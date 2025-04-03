@@ -82,10 +82,11 @@
                     <table class="table table-hover">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col" style="width: 50%">Checklist Item</th>
+                                <th scope="col" style="width: 45%">Checklist Item</th>
                                 <th scope="col" style="width: 15%">Status</th>
-                                <th scope="col" style="width: 20%">Confidence</th>
-                                <th scope="col" style="width: 15%">Action</th>
+                                <th scope="col" style="width: 15%">Confidence</th>
+                                <th scope="col" style="width: 15%">Analysis Method</th>
+                                <th scope="col" style="width: 10%">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -93,11 +94,15 @@
                             {% set is_present = false %}
                             {% set confidence = 0 %}
                             {% set explanation = "" %}
+                            {% set method = "traditional" %}
                             
                             {% if matching_results[item] is mapping %}
                                 {% set is_present = matching_results[item].present %}
                                 {% set confidence = matching_results[item].confidence | float %}
                                 {% set explanation = matching_results[item].explanation %}
+                                {% if matching_results[item].method is defined %}
+                                    {% set method = matching_results[item].method %}
+                                {% endif %}
                             {% elif matching_results[item] is boolean %}
                                 {% set is_present = matching_results[item] %}
                                 {% set confidence = 1.0 if is_present else 0.0 %}
@@ -127,6 +132,15 @@
                                             {{ confidence_percent }}%
                                         </div>
                                     </div>
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if not is_present %}

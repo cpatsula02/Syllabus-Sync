@@ -150,36 +150,42 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     return False
 
 def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str], Dict[str, Any]]:
-    """Process both documents and return checklist items and matching results."""
+    """Process both documents and return checklist items and matching results with detailed breakdown."""
     try:
         # Extract text from both documents
         checklist_text = extract_text(checklist_path)
         outline_text = extract_text(outline_path)
         
-        # Extract checklist items
+        # Extract checklist items (only numbered or bulleted items)
         checklist_items = extract_checklist_items(checklist_text)
         
+        # Check if we found any checklist items
+        if not checklist_items:
+            logging.warning("No numbered or bulleted checklist items found in the document!")
+            return [], {}
+            
         # Initialize empty results dictionary
         matching_results = {}
         
-        # First, try using OpenAI for more accurate analysis if available
-        used_openai = False
+        # Try using OpenAI for more accurate analysis if available
+        # The new implementation attempts to process ALL items individually
         try:
-            if 'openai_helper' in globals():
-                logging.info("Using OpenAI for document analysis")
-                # This will process a subset of items to avoid API limits
-                ai_results = openai_helper.analyze_checklist_items_batch(checklist_items, outline_text)
-                used_openai = True
+            import openai_helper
+            logging.info("Using OpenAI for document analysis")
+            
+            # Process all items individually through OpenAI (with fallback handling built in)
+            ai_results = openai_helper.analyze_checklist_items_batch(checklist_items, outline_text)
+            
+            # Add AI results to our matching results
+            for item, result in ai_results.items():
+                matching_results[item] = result
                 
-                # Add AI results to our matching results
-                for item, result in ai_results.items():
-                    matching_results[item] = result
+        except ImportError:
+            logging.warning("OpenAI helper module not available, using only traditional methods")
         except Exception as ai_error:
-            logging.warning(f"OpenAI analysis failed, falling back to traditional methods: {str(ai_error)}")
-            used_openai = False
+            logging.warning(f"OpenAI analysis failed: {str(ai_error)}")
         
-        # Check if there are any items not processed by OpenAI
-        # Either because OpenAI failed, wasn't available, or only processed a subset
+        # Check if there are any items not processed yet
         unprocessed_items = [item for item in checklist_items if item not in matching_results]
         
         if unprocessed_items:
@@ -189,15 +195,16 @@ def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str]
                 # Format the result to match the OpenAI structure for consistency
                 matching_results[item] = {
                     "present": is_present,
-                    "confidence": 0.9 if is_present else 0.1,  # Slightly less confident than OpenAI
-                    "explanation": "Detected using pattern matching" if is_present else "Not found in document"
+                    "confidence": 0.8 if is_present else 0.2,
+                    "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                    "method": "traditional"  # Mark which method was used
                 }
         
-        # Add a log about what methods were used
-        if used_openai:
-            logging.info(f"Completed analysis using combination of OpenAI ({len(matching_results) - len(unprocessed_items)} items) and traditional methods ({len(unprocessed_items)} items)")
-        else:
-            logging.info(f"Completed analysis using only traditional methods ({len(matching_results)} items)")
+        # Count methods used for detailed logging
+        ai_count = sum(1 for result in matching_results.values() if result.get("method", "").startswith("openai"))
+        traditional_count = sum(1 for result in matching_results.values() if result.get("method", "").startswith("traditional"))
+        
+        logging.info(f"Analysis complete: {ai_count} items processed with OpenAI, {traditional_count} with traditional methods")
         
         return checklist_items, matching_results
         

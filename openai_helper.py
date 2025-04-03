@@ -96,58 +96,96 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
 
 def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[str, Dict[str, Any]]:
     """
-    Process multiple checklist items against a document text using OpenAI.
+    Process each checklist item individually through the OpenAI API,
+    with fallback to traditional NLP methods if API calls fail.
+    
     Returns a dictionary mapping each item to its analysis result.
     
-    To prevent rate limiting and timeouts:
-    1. Adds a small delay between API calls
-    2. Limits the number of items processed with OpenAI
-    3. Falls back to traditional NLP for the rest
-    4. Gracefully handles API quota exceeded errors
+    Features:
+    1. Processes each item individually for more detailed analysis
+    2. Adds a delay between API calls to prevent rate limiting
+    3. Gracefully handles API quota exceeded errors with fallback methods
+    4. Provides detailed logging for each item's analysis
     """
     results = {}
+    api_successes = 0
+    api_failures = 0
     
     # Check if the API key exists and is not empty
     if not OPENAI_API_KEY:
         logger.warning("OpenAI API key not found or empty. Using only traditional analysis methods.")
         return results
     
-    # Limit the number of OpenAI API calls to prevent timeouts and quota issues
-    MAX_API_CALLS = 3  # Reduced to 3 to minimize quota usage
-    
-    # Only analyze items with a meaningful length to save API calls
-    filtered_items = [item for item in items if len(item) > 10]
-    
-    # If too many items, prioritize a subset (first N items)
-    api_items = filtered_items[:MAX_API_CALLS] if len(filtered_items) > MAX_API_CALLS else filtered_items
-    
-    logger.info(f"Analyzing {len(api_items)} items with OpenAI API (out of {len(items)} total items)")
+    # Process all items, attempting to use OpenAI for each one
+    logger.info(f"Attempting to analyze {len(items)} checklist items with OpenAI API")
     
     api_quota_exceeded = False
     
-    # Process the selected items with OpenAI
-    for i, item in enumerate(api_items):
-        # If we've already hit API quota issues, don't make further calls
+    # Process each item individually
+    for i, item in enumerate(items):
+        item_id = f"Item #{i+1}"
+        logger.info(f"Processing {item_id}: {item[:50]}{'...' if len(item) > 50 else ''}")
+        
+        # If we've already hit API quota issues, don't make further API calls
         if api_quota_exceeded:
-            logger.info(f"Skipping OpenAI API call for item {i+1} due to quota issues")
+            logger.info(f"Skipping OpenAI API call for {item_id} due to quota issues")
+            
+            # Use traditional method as fallback
+            from document_processor import check_item_in_document
+            is_present = check_item_in_document(item, document_text)
+            results[item] = {
+                "present": is_present,
+                "confidence": 0.8 if is_present else 0.2,
+                "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                "method": "traditional"  # Mark which method was used
+            }
+            api_failures += 1
             continue
         
-        # Add a small delay between API calls to prevent rate limiting
+        # Add a delay between API calls to prevent rate limiting
         if i > 0:
-            time.sleep(1.0)  # Increased delay to 1 second
+            time.sleep(1.5)  # Increased delay to 1.5 seconds between API calls
         
         try:
-            results[item] = analyze_checklist_item(item, document_text)
+            # Try to analyze with OpenAI API
+            item_result = analyze_checklist_item(item, document_text)
+            item_result["method"] = "openai"  # Mark which method was used
+            results[item] = item_result
+            logger.info(f"Successfully analyzed {item_id} with OpenAI API")
+            api_successes += 1
+            
         except Exception as e:
             # Check if this is a quota exceeded error
             error_msg = str(e).lower()
             if "quota" in error_msg or "rate limit" in error_msg or "exceeded" in error_msg:
-                logger.warning("OpenAI API quota exceeded. Switching to traditional analysis for remaining items.")
+                logger.warning(f"OpenAI API quota exceeded at item {i+1}. Switching to traditional analysis for remaining items.")
                 api_quota_exceeded = True
+                
+                # Use traditional method for this item too
+                from document_processor import check_item_in_document
+                is_present = check_item_in_document(item, document_text)
+                results[item] = {
+                    "present": is_present,
+                    "confidence": 0.8 if is_present else 0.2,
+                    "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                    "method": "traditional (after quota exceeded)"
+                }
+                api_failures += 1
             else:
-                logger.error(f"Error analyzing item with OpenAI: {str(e)}")
+                # For other errors, still use traditional method but log the specific error
+                logger.error(f"Error analyzing item {i+1} with OpenAI: {str(e)}")
+                
+                from document_processor import check_item_in_document
+                is_present = check_item_in_document(item, document_text)
+                results[item] = {
+                    "present": is_present,
+                    "confidence": 0.8 if is_present else 0.2,
+                    "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                    "method": "traditional (after API error)"
+                }
+                api_failures += 1
     
-    # For the remaining items (if we limited API calls), use a fallback method
-    # This will be handled by the process_documents function
+    # Log summary of API usage
+    logger.info(f"OpenAI API usage summary: {api_successes} successful calls, {api_failures} fallbacks to traditional methods")
     
     return results
