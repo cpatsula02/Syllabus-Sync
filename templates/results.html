@@ -82,11 +82,19 @@
                     <table class="table table-hover">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col" style="width: 45%">Checklist Item</th>
+                                <th scope="col" style="width: 65%">Checklist Item</th>
+                                <th scope="col" style="width: 20%">Status</th>
+                                <th scope="col" style="width: 15%">Action</th>
+                            </tr>
+                        </thead>
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col" style="width: 65%">Checklist Item</th>
+                                <th scope="col" style="width: 20%">Status</th>
+                                <th scope="col" style="width: 15%">Action</th>
                                 <th scope="col" style="width: 15%">Status</th>
-                                <th scope="col" style="width: 15%">Confidence</th>
-                                <th scope="col" style="width: 15%">Analysis Method</th>
-                                <th scope="col" style="width: 10%">Action</th>
+                                <th scope="col" style="width: 20%">Analysis Method</th>
+                                <th scope="col" style="width: 15%">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -115,25 +123,694 @@
                                     {% if explanation %}
                                     <div class="small text-muted mt-1">{{ explanation }}</div>
                                     {% endif %}
-                                </td>
-                                <td>
+<td>
                                     {% if is_present %}
                                     <span class="badge bg-success">Present</span>
                                     {% else %}
                                     <span class="badge bg-danger">Missing</span>
                                     {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
                                 </td>
                                 <td>
-                                    <div class="progress" style="height: 20px;">
-                                        {% set confidence_percent = (confidence * 100) | int %}
-                                        {% set confidence_color = "bg-success" if confidence > 0.7 else "bg-warning" if confidence > 0.4 else "bg-danger" %}
-                                        <div class="progress-bar {{ confidence_color }}" role="progressbar" style="width: {{ confidence_percent }}%;" 
-                                            aria-valuenow="{{ confidence_percent }}" aria-valuemin="0" aria-valuemax="100">
-                                            {{ confidence_percent }}%
-                                        </div>
-                                    </div>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
                                 </td>
                                 <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+<td>
+                                    {% if is_present %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_present %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if method == "openai" %}
+                                    <span class="badge bg-primary">AI Analysis</span>
+                                    {% elif method and method.startswith("traditional") %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pattern Matching</span>
+                                    {% endif %}
+                                </td>
                                     {% if method == "openai" %}
                                     <span class="badge bg-primary">AI Analysis</span>
                                     {% elif method and method.startswith("traditional") %}
@@ -161,9 +838,12 @@
                     <a href="{{ url_for('index') }}" class="btn btn-primary me-2">
                         <i class="fas fa-redo me-2"></i>Check Another Document
                     </a>
-                    <button class="btn btn-secondary" id="printResults">
+                    <button class="btn btn-secondary me-2" id="printResults">
                         <i class="fas fa-print me-2"></i>Print Results
                     </button>
+                    <a href="{{ url_for('download_pdf') }}" class="btn btn-success">
+                        <i class="fas fa-file-pdf me-2"></i>Download PDF Report
+                    </a>
                 </div>
             </div>
         </div>
