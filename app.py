@@ -51,6 +51,9 @@ def upload_files():
         return redirect(request.url)
     
     # Save files
+    checklist_path = None
+    outline_path = None
+    
     try:
         checklist_filename = secure_filename(checklist_file.filename)
         outline_filename = secure_filename(outline_file.filename)
@@ -65,20 +68,39 @@ def upload_files():
         checklist_items, matching_results = document_processor.process_documents(
             checklist_path, outline_path)
         
+        # Check if we have any results
+        if not checklist_items:
+            flash('No valid checklist items found. Please ensure your checklist document contains numbered or bulleted items.')
+            return redirect(url_for('index'))
+        
         # Store results in session for the results page
         session['checklist_items'] = checklist_items
         session['matching_results'] = matching_results
-        
-        # Clean up files after processing
-        os.remove(checklist_path)
-        os.remove(outline_path)
         
         return redirect(url_for('results'))
         
     except Exception as e:
         logging.error(f"Error processing files: {str(e)}")
-        flash(f'Error processing files: {str(e)}')
+        error_msg = str(e).lower()
+        
+        # Check for specific error messages and provide friendly responses
+        if "quota" in error_msg or "rate limit" in error_msg or "exceeded" in error_msg:
+            flash('Our AI service is currently experiencing high demand. The analysis will be performed using traditional methods only.')
+        elif "timeout" in error_msg:
+            flash('Processing took too long. Try with smaller documents or wait a moment and try again.')
+        else:
+            flash(f'Error processing files: {str(e)}')
+        
         return redirect(request.url)
+    finally:
+        # Clean up files after processing, even if there was an error
+        try:
+            if checklist_path and os.path.exists(checklist_path):
+                os.remove(checklist_path)
+            if outline_path and os.path.exists(outline_path):
+                os.remove(outline_path)
+        except Exception as cleanup_error:
+            logging.error(f"Error cleaning up files: {str(cleanup_error)}")
 
 @app.route('/results')
 def results():

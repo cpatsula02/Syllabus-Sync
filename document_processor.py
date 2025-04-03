@@ -68,14 +68,17 @@ def extract_text(file_path: str) -> str:
         raise ValueError(f"Unsupported file format: {file_extension}")
 
 def extract_checklist_items(text: str) -> List[str]:
-    """Extract checklist items from the checklist document."""
+    """
+    Extract checklist items from the checklist document.
+    Only extract numbered or bulleted items, excluding any other text.
+    """
     # Split text into lines and clean them
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     
     # Look for patterns like numbering, bullet points, or similar indicators
     checklist_items = []
     
-    # Common bullet point and numbering patterns
+    # Common bullet point and numbering patterns - these are the ONLY patterns we'll accept
     bullet_pattern = r'^[\s]*[-•★*]+\s*(.*)'
     number_pattern = r'^[\s]*[0-9]+[.)]\s*(.*)'
     
@@ -95,19 +98,12 @@ def extract_checklist_items(text: str) -> List[str]:
             if item and len(item) > 3:
                 checklist_items.append(item)
             continue
-            
-        # If line is relatively short and looks like a checklist item
-        # (not too short, not too long)
-        if 10 <= len(line) <= 200 and not line.endswith(':'):
-            checklist_items.append(line)
+        
+        # If the line doesn't match any of the patterns, skip it
+        # We're only interested in explicitly numbered or bulleted items
     
-    # If no items found using patterns, fall back to sentences
-    if not checklist_items:
-        sentences = sent_tokenize(text)
-        for sentence in sentences:
-            clean_sentence = sentence.strip()
-            if 10 <= len(clean_sentence) <= 200:
-                checklist_items.append(clean_sentence)
+    # Log how many items were found
+    logging.info(f"Found {len(checklist_items)} numbered or bulleted checklist items")
     
     return checklist_items
 
