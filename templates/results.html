@@ -122,8 +122,13 @@
                                     {% else %}
                                     <span class="badge bg-danger">Missing</span>
                                     {% endif %}
-                                    {% if method == "openai" %}
+                                    {% if method and method.startswith("openai") %}
                                     <span class="badge bg-primary ms-1">AI Analysis</span>
+                                    {% if "attempt" in method %}
+                                    <div class="small text-muted mt-1">{{ method }}</div>
+                                    {% endif %}
+                                    {% elif method %}
+                                    <span class="badge bg-secondary ms-1">{{ method }}</span>
                                     {% else %}
                                     <span class="badge bg-secondary ms-1">Pattern Matching</span>
                                     {% endif %}

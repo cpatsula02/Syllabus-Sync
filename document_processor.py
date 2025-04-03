@@ -443,12 +443,29 @@ def check_special_entity_patterns(item, document):
     
     return False
 
-def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str], Dict[str, Any]]:
-    """Process both documents and return checklist items and matching results with detailed breakdown."""
+def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+    """
+    Process both documents and return checklist items and matching results with detailed breakdown.
+    
+    Args:
+        checklist_path: Path to the checklist document
+        outline_path: Path to the course outline document
+        api_attempts: Number of API analysis attempts to make (1-10)
+        additional_context: Additional context about the course or specific situations
+        
+    Returns:
+        A tuple of (checklist_items, matching_results)
+    """
     try:
         # Extract text from both documents
         checklist_text = extract_text(checklist_path)
         outline_text = extract_text(outline_path)
+        
+        # Add additional context to outline text if provided
+        if additional_context:
+            context_header = "\n\n--- ADDITIONAL COURSE CONTEXT ---\n\n"
+            outline_text = outline_text + context_header + additional_context
+            logging.info(f"Added {len(additional_context)} characters of additional context")
         
         # Extract checklist items (only numbered or bulleted items)
         checklist_items = extract_checklist_items(checklist_text)
@@ -465,10 +482,14 @@ def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str]
         # The new implementation attempts to process ALL items individually
         try:
             import openai_helper
-            logging.info("Using OpenAI for document analysis")
+            logging.info(f"Using OpenAI for document analysis with {api_attempts} attempts per item")
             
             # Process all items individually through OpenAI (with fallback handling built in)
-            ai_results = openai_helper.analyze_checklist_items_batch(checklist_items, outline_text)
+            ai_results = openai_helper.analyze_checklist_items_batch(
+                checklist_items, 
+                outline_text, 
+                max_attempts=api_attempts
+            )
             
             # Add AI results to our matching results
             for item, result in ai_results.items():

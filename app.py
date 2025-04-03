@@ -53,6 +53,25 @@ def upload_files():
         flash('Only PDF and DOCX files are allowed.')
         return redirect(request.url)
     
+    # Get additional parameters
+    api_attempts = request.form.get('api_attempts', '3')
+    additional_context = request.form.get('additional_context', '')
+    
+    # Validate api_attempts
+    try:
+        api_attempts = int(api_attempts)
+        if api_attempts < 1:
+            api_attempts = 1
+        elif api_attempts > 10:
+            api_attempts = 10
+    except ValueError:
+        api_attempts = 3  # Default to 3 attempts if invalid
+    
+    # Log the parameters
+    logging.info(f"Analysis with {api_attempts} API attempts")
+    if additional_context:
+        logging.info(f"Additional context provided: {len(additional_context)} characters")
+    
     # Save files
     checklist_path = None
     outline_path = None
@@ -69,7 +88,7 @@ def upload_files():
         
         # Process the files and get results
         checklist_items, matching_results = document_processor.process_documents(
-            checklist_path, outline_path)
+            checklist_path, outline_path, api_attempts=api_attempts, additional_context=additional_context)
         
         # Check if we have any results
         if not checklist_items:

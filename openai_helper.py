@@ -95,22 +95,36 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
             "explanation": "Error during AI analysis. Using fallback analysis."
         }
 
-def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[str, Dict[str, Any]]:
+def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3) -> Dict[str, Dict[str, Any]]:
     """
     Process each checklist item individually through the OpenAI API,
     with fallback to traditional NLP methods if API calls fail.
     
-    Returns a dictionary mapping each item to its analysis result.
+    Args:
+        items: List of checklist items to analyze
+        document_text: The full text of the document to check against
+        max_attempts: Maximum number of API analysis attempts for each item (1-10)
+    
+    Returns:
+        A dictionary mapping each item to its analysis result
     
     Features:
     1. Processes each item individually for more detailed analysis
     2. Adds a delay between API calls to prevent rate limiting
     3. Gracefully handles API quota exceeded errors with fallback methods
     4. Provides detailed logging for each item's analysis
+    5. Supports multiple API attempts per item for more accurate results
     """
     results = {}
     api_successes = 0
     api_failures = 0
+    total_attempts = 0
+    
+    # Validate max_attempts
+    if max_attempts < 1:
+        max_attempts = 1
+    elif max_attempts > 10:
+        max_attempts = 10
     
     # Check if the API key exists and is not empty
     if not OPENAI_API_KEY:
@@ -118,7 +132,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
         return results
     
     # Process all items, attempting to use OpenAI for each one
-    logger.info(f"Attempting to analyze {len(items)} checklist items with OpenAI API")
+    logger.info(f"Attempting to analyze {len(items)} checklist items with OpenAI API (max {max_attempts} attempts per item)")
     
     api_quota_exceeded = False
     
@@ -177,12 +191,59 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
             time.sleep(1.5)  # Increased delay to 1.5 seconds between API calls
         
         try:
-            # Try to analyze with OpenAI API
-            item_result = analyze_checklist_item(item, document_text)
-            item_result["method"] = "openai"  # Mark which method was used
-            results[item] = item_result
-            logger.info(f"Successfully analyzed {item_id} with OpenAI API")
-            api_successes += 1
+            # Try to analyze with OpenAI API using multiple attempts if configured
+            attempt_results = []
+            attempt_successful = False
+            
+            # Make multiple attempts if max_attempts > 1
+            for attempt in range(max_attempts):
+                total_attempts += 1
+                
+                if attempt > 0:
+                    logger.info(f"Attempt {attempt+1}/{max_attempts} for {item_id}")
+                    # Add a small delay between retry attempts
+                    time.sleep(1.0)
+                
+                try:
+                    # Try to analyze with OpenAI API
+                    attempt_result = analyze_checklist_item(item, document_text)
+                    attempt_result["attempt"] = attempt + 1
+                    attempt_results.append(attempt_result)
+                    
+                    # Consider the attempt successful
+                    attempt_successful = True
+                    
+                    # If we're only doing one attempt or if this attempt is confident enough, stop
+                    if max_attempts == 1 or attempt_result.get("confidence", 0) > 0.8:
+                        break
+                        
+                except Exception as retry_error:
+                    # If any retry fails, log it but continue with next attempt
+                    logger.warning(f"Attempt {attempt+1} failed: {str(retry_error)}")
+                    # Break the retry loop if we hit quota exceeded
+                    if "quota" in str(retry_error).lower() or "rate limit" in str(retry_error).lower():
+                        raise  # Re-raise to be caught by the outer exception handler
+            
+            # If we have results from at least one attempt
+            if attempt_results:
+                # Find the most confident result among all attempts
+                best_result = max(attempt_results, key=lambda x: x.get("confidence", 0))
+                
+                # Add additional context about the attempts
+                best_result["method"] = f"openai (attempt {best_result.get('attempt', 1)} of {max_attempts})"
+                best_result["total_attempts"] = len(attempt_results)
+                
+                # If we made multiple attempts, add that information to the explanation
+                if len(attempt_results) > 1:
+                    best_result["explanation"] = f"{best_result.get('explanation', '')} (Based on {len(attempt_results)} analysis attempts)"
+                
+                # Store the best result
+                results[item] = best_result
+                logger.info(f"Successfully analyzed {item_id} with OpenAI API after {len(attempt_results)} attempts")
+                api_successes += 1
+            else:
+                # This shouldn't happen due to our exception handling, but just in case
+                raise Exception("No successful API attempts")
             
         except Exception as e:
             # Check if this is a quota exceeded error
@@ -274,6 +335,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
                 api_failures += 1
     
     # Log summary of API usage
-    logger.info(f"OpenAI API usage summary: {api_successes} successful calls, {api_failures} fallbacks to traditional methods")
+    logger.info(f"OpenAI API usage summary: {api_successes} successful items, {api_failures} fallbacks to traditional methods")
+    logger.info(f"Total API attempts: {total_attempts} (average {total_attempts/len(items):.1f} attempts per item)")
     
     return results
