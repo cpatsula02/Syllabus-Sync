@@ -231,24 +231,7 @@ def results():
                           checklist_items=checklist_items,
                           matching_results=matching_results)
                           
-@app.route('/download-pdf')
-def download_pdf():
-    # Get results from session
-    checklist_items = session.get('checklist_items', [])
-    matching_results = session.get('matching_results', {})
-    
-    if not checklist_items or not matching_results:
-        flash('No results found. Please upload files again.')
-        return redirect(url_for('index'))
-    
-    # Generate PDF
-    pdf_output = generate_pdf_report(checklist_items, matching_results)
-    
-    # Return PDF response
-    response = make_response(pdf_output.getvalue())
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = 'attachment; filename=course_outline_analysis.pdf'
-    return response
+# PDF download route temporarily removed
 
 # Error handlers
 @app.errorhandler(413)
