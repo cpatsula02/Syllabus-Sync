@@ -124,6 +124,14 @@ def check_item_in_document(item: str, document_text: str) -> Tuple[bool, List[Tu
     # Keep track of locations where matches were found
     locations = []
     
+    # Special handling for policy items
+    if 'policy' in item_lower:
+        # Require explicit policy mentions for policy-related items
+        policy_words = item_lower.split()
+        policy_type = ' '.join(policy_words[:policy_words.index('policy')])
+        if not any(f"{policy_type} policy" in section.lower() for section in document_lower.split('\n\n')):
+            return False, []
+    
     # Direct match - if the exact phrase appears
     if item_lower in document_lower:
         # Find all occurrences of the item
@@ -218,8 +226,8 @@ def check_item_in_document(item: str, document_text: str) -> Tuple[bool, List[Tu
         # Count how many important words appear in the document
         words_found = sum(1 for word in item_words if word in document_lower)
         
-        # Lower the threshold to 65% to catch more matches with different wording
-        if len(item_words) > 0 and words_found / len(item_words) >= 0.65:
+        # Increase threshold to 85% for more accurate matches
+        if len(item_words) > 0 and words_found / len(item_words) >= 0.85:
             # For keyword matches, just use a summary as the matched text
             matches_list = ', '.join(word for word in item_words if word in document_lower)
             matched_summary = f"Found {words_found}/{len(item_words)} keywords: {matches_list}"
