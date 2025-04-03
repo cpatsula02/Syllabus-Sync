@@ -130,14 +130,25 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
         if api_quota_exceeded:
             logger.info(f"Skipping OpenAI API call for {item_id} due to quota issues")
             
-            # Use traditional method as fallback
+            # Use traditional method as fallback with enhanced pattern matching
             from document_processor import check_item_in_document
             is_present = check_item_in_document(item, document_text)
+            
+            # Provide more detailed explanations for policy-related items
+            explanation = "Not found in document"
+            if is_present:
+                if 'policy' in item.lower() or 'policies' in item.lower():
+                    explanation = "Policy content detected through pattern matching"
+                elif 'assignment' in item.lower() or 'assessment' in item.lower():
+                    explanation = "Assessment-related content detected through pattern matching"
+                else:
+                    explanation = "Detected using pattern matching"
+            
             results[item] = {
                 "present": is_present,
-                "confidence": 0.8 if is_present else 0.2,
-                "explanation": "Detected using pattern matching" if is_present else "Not found in document",
-                "method": "traditional"  # Mark which method was used
+                "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
+                "explanation": explanation,
+                "method": "traditional (enhanced)"  # Mark which method was used
             }
             api_failures += 1
             continue
@@ -161,13 +172,24 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
                 logger.warning(f"OpenAI API quota exceeded at item {i+1}. Switching to traditional analysis for remaining items.")
                 api_quota_exceeded = True
                 
-                # Use traditional method for this item too
+                # Use traditional method for this item too with enhanced pattern matching
                 from document_processor import check_item_in_document
                 is_present = check_item_in_document(item, document_text)
+                
+                # Provide more detailed explanations for policy-related items
+                explanation = "Not found in document"
+                if is_present:
+                    if 'policy' in item.lower() or 'policies' in item.lower():
+                        explanation = "Policy content detected through pattern matching"
+                    elif 'assignment' in item.lower() or 'assessment' in item.lower():
+                        explanation = "Assessment-related content detected through pattern matching"
+                    else:
+                        explanation = "Detected using pattern matching"
+                
                 results[item] = {
                     "present": is_present,
-                    "confidence": 0.8 if is_present else 0.2,
-                    "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                    "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
+                    "explanation": explanation,
                     "method": "traditional (after quota exceeded)"
                 }
                 api_failures += 1
@@ -177,10 +199,21 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
                 
                 from document_processor import check_item_in_document
                 is_present = check_item_in_document(item, document_text)
+                
+                # Provide more detailed explanations for policy-related items
+                explanation = "Not found in document"
+                if is_present:
+                    if 'policy' in item.lower() or 'policies' in item.lower():
+                        explanation = "Policy content detected through pattern matching"
+                    elif 'assignment' in item.lower() or 'assessment' in item.lower():
+                        explanation = "Assessment-related content detected through pattern matching"
+                    else:
+                        explanation = "Detected using pattern matching"
+                
                 results[item] = {
                     "present": is_present,
-                    "confidence": 0.8 if is_present else 0.2,
-                    "explanation": "Detected using pattern matching" if is_present else "Not found in document",
+                    "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
+                    "explanation": explanation,
                     "method": "traditional (after API error)"
                 }
                 api_failures += 1

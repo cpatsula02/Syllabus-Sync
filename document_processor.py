@@ -111,6 +111,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     """
     Check if a checklist item is present in the document text.
     Uses a more sophisticated matching approach beyond simple string matching.
+    Enhanced for policy-related content detection.
     """
     # Clean and normalize text for comparison
     item_lower = item.lower()
@@ -119,6 +120,39 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     # Direct match - if the exact phrase appears
     if item_lower in document_lower:
         return True
+    
+    # Special policy-related pattern detection
+    # Look for policy headers and content related to the item
+    if 'policy' in item_lower or 'policies' in item_lower or 'requirements' in item_lower:
+        # For specific policy items, generate variations to check
+        policy_words = ['policy', 'policies', 'guideline', 'guidelines', 'requirement', 'requirements', 'procedure', 'protocol']
+        
+        # Extract the policy type from the item
+        policy_type = ''
+        for word in policy_words:
+            if word in item_lower:
+                # Find what kind of policy (e.g., "missed assignment policy" -> "missed assignment")
+                pattern = re.compile(r'([\w\s]+)\s+' + word)
+                match = pattern.search(item_lower)
+                if match:
+                    policy_type = match.group(1).strip()
+                    break
+        
+        # If we found a policy type, check for its presence in any form
+        if policy_type:
+            # Check if the policy type appears near policy-related words
+            policy_sections = re.findall(r'([^.!?]*(?:policy|policies|guidelines|procedures|protocols)[^.!?]*[.!?])', document_lower)
+            
+            for section in policy_sections:
+                # Check if this policy section contains our type
+                if policy_type in section or any(word in section for word in policy_type.split()):
+                    return True
+            
+            # Also check for headers that might match the policy type
+            # Headers often have special formatting (e.g., "Missed Assessment Policy:")
+            header_pattern = re.compile(r'(^|\n)([^.!?\n]*' + re.escape(policy_type) + r'[^.!?\n]*(?:policy|policies|guidelines|procedures|protocols)[^.!?\n]*)', re.IGNORECASE)
+            if header_pattern.search(document_lower):
+                return True
     
     # Extract important keywords from the item (remove stopwords)
     try:
@@ -146,6 +180,28 @@ def check_item_in_document(item: str, document_text: str) -> bool:
             phrase = ' '.join(item_parts[i:i+min_required])
             if phrase in document_lower:
                 return True
+    
+    # Check for semantic equivalents (especially for policies)
+    # This checks for cases where policy content exists but with different wording
+    if 'miss' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower) and 'policy' in item_lower:
+        # Look for sections that talk about missed assignments/assessments
+        missed_terms = ['miss', 'missed', 'missing', 'absence', 'absent']
+        assignment_terms = ['assignment', 'assessment', 'work', 'quiz', 'exam', 'test']
+        policy_terms = ['policy', 'policies', 'procedure', 'guideline', 'rule', 'requirement', 'deferral', 'defer']
+        
+        # Check for proximity of these terms
+        for m_term in missed_terms:
+            for a_term in assignment_terms:
+                # Check if these terms appear within a reasonable distance
+                for p_term in policy_terms:
+                    pattern = re.compile(r'[^.!?]*' + m_term + r'[^.!?]*' + a_term + r'[^.!?]*' + p_term + r'[^.!?]*[.!?]', re.IGNORECASE)
+                    if pattern.search(document_lower):
+                        return True
+                    
+                    # Try reverse order too (policy term first, then missed term)
+                    pattern = re.compile(r'[^.!?]*' + p_term + r'[^.!?]*' + m_term + r'[^.!?]*' + a_term + r'[^.!?]*[.!?]', re.IGNORECASE)
+                    if pattern.search(document_lower):
+                        return True
     
     return False
 
