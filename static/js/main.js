@@ -3,7 +3,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadForm = document.getElementById('uploadForm');
     const submitBtn = document.getElementById('submitBtn');
     const uploadProgress = document.getElementById('uploadProgress');
-    const progressBar = uploadProgress.querySelector('.progress-bar');
+    
+    // Add null checks to prevent errors
+    const progressBar = uploadProgress ? uploadProgress.querySelector('.progress-bar') : null;
     
     if (uploadForm) {
         uploadForm.addEventListener('submit', function(e) {
@@ -28,7 +30,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show progress
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
-            uploadProgress.classList.remove('d-none');
+            if (uploadProgress) {
+                uploadProgress.classList.remove('d-none');
+            }
             
             // Simulate progress (actual processing happens server-side)
             let progress = 0;
@@ -38,11 +42,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     clearInterval(interval);
                     progress = 100;
                 }
-                progressBar.style.width = progress + '%';
-                progressBar.setAttribute('aria-valuenow', progress);
                 
-                if (progress === 100) {
-                    progressBar.textContent = 'Analysis Complete!';
+                // Only update progress if progressBar exists
+                if (progressBar) {
+                    progressBar.style.width = progress + '%';
+                    progressBar.setAttribute('aria-valuenow', progress);
+                    
+                    if (progress === 100) {
+                        progressBar.textContent = 'Analysis Complete!';
+                    }
                 }
             }, 300);
         });

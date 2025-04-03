@@ -25,6 +25,12 @@ try:
     nltk.download('stopwords', quiet=True)
 except ImportError:
     logging.warning("NLTK not installed. Advanced text processing may not work.")
+    
+# Import OpenAI helper
+try:
+    import openai_helper
+except ImportError:
+    logging.warning("OpenAI helper module not found. AI-powered analysis will not be available.")
 
 def extract_text_from_pdf(file_path: str) -> str:
     """Extract text content from a PDF file."""
@@ -147,7 +153,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     
     return False
 
-def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str], Dict[str, bool]]:
+def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str], Dict[str, Any]]:
     """Process both documents and return checklist items and matching results."""
     try:
         # Extract text from both documents
@@ -157,10 +163,33 @@ def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str]
         # Extract checklist items
         checklist_items = extract_checklist_items(checklist_text)
         
-        # Check each item against the course outline
+        # First, try using OpenAI for more accurate analysis if available
+        try:
+            if 'openai_helper' in globals():
+                logging.info("Using OpenAI for document analysis")
+                ai_results = openai_helper.analyze_checklist_items_batch(checklist_items, outline_text)
+                
+                # Convert AI results to the expected format
+                matching_results = {}
+                for item, result in ai_results.items():
+                    # Store the full result with confidence and explanation
+                    matching_results[item] = result
+                
+                return checklist_items, matching_results
+        except Exception as ai_error:
+            logging.warning(f"OpenAI analysis failed, falling back to traditional methods: {str(ai_error)}")
+        
+        # Fallback to traditional NLP methods if OpenAI is not available or fails
+        logging.info("Using traditional NLP for document analysis")
         matching_results = {}
         for item in checklist_items:
-            matching_results[item] = check_item_in_document(item, outline_text)
+            is_present = check_item_in_document(item, outline_text)
+            # Format the result to match the OpenAI structure for consistency
+            matching_results[item] = {
+                "present": is_present,
+                "confidence": 1.0 if is_present else 0.0,
+                "explanation": "Detected using pattern matching" if is_present else "Not found in document"
+            }
         
         return checklist_items, matching_results
         

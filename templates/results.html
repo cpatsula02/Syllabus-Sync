@@ -13,9 +13,16 @@
             <div class="card-body">
                 <div class="results-summary mb-4">
                     {% set total_items = checklist_items|length %}
-                    {% set present_items = matching_results.values()|select|list|length %}
-                    {% set missing_items = total_items - present_items %}
-                    {% set completion_percentage = (present_items / total_items * 100)|int if total_items > 0 else 0 %}
+                    {% set present_items = namespace(count=0) %}
+                    {% for item in checklist_items %}
+                        {% if matching_results[item] is mapping and matching_results[item].present %}
+                            {% set present_items.count = present_items.count + 1 %}
+                        {% elif matching_results[item] is boolean and matching_results[item] %}
+                            {% set present_items.count = present_items.count + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    {% set missing_items = total_items - present_items.count %}
+                    {% set completion_percentage = (present_items.count / total_items * 100)|int if total_items > 0 else 0 %}
                     
                     <div class="row align-items-center">
                         <div class="col-md-4 text-center">
@@ -33,7 +40,7 @@
                                                 <i class="fas fa-check"></i>
                                             </div>
                                             <div>
-                                                <h4 class="h2 mb-0">{{ present_items }}</h4>
+                                                <h4 class="h2 mb-0">{{ present_items.count }}</h4>
                                                 <p class="small mb-0">Items Present</p>
                                             </div>
                                         </div>
@@ -75,24 +82,54 @@
                     <table class="table table-hover">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col" style="width: 70%">Checklist Item</th>
+                                <th scope="col" style="width: 50%">Checklist Item</th>
                                 <th scope="col" style="width: 15%">Status</th>
+                                <th scope="col" style="width: 20%">Confidence</th>
                                 <th scope="col" style="width: 15%">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in checklist_items %}
-                            <tr class="{% if matching_results[item] %}table-success{% else %}table-danger{% endif %}">
-                                <td>{{ item }}</td>
+                            {% set is_present = false %}
+                            {% set confidence = 0 %}
+                            {% set explanation = "" %}
+                            
+                            {% if matching_results[item] is mapping %}
+                                {% set is_present = matching_results[item].present %}
+                                {% set confidence = matching_results[item].confidence | float %}
+                                {% set explanation = matching_results[item].explanation %}
+                            {% elif matching_results[item] is boolean %}
+                                {% set is_present = matching_results[item] %}
+                                {% set confidence = 1.0 if is_present else 0.0 %}
+                                {% set explanation = "Found in document" if is_present else "Not found in document" %}
+                            {% endif %}
+                            
+                            <tr class="{% if is_present %}table-success{% else %}table-danger{% endif %}">
                                 <td>
-                                    {% if matching_results[item] %}
+                                    {{ item }}
+                                    {% if explanation %}
+                                    <div class="small text-muted mt-1">{{ explanation }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_present %}
                                     <span class="badge bg-success">Present</span>
                                     {% else %}
                                     <span class="badge bg-danger">Missing</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if not matching_results[item] %}
+                                    <div class="progress" style="height: 20px;">
+                                        {% set confidence_percent = (confidence * 100) | int %}
+                                        {% set confidence_color = "bg-success" if confidence > 0.7 else "bg-warning" if confidence > 0.4 else "bg-danger" %}
+                                        <div class="progress-bar {{ confidence_color }}" role="progressbar" style="width: {{ confidence_percent }}%;" 
+                                            aria-valuenow="{{ confidence_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ confidence_percent }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if not is_present %}
                                     <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
                                         <i class="fas fa-copy me-1"></i> Copy
                                     </button>
