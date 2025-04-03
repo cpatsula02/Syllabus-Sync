@@ -37,7 +37,8 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
         
         # Call the OpenAI API with shorter timeout
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Using a faster model to prevent timeouts
+            model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
+                             # do not change this unless explicitly requested by the user
             messages=[
                 {"role": "system", "content": "Analyze if a checklist item appears in a document."},
                 {"role": "user", "content": prompt}
