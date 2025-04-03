@@ -351,15 +351,26 @@ def sections_are_related(section_title, item_concepts):
 
 def content_contains_concepts(section_content, item_concepts):
     """Check if section content contains the concepts from the checklist item."""
-    # Flatten all terms from all concepts for easier checking
+    # Special handling for course workload
+    if any('workload' in term for terms in item_concepts.values() for term in terms):
+        workload_patterns = [
+            r'course\s+workload',
+            r'expected\s+(time|hours)',
+            r'(time|hours)\s+(required|expected|needed)',
+            r'workload\s+expectations?',
+            r'(weekly|total)\s+(time|hours|workload)',
+            r'hours\s+per\s+week'
+        ]
+        for pattern in workload_patterns:
+            if re.search(pattern, section_content, re.IGNORECASE):
+                return True
+    
+    # Standard concept matching for other items
     all_concept_terms = []
     for terms in item_concepts.values():
         all_concept_terms.extend(terms)
     
-    # Check if a significant number of terms appear in the section content
     terms_found = sum(1 for term in all_concept_terms if term in section_content)
-    
-    # If at least 60% of the terms are found in this section, consider it a match
     return len(all_concept_terms) > 0 and terms_found / len(all_concept_terms) >= 0.6
 
 def extract_policy_type(item_text):
@@ -674,9 +685,9 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
     # Special pattern for contacting instructor
     if 'contact' in item or 'instructor' in item or 'professor' in item or 'email' in item:
         contact_patterns = [
-            r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Email pattern
-            r'(instructor|professor|faculty)\s+email\s*:?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-            r'email\s*:?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+            r'[a-zA-Z0-9._%+-]+@ucalgary\.ca\b',  # University email pattern
+            r'(instructor|professor|faculty)\s+email\s*:?\s*[a-zA-Z0-9._%+-]+@ucalgary\.ca\b',
+            r'email\s*:?\s*[a-zA-Z0-9._%+-]+@ucalgary\.ca\b'
         ]
         for pattern in contact_patterns:
             match = re.search(pattern, document_lower, re.IGNORECASE)
@@ -696,7 +707,19 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
 
 def check_special_entity_patterns(item, document):
     """Check for special entity patterns that might be missed by other methods."""
-    # Call the updated version that returns locations, but discard the locations
+    # Special handling for link validation
+    if 'link' in item.lower():
+        # Look for URLs in common formats
+        url_patterns = [
+            r'https?://[^\s<>"]+|www\.[^\s<>"]+',
+            r'[^\s<>"]+\.ucalgary\.ca[^\s<>"]*'
+        ]
+        
+        for pattern in url_patterns:
+            if re.findall(pattern, document):
+                return True
+                
+    # Standard pattern checking for other items
     locations = check_special_entity_patterns_with_locations(item, document, document.lower())
     return len(locations) > 0
 
