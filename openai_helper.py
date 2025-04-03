@@ -134,15 +134,33 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
             from document_processor import check_item_in_document
             is_present = check_item_in_document(item, document_text)
             
-            # Provide more detailed explanations for policy-related items
+            # Provide more detailed explanations based on content type
             explanation = "Not found in document"
             if is_present:
-                if 'policy' in item.lower() or 'policies' in item.lower():
-                    explanation = "Policy content detected through pattern matching"
-                elif 'assignment' in item.lower() or 'assessment' in item.lower():
-                    explanation = "Assessment-related content detected through pattern matching"
+                item_lower = item.lower()
+                # Generate more specific explanations by content type
+                if 'policy' in item_lower or 'policies' in item_lower:
+                    explanation = "Policy content detected in document sections"
+                elif 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+                    explanation = "Found missed assignment/assessment policy content"
+                elif 'assignment' in item_lower or 'assessment' in item_lower:
+                    explanation = "Assignment/assessment details detected in document"
+                elif 'grade' in item_lower or 'grading' in item_lower or 'distribution' in item_lower:
+                    explanation = "Grade information found in document sections"
+                elif 'participation' in item_lower:
+                    explanation = "Class participation information detected"
+                elif 'textbook' in item_lower or 'reading' in item_lower or 'material' in item_lower:
+                    explanation = "Course materials/textbook information found"
+                elif 'objective' in item_lower or 'outcome' in item_lower:
+                    explanation = "Course objectives/outcomes detected"
+                elif 'schedule' in item_lower or 'calendar' in item_lower:
+                    explanation = "Course schedule/calendar information found"
+                elif 'contact' in item_lower or 'instructor' in item_lower:
+                    explanation = "Instructor contact information detected"
+                elif 'exam' in item_lower or 'test' in item_lower or 'quiz' in item_lower:
+                    explanation = "Exam/assessment information found"
                 else:
-                    explanation = "Detected using pattern matching"
+                    explanation = "Content matched through section analysis"
             
             results[item] = {
                 "present": is_present,
@@ -176,15 +194,33 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
                 from document_processor import check_item_in_document
                 is_present = check_item_in_document(item, document_text)
                 
-                # Provide more detailed explanations for policy-related items
+                # Provide more detailed explanations based on content type
                 explanation = "Not found in document"
                 if is_present:
-                    if 'policy' in item.lower() or 'policies' in item.lower():
-                        explanation = "Policy content detected through pattern matching"
-                    elif 'assignment' in item.lower() or 'assessment' in item.lower():
-                        explanation = "Assessment-related content detected through pattern matching"
+                    item_lower = item.lower()
+                    # Generate more specific explanations by content type
+                    if 'policy' in item_lower or 'policies' in item_lower:
+                        explanation = "Policy content detected in document sections"
+                    elif 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+                        explanation = "Found missed assignment/assessment policy content"
+                    elif 'assignment' in item_lower or 'assessment' in item_lower:
+                        explanation = "Assignment/assessment details detected in document"
+                    elif 'grade' in item_lower or 'grading' in item_lower or 'distribution' in item_lower:
+                        explanation = "Grade information found in document sections"
+                    elif 'participation' in item_lower:
+                        explanation = "Class participation information detected"
+                    elif 'textbook' in item_lower or 'reading' in item_lower or 'material' in item_lower:
+                        explanation = "Course materials/textbook information found"
+                    elif 'objective' in item_lower or 'outcome' in item_lower:
+                        explanation = "Course objectives/outcomes detected"
+                    elif 'schedule' in item_lower or 'calendar' in item_lower:
+                        explanation = "Course schedule/calendar information found"
+                    elif 'contact' in item_lower or 'instructor' in item_lower:
+                        explanation = "Instructor contact information detected"
+                    elif 'exam' in item_lower or 'test' in item_lower or 'quiz' in item_lower:
+                        explanation = "Exam/assessment information found"
                     else:
-                        explanation = "Detected using pattern matching"
+                        explanation = "Content matched through section analysis"
                 
                 results[item] = {
                     "present": is_present,
@@ -200,15 +236,33 @@ def analyze_checklist_items_batch(items: List[str], document_text: str) -> Dict[
                 from document_processor import check_item_in_document
                 is_present = check_item_in_document(item, document_text)
                 
-                # Provide more detailed explanations for policy-related items
+                # Provide more detailed explanations based on content type
                 explanation = "Not found in document"
                 if is_present:
-                    if 'policy' in item.lower() or 'policies' in item.lower():
-                        explanation = "Policy content detected through pattern matching"
-                    elif 'assignment' in item.lower() or 'assessment' in item.lower():
-                        explanation = "Assessment-related content detected through pattern matching"
+                    item_lower = item.lower()
+                    # Generate more specific explanations by content type
+                    if 'policy' in item_lower or 'policies' in item_lower:
+                        explanation = "Policy content detected in document sections"
+                    elif 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+                        explanation = "Found missed assignment/assessment policy content"
+                    elif 'assignment' in item_lower or 'assessment' in item_lower:
+                        explanation = "Assignment/assessment details detected in document"
+                    elif 'grade' in item_lower or 'grading' in item_lower or 'distribution' in item_lower:
+                        explanation = "Grade information found in document sections"
+                    elif 'participation' in item_lower:
+                        explanation = "Class participation information detected"
+                    elif 'textbook' in item_lower or 'reading' in item_lower or 'material' in item_lower:
+                        explanation = "Course materials/textbook information found"
+                    elif 'objective' in item_lower or 'outcome' in item_lower:
+                        explanation = "Course objectives/outcomes detected"
+                    elif 'schedule' in item_lower or 'calendar' in item_lower:
+                        explanation = "Course schedule/calendar information found"
+                    elif 'contact' in item_lower or 'instructor' in item_lower:
+                        explanation = "Instructor contact information detected"
+                    elif 'exam' in item_lower or 'test' in item_lower or 'quiz' in item_lower:
+                        explanation = "Exam/assessment information found"
                     else:
-                        explanation = "Detected using pattern matching"
+                        explanation = "Content matched through section analysis"
                 
                 results[item] = {
                     "present": is_present,

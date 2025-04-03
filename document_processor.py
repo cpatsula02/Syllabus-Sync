@@ -110,8 +110,7 @@ def extract_checklist_items(text: str) -> List[str]:
 def check_item_in_document(item: str, document_text: str) -> bool:
     """
     Check if a checklist item is present in the document text.
-    Uses a more sophisticated matching approach beyond simple string matching.
-    Enhanced for policy-related content detection.
+    Uses advanced semantic matching to identify related content even when wording differs.
     """
     # Clean and normalize text for comparison
     item_lower = item.lower()
@@ -121,40 +120,49 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     if item_lower in document_lower:
         return True
     
-    # Special policy-related pattern detection
-    # Look for policy headers and content related to the item
-    if 'policy' in item_lower or 'policies' in item_lower or 'requirements' in item_lower:
-        # For specific policy items, generate variations to check
-        policy_words = ['policy', 'policies', 'guideline', 'guidelines', 'requirement', 'requirements', 'procedure', 'protocol']
-        
-        # Extract the policy type from the item
-        policy_type = ''
-        for word in policy_words:
-            if word in item_lower:
-                # Find what kind of policy (e.g., "missed assignment policy" -> "missed assignment")
-                pattern = re.compile(r'([\w\s]+)\s+' + word)
-                match = pattern.search(item_lower)
-                if match:
-                    policy_type = match.group(1).strip()
-                    break
-        
-        # If we found a policy type, check for its presence in any form
-        if policy_type:
-            # Check if the policy type appears near policy-related words
-            policy_sections = re.findall(r'([^.!?]*(?:policy|policies|guidelines|procedures|protocols)[^.!?]*[.!?])', document_lower)
-            
-            for section in policy_sections:
-                # Check if this policy section contains our type
-                if policy_type in section or any(word in section for word in policy_type.split()):
-                    return True
-            
-            # Also check for headers that might match the policy type
-            # Headers often have special formatting (e.g., "Missed Assessment Policy:")
-            header_pattern = re.compile(r'(^|\n)([^.!?\n]*' + re.escape(policy_type) + r'[^.!?\n]*(?:policy|policies|guidelines|procedures|protocols)[^.!?\n]*)', re.IGNORECASE)
-            if header_pattern.search(document_lower):
-                return True
+    # Extract core concepts from the checklist item
+    item_concepts = extract_core_concepts(item_lower)
     
-    # Extract important keywords from the item (remove stopwords)
+    # 1. Section Header Analysis - Identify document sections and their content
+    document_sections = extract_document_sections(document_lower)
+    
+    # 2. Check if any of the extracted sections match our item concepts
+    for section_title, section_content in document_sections.items():
+        # Check if this section's title relates to our item
+        if sections_are_related(section_title, item_concepts):
+            return True
+            
+        # Check if this section's content contains our item concepts
+        # Use a proximity search within the section content only
+        if content_contains_concepts(section_content, item_concepts):
+            return True
+    
+    # 3. Policy-specific checks
+    if any(word in item_lower for word in ['policy', 'policies', 'requirements', 'guideline', 'guidelines']):
+        # Extract policy type (e.g., "missed assignment policy" -> "missed assignment")
+        policy_type = extract_policy_type(item_lower)
+        
+        if policy_type:
+            policy_patterns = [
+                # Policy header patterns
+                r'(^|\n)([^.!?\n]*' + re.escape(policy_type) + r'[^.!?\n]*(?:policy|policies|guidelines|rule|protocol)[^.!?\n]*)',
+                # Policy in paragraph patterns
+                r'([^.!?]*' + re.escape(policy_type) + r'[^.!?]*(?:policy|policies|guidelines|rule|protocol)[^.!?]*[.!?])'
+            ]
+            
+            for pattern in policy_patterns:
+                if re.search(pattern, document_lower, re.IGNORECASE):
+                    return True
+    
+    # 4. Check for semantically similar content without exact wording matches
+    if check_semantic_similarity(item_lower, document_lower, item_concepts):
+        return True
+    
+    # 5. Special entity-specific checks
+    if check_special_entity_patterns(item_lower, document_lower):
+        return True
+    
+    # 6. Fallback: Check for keyword density
     try:
         stop_words = set(stopwords.words('english'))
         item_words = [word for word in re.findall(r'\b\w+\b', item_lower) 
@@ -163,45 +171,275 @@ def check_item_in_document(item: str, document_text: str) -> bool:
         # Count how many important words appear in the document
         words_found = sum(1 for word in item_words if word in document_lower)
         
-        # If more than 70% of important words are found, consider it a match
-        if len(item_words) > 0 and words_found / len(item_words) >= 0.7:
+        # Lower the threshold to 65% to catch more matches with different wording
+        if len(item_words) > 0 and words_found / len(item_words) >= 0.65:
             return True
     except:
         # Fall back to simple matching if NLP processing fails
         pass
     
-    # Check for sentence similarity with fuzzy matching
-    # Split item into words and check if most of them appear close together
-    item_parts = item_lower.split()
-    if len(item_parts) >= 3:
-        # Check for at least 3/4 of consecutive words appearing
-        min_required = max(3, len(item_parts) * 3 // 4)
-        for i in range(len(item_parts) - min_required + 1):
-            phrase = ' '.join(item_parts[i:i+min_required])
-            if phrase in document_lower:
+    return False
+
+def extract_core_concepts(text):
+    """Extract core concepts from text for semantic matching."""
+    # Define concept categories and their related terms
+    concept_categories = {
+        'textbook': ['textbook', 'book', 'reading', 'literature', 'material', 'resource'],
+        'grade_distribution': ['grade', 'grading', 'mark', 'assessment', 'evaluation', 'distribution', 'weight', 'percentage', 'score'],
+        'assignment': ['assignment', 'homework', 'task', 'project', 'paper', 'report', 'submission'],
+        'participation': ['participation', 'engage', 'discussion', 'contribute', 'attend', 'attendance'],
+        'exam': ['exam', 'examination', 'test', 'quiz', 'final', 'midterm'],
+        'policy': ['policy', 'rule', 'guideline', 'requirement', 'procedure', 'protocol', 'regulation'],
+        'schedule': ['schedule', 'timetable', 'calendar', 'date', 'deadline', 'timeline', 'due'],
+        'objective': ['objective', 'goal', 'outcome', 'aim', 'purpose', 'learning'],
+        'instructor': ['instructor', 'professor', 'teacher', 'faculty', 'contact', 'email', 'office']
+    }
+    
+    # Extract concepts that appear in the text
+    found_concepts = {}
+    for concept, terms in concept_categories.items():
+        for term in terms:
+            if term in text:
+                if concept not in found_concepts:
+                    found_concepts[concept] = []
+                found_concepts[concept].append(term)
+    
+    return found_concepts
+
+def extract_document_sections(document_text):
+    """Extract sections with their titles and content from the document."""
+    sections = {}
+    
+    # Common section header patterns in course outlines
+    header_patterns = [
+        # Format: Header followed by a newline
+        r'(^|\n)([A-Z][A-Za-z\s\d:&\-\']+)(\n)',
+        # Format: Header with colon
+        r'(^|\n)([A-Z][A-Za-z\s\d:&\-\']+):',
+        # Format: Numbered/bulleted headers
+        r'(^|\n)(\d+\.\s+[A-Z][A-Za-z\s\d:&\-\']+)(\n|:)',
+        # Format: Headers with formatting marks around them
+        r'(^|\n)([\*\-\_\=]{0,3}[A-Z][A-Za-z\s\d:&\-\']+[\*\-\_\=]{0,3})(\n|:)'
+    ]
+    
+    # Find all potential section headers
+    all_headers = []
+    for pattern in header_patterns:
+        headers = re.finditer(pattern, document_text, re.MULTILINE)
+        for match in headers:
+            header_text = match.group(2).strip()
+            # Filter out very short headers or non-header-like text
+            if len(header_text) > 3 and len(header_text.split()) <= 6:
+                header_pos = match.start(2)
+                all_headers.append((header_pos, header_text))
+    
+    # Sort headers by position
+    all_headers.sort(key=lambda x: x[0])
+    
+    # Extract content between headers
+    for i in range(len(all_headers)):
+        current_header = all_headers[i][1]
+        current_pos = all_headers[i][0]
+        
+        # Get content until the next header or end of document
+        end_pos = len(document_text)
+        if i < len(all_headers) - 1:
+            end_pos = all_headers[i+1][0]
+        
+        # Extract section content
+        start_content_pos = current_pos + len(current_header)
+        section_content = document_text[start_content_pos:end_pos].strip()
+        
+        # Store the section
+        sections[current_header.lower()] = section_content.lower()
+    
+    return sections
+
+def sections_are_related(section_title, item_concepts):
+    """Check if a section title is related to the concepts in the checklist item."""
+    # Look for direct concept matches in the section title
+    for concept, terms in item_concepts.items():
+        for term in terms:
+            if term in section_title:
                 return True
     
-    # Check for semantic equivalents (especially for policies)
-    # This checks for cases where policy content exists but with different wording
-    if 'miss' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower) and 'policy' in item_lower:
-        # Look for sections that talk about missed assignments/assessments
-        missed_terms = ['miss', 'missed', 'missing', 'absence', 'absent']
-        assignment_terms = ['assignment', 'assessment', 'work', 'quiz', 'exam', 'test']
-        policy_terms = ['policy', 'policies', 'procedure', 'guideline', 'rule', 'requirement', 'deferral', 'defer']
+    # Check for common concept pairs that might be related
+    concept_relations = {
+        'textbook': ['material', 'required', 'reading'],
+        'grade_distribution': ['breakdown', 'composition', 'scale', 'grading'],
+        'participation': ['attendance', 'classroom', 'engagement'],
+        'assignment': ['task', 'project', 'work', 'submission', 'paper'],
+        'policy': ['late', 'missed', 'absence', 'attendance', 'requirement']
+    }
+    
+    # Check if any concept from the item appears in related concept terms in the section title
+    for item_concept in item_concepts.keys():
+        if item_concept in concept_relations:
+            related_terms = concept_relations[item_concept]
+            for term in related_terms:
+                if term in section_title:
+                    return True
+    
+    return False
+
+def content_contains_concepts(section_content, item_concepts):
+    """Check if section content contains the concepts from the checklist item."""
+    # Flatten all terms from all concepts for easier checking
+    all_concept_terms = []
+    for terms in item_concepts.values():
+        all_concept_terms.extend(terms)
+    
+    # Check if a significant number of terms appear in the section content
+    terms_found = sum(1 for term in all_concept_terms if term in section_content)
+    
+    # If at least 60% of the terms are found in this section, consider it a match
+    return len(all_concept_terms) > 0 and terms_found / len(all_concept_terms) >= 0.6
+
+def extract_policy_type(item_text):
+    """Extract the type of policy from policy-related checklist items."""
+    policy_words = ['policy', 'policies', 'guideline', 'guidelines', 'requirement', 
+                   'requirements', 'procedure', 'procedures', 'protocol', 'protocols', 'rule', 'rules']
+    
+    for word in policy_words:
+        if word in item_text:
+            # Find what kind of policy (e.g., "missed assignment policy" -> "missed assignment")
+            pattern = re.compile(r'([\w\s]+)\s+' + word)
+            match = pattern.search(item_text)
+            if match:
+                return match.group(1).strip()
+    
+    return None
+
+def check_semantic_similarity(item, document, item_concepts):
+    """Check for semantic similarity between checklist item and document content."""
+    # Try to construct meaningful combinations from the item
+    meaningful_combinations = []
+    
+    # Check specific semantic patterns
+    
+    # Pattern 1: Course objectives/learning outcomes
+    if 'objective' in item_concepts or 'learning' in item or 'outcome' in item:
+        patterns = [
+            r'(course|learning|student)\s+(objectives|outcomes|goals)',
+            r'(by the end|students will|learners will)',
+            r'(upon completion|after completing)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Pattern 2: Textbooks and materials
+    if 'textbook' in item_concepts:
+        patterns = [
+            r'(required|recommended)\s+(textbook|text|reading|material)',
+            r'(course|class)\s+(material|resource|text|book)',
+            r'(text|book|reading)\s+(list|requirement|required)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Pattern 3: Grade distribution/assessment
+    if 'grade_distribution' in item_concepts:
+        patterns = [
+            r'(grade|grading|mark)\s+(distribution|breakdown|allocation|scheme)',
+            r'(assessment|evaluation)\s+(component|criteria|method|breakdown)',
+            r'(final\s+grade|course\s+grade)\s+(determined|calculated|comprised)',
+            r'(grade|mark|score)\s+(weighting|weight|percentage|worth)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
         
-        # Check for proximity of these terms
-        for m_term in missed_terms:
-            for a_term in assignment_terms:
-                # Check if these terms appear within a reasonable distance
-                for p_term in policy_terms:
-                    pattern = re.compile(r'[^.!?]*' + m_term + r'[^.!?]*' + a_term + r'[^.!?]*' + p_term + r'[^.!?]*[.!?]', re.IGNORECASE)
-                    if pattern.search(document_lower):
-                        return True
-                    
-                    # Try reverse order too (policy term first, then missed term)
-                    pattern = re.compile(r'[^.!?]*' + p_term + r'[^.!?]*' + m_term + r'[^.!?]*' + a_term + r'[^.!?]*[.!?]', re.IGNORECASE)
-                    if pattern.search(document_lower):
-                        return True
+        # Also look for grade tables or distributions in list format
+        grade_table_pattern = r'(assignment|quiz|exam|test|participation|project).*?(\d+%|\d+\s+percent)'
+        if re.search(grade_table_pattern, document, re.IGNORECASE):
+            return True
+    
+    # Additional patterns for checking more specific items
+    # Pattern 4: Class participation rules
+    if 'participation' in item_concepts:
+        if any(term in document for term in ['class participation', 'participation grade', 'participate in class', 'participation will be']):
+            return True
+    
+    # Pattern 5: Assignment details
+    if 'assignment' in item_concepts:
+        assignment_patterns = [
+            r'(assignment|homework|project)\s+(description|detail|instruction)',
+            r'(submit|submission|complete)\s+(assignment|homework|project)',
+            r'(assignment|homework|project)\s+(due|deadline)'
+        ]
+        for pattern in assignment_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    return False
+
+def check_special_entity_patterns(item, document):
+    """Check for special entity patterns that might be missed by other methods."""
+    # Special pattern for missed assignment policies
+    if 'missed' in item and ('assignment' in item or 'assessment' in item):
+        missed_patterns = [
+            r'missed\s+assessment',
+            r'missed\s+assignment', 
+            r'missing\s+(work|assignment|assessment|exam|quiz)',
+            r'absence\s+from\s+(class|exam|assessment|assignment)',
+            r'(extension|deferral)\s+for\s+(assignment|assessment|exam)',
+            r'(accommodation|consideration)\s+for\s+missed'
+        ]
+        for pattern in missed_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Special pattern for late policies
+    if 'late' in item and ('assignment' in item or 'work' in item or 'policy' in item):
+        late_patterns = [
+            r'late\s+(assignment|submission|work)',
+            r'(late|penalty)\s+policy', 
+            r'(submission|work|assignment)\s+after\s+deadline',
+            r'(deduction|penalty)\s+for\s+late',
+            r'(grade|mark)\s+reduction\s+for\s+late'
+        ]
+        for pattern in late_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Special pattern for final exam details
+    if 'final' in item and ('exam' in item or 'examination' in item):
+        final_exam_patterns = [
+            r'final\s+(exam|examination)',
+            r'(exam|examination)\s+schedule', 
+            r'(exam|test)\s+worth\s+\d+%',
+            r'(cumulative|comprehensive)\s+final',
+            r'(registrar|scheduled)\s+(exam|examination)'
+        ]
+        for pattern in final_exam_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Special pattern for class schedule
+    if 'schedule' in item or 'topic' in item or 'calendar' in item:
+        schedule_patterns = [
+            r'(class|course|lecture)\s+(schedule|calendar|topic|outline)',
+            r'(weekly|daily)\s+(topic|reading|schedule)',
+            r'(topic|module|unit)\s+(covered|discussed)',
+            r'(schedule|calendar)\s+of\s+(class|topic|reading)'
+        ]
+        for pattern in schedule_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+    
+    # Special pattern for contacting instructor
+    if 'contact' in item or 'instructor' in item or 'professor' in item:
+        contact_patterns = [
+            r'(contact|email|reach)\s+(instructor|professor|teacher|faculty)',
+            r'(instructor|professor|faculty)\s+(contact|information|email)',
+            r'(office|email|phone)\s+(hour|location)',
+            r'(communicate|contact)\s+with\s+(me|instructor|professor)'
+        ]
+        for pattern in contact_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
     
     return False
 
