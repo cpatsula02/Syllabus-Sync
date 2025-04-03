@@ -163,33 +163,45 @@ def process_documents(checklist_path: str, outline_path: str) -> Tuple[List[str]
         # Extract checklist items
         checklist_items = extract_checklist_items(checklist_text)
         
+        # Initialize empty results dictionary
+        matching_results = {}
+        
         # First, try using OpenAI for more accurate analysis if available
+        used_openai = False
         try:
             if 'openai_helper' in globals():
                 logging.info("Using OpenAI for document analysis")
+                # This will process a subset of items to avoid API limits
                 ai_results = openai_helper.analyze_checklist_items_batch(checklist_items, outline_text)
+                used_openai = True
                 
-                # Convert AI results to the expected format
-                matching_results = {}
+                # Add AI results to our matching results
                 for item, result in ai_results.items():
-                    # Store the full result with confidence and explanation
                     matching_results[item] = result
-                
-                return checklist_items, matching_results
         except Exception as ai_error:
             logging.warning(f"OpenAI analysis failed, falling back to traditional methods: {str(ai_error)}")
+            used_openai = False
         
-        # Fallback to traditional NLP methods if OpenAI is not available or fails
-        logging.info("Using traditional NLP for document analysis")
-        matching_results = {}
-        for item in checklist_items:
-            is_present = check_item_in_document(item, outline_text)
-            # Format the result to match the OpenAI structure for consistency
-            matching_results[item] = {
-                "present": is_present,
-                "confidence": 1.0 if is_present else 0.0,
-                "explanation": "Detected using pattern matching" if is_present else "Not found in document"
-            }
+        # Check if there are any items not processed by OpenAI
+        # Either because OpenAI failed, wasn't available, or only processed a subset
+        unprocessed_items = [item for item in checklist_items if item not in matching_results]
+        
+        if unprocessed_items:
+            logging.info(f"Using traditional NLP for {len(unprocessed_items)} remaining items")
+            for item in unprocessed_items:
+                is_present = check_item_in_document(item, outline_text)
+                # Format the result to match the OpenAI structure for consistency
+                matching_results[item] = {
+                    "present": is_present,
+                    "confidence": 0.9 if is_present else 0.1,  # Slightly less confident than OpenAI
+                    "explanation": "Detected using pattern matching" if is_present else "Not found in document"
+                }
+        
+        # Add a log about what methods were used
+        if used_openai:
+            logging.info(f"Completed analysis using combination of OpenAI ({len(matching_results) - len(unprocessed_items)} items) and traditional methods ({len(unprocessed_items)} items)")
+        else:
+            logging.info(f"Completed analysis using only traditional methods ({len(matching_results)} items)")
         
         return checklist_items, matching_results
         
