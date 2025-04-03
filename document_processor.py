@@ -672,12 +672,11 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
                 return matched_locations
     
     # Special pattern for contacting instructor
-    if 'contact' in item or 'instructor' in item or 'professor' in item:
+    if 'contact' in item or 'instructor' in item or 'professor' in item or 'email' in item:
         contact_patterns = [
-            r'(contact|email|reach)\s+(instructor|professor|teacher|faculty)',
-            r'(instructor|professor|faculty)\s+(contact|information|email)',
-            r'(office|email|phone)\s+(hour|location)',
-            r'(communicate|contact)\s+with\s+(me|instructor|professor)'
+            r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Email pattern
+            r'(instructor|professor|faculty)\s+email\s*:?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+            r'email\s*:?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
         ]
         for pattern in contact_patterns:
             match = re.search(pattern, document_lower, re.IGNORECASE)
