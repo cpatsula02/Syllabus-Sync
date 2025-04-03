@@ -95,6 +95,7 @@
                             {% set confidence = 0 %}
                             {% set explanation = "" %}
                             {% set method = "traditional" %}
+                            {% set locations = [] %}
                             
                             {% if matching_results[item] is mapping %}
                                 {% set is_present = matching_results[item].present %}
@@ -102,6 +103,9 @@
                                 {% set explanation = matching_results[item].explanation %}
                                 {% if matching_results[item].method is defined %}
                                     {% set method = matching_results[item].method %}
+                                {% endif %}
+                                {% if matching_results[item].locations is defined %}
+                                    {% set locations = matching_results[item].locations %}
                                 {% endif %}
                             {% elif matching_results[item] is boolean %}
                                 {% set is_present = matching_results[item] %}
@@ -132,6 +136,16 @@
                                     {% else %}
                                     <span class="badge bg-secondary ms-1">Pattern Matching</span>
                                     {% endif %}
+                                    
+                                    {% if is_present and locations and locations|length > 0 %}
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-success show-matches-btn" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#matchModal{{ loop.index }}">
+                                            <i class="fas fa-search-location me-1"></i> View Matches
+                                        </button>
+                                    </div>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if not is_present %}
@@ -143,6 +157,52 @@
                                     {% endif %}
                                 </td>
                             </tr>
+                            
+                            {% if is_present and locations and locations|length > 0 %}
+                            <!-- Match details modal -->
+                            <div class="modal fade" id="matchModal{{ loop.index }}" tabindex="-1" aria-labelledby="matchModalLabel{{ loop.index }}" aria-hidden="true">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-success text-white">
+                                            <h5 class="modal-title" id="matchModalLabel{{ loop.index }}">
+                                                <i class="fas fa-check-circle me-2"></i> Matched Content
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <h6 class="mb-3">Checklist Item:</h6>
+                                            <div class="alert alert-light mb-4">{{ item }}</div>
+                                            
+                                            <h6 class="mb-3">Found in Document:</h6>
+                                            {% for match_text, match_context in locations %}
+                                            <div class="card mb-3 border-success">
+                                                <div class="card-header bg-success text-white">
+                                                    <i class="fas fa-search me-2"></i> Match {{ loop.index }}
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="matched-text mb-3">
+                                                        <strong>Matched Text:</strong>
+                                                        <div class="p-2 bg-light rounded border mt-2">
+                                                            <mark class="bg-success text-white p-1">{{ match_text }}</mark>
+                                                        </div>
+                                                    </div>
+                                                    <div class="match-context">
+                                                        <strong>Surrounding Context:</strong>
+                                                        <div class="p-2 bg-light rounded border mt-2 match-context-content">
+                                                            {{ match_context|replace(match_text, '<mark class="bg-success text-white p-1">' + match_text + '</mark>')|safe }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -157,6 +217,12 @@
                             <li><span class="badge bg-secondary">Pattern Matching</span> - Uses traditional text analysis techniques</li>
                         </ul>
                     </div>
+                </div>
+                
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                    <a href="{{ url_for('download_pdf') }}" class="btn btn-primary">
+                        <i class="fas fa-file-pdf me-2"></i> Download PDF Report
+                    </a>
                 </div>
             </div>
             <div class="card-footer text-center">

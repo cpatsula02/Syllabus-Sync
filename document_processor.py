@@ -107,18 +107,40 @@ def extract_checklist_items(text: str) -> List[str]:
     
     return checklist_items
 
-def check_item_in_document(item: str, document_text: str) -> bool:
+def check_item_in_document(item: str, document_text: str) -> Tuple[bool, List[Tuple[str, str]]]:
     """
     Check if a checklist item is present in the document text.
     Uses advanced semantic matching to identify related content even when wording differs.
+    
+    Returns:
+        Tuple[bool, List[Tuple[str, str]]]: A tuple containing:
+            - bool: Whether the item was found in the document
+            - List[Tuple[str, str]]: A list of (matched_text, context) tuples with locations where the item was found
     """
     # Clean and normalize text for comparison
     item_lower = item.lower()
     document_lower = document_text.lower()
     
+    # Keep track of locations where matches were found
+    locations = []
+    
     # Direct match - if the exact phrase appears
     if item_lower in document_lower:
-        return True
+        # Find all occurrences of the item
+        for match in re.finditer(re.escape(item_lower), document_lower):
+            start, end = match.span()
+            
+            # Get context around the match (100 chars before and after)
+            context_start = max(0, start - 100)
+            context_end = min(len(document_text), end + 100)
+            
+            # Extract the matched text and context
+            matched_text = document_text[start:end]
+            context = document_text[context_start:context_end]
+            
+            locations.append((matched_text, context))
+        
+        return True, locations
     
     # Extract core concepts from the checklist item
     item_concepts = extract_core_concepts(item_lower)
@@ -130,12 +152,19 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     for section_title, section_content in document_sections.items():
         # Check if this section's title relates to our item
         if sections_are_related(section_title, item_concepts):
-            return True
+            # Convert section title back to original case as best as possible
+            original_section_title = find_original_text(section_title, document_text)
+            section_preview = section_content[:200] + "..." if len(section_content) > 200 else section_content
+            locations.append((original_section_title, original_section_title + "\n" + section_preview))
+            return True, locations
             
         # Check if this section's content contains our item concepts
         # Use a proximity search within the section content only
         if content_contains_concepts(section_content, item_concepts):
-            return True
+            original_section_title = find_original_text(section_title, document_text)
+            section_preview = section_content[:200] + "..." if len(section_content) > 200 else section_content
+            locations.append((original_section_title, original_section_title + "\n" + section_preview))
+            return True, locations
     
     # 3. Policy-specific checks
     if any(word in item_lower for word in ['policy', 'policies', 'requirements', 'guideline', 'guidelines']):
@@ -151,16 +180,34 @@ def check_item_in_document(item: str, document_text: str) -> bool:
             ]
             
             for pattern in policy_patterns:
-                if re.search(pattern, document_lower, re.IGNORECASE):
-                    return True
+                for match in re.finditer(pattern, document_lower, re.IGNORECASE):
+                    if match:
+                        # Extract the matched text and context
+                        group_idx = 2 if len(match.groups()) > 1 else 0
+                        start, end = match.span(group_idx)
+                        
+                        # Get the matched text and context
+                        matched_text = document_text[start:end]
+                        
+                        # Get surrounding context
+                        context_start = max(0, start - 100)
+                        context_end = min(len(document_text), end + 100)
+                        context = document_text[context_start:context_end]
+                        
+                        locations.append((matched_text, context))
+                        return True, locations
     
     # 4. Check for semantically similar content without exact wording matches
-    if check_semantic_similarity(item_lower, document_lower, item_concepts):
-        return True
+    semantic_match_locations = check_semantic_similarity_with_locations(item_lower, document_text, document_lower, item_concepts)
+    if semantic_match_locations:
+        locations.extend(semantic_match_locations)
+        return True, locations
     
     # 5. Special entity-specific checks
-    if check_special_entity_patterns(item_lower, document_lower):
-        return True
+    entity_match_locations = check_special_entity_patterns_with_locations(item_lower, document_text, document_lower)
+    if entity_match_locations:
+        locations.extend(entity_match_locations)
+        return True, locations
     
     # 6. Fallback: Check for keyword density
     try:
@@ -173,12 +220,24 @@ def check_item_in_document(item: str, document_text: str) -> bool:
         
         # Lower the threshold to 65% to catch more matches with different wording
         if len(item_words) > 0 and words_found / len(item_words) >= 0.65:
-            return True
+            # For keyword matches, just use a summary as the matched text
+            matches_list = ', '.join(word for word in item_words if word in document_lower)
+            matched_summary = f"Found {words_found}/{len(item_words)} keywords: {matches_list}"
+            
+            # Get a relevant section where most keywords appear
+            best_section = find_best_keyword_section(document_text, item_words)
+            if best_section:
+                locations.append((matched_summary, best_section))
+                return True, locations
+            else:
+                # No good section found, just use a generic message
+                locations.append((matched_summary, f"Keyword match in document: {words_found}/{len(item_words)} keywords found"))
+                return True, locations
     except:
         # Fall back to simple matching if NLP processing fails
         pass
     
-    return False
+    return False, []
 
 def extract_core_concepts(text):
     """Extract core concepts from text for semantic matching."""
@@ -310,10 +369,77 @@ def extract_policy_type(item_text):
     
     return None
 
-def check_semantic_similarity(item, document, item_concepts):
-    """Check for semantic similarity between checklist item and document content."""
-    # Try to construct meaningful combinations from the item
-    meaningful_combinations = []
+def find_original_text(lowercase_text, original_document):
+    """
+    Find the original text (with correct case) from the lowercase version.
+    This helps preserve the original formatting when displaying matches.
+    """
+    if not lowercase_text:
+        return ""
+    
+    # Escape special regex characters
+    escaped_text = re.escape(lowercase_text)
+    
+    # Try to find the original cased version in the document
+    match = re.search(escaped_text, original_document.lower())
+    if match:
+        start, end = match.span()
+        return original_document[start:end]
+    
+    return lowercase_text  # Fallback to the lowercase text if not found
+
+def find_best_keyword_section(document_text, keywords):
+    """
+    Find the section of the document that contains the most keywords.
+    Returns a relevant excerpt from the document.
+    """
+    # Get document sentences
+    try:
+        sentences = sent_tokenize(document_text)
+        
+        # Score each sentence based on keyword appearances
+        sentence_scores = []
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            score = sum(1 for keyword in keywords if keyword in sentence_lower)
+            sentence_scores.append((score, sentence))
+        
+        # Sort by score (highest first)
+        sentence_scores.sort(reverse=True)
+        
+        # Take top 3 sentences if available
+        top_sentences = [s for _, s in sentence_scores[:3] if s]
+        
+        if top_sentences:
+            return " ".join(top_sentences)
+    except:
+        # Fall back to a more basic approach if NLTK fails
+        words = document_text.split()
+        best_start = 0
+        best_count = 0
+        
+        # Use a sliding window to find best section
+        window_size = 50
+        for i in range(len(words) - window_size + 1):
+            window = " ".join(words[i:i+window_size]).lower()
+            count = sum(1 for keyword in keywords if keyword in window)
+            if count > best_count:
+                best_count = count
+                best_start = i
+        
+        # Return best window if found
+        if best_count > 0:
+            return " ".join(words[best_start:best_start+window_size])
+    
+    # No good section found
+    return None
+
+def check_semantic_similarity_with_locations(item, original_document, document_lower, item_concepts):
+    """
+    Check for semantic similarity between checklist item and document content.
+    Returns a list of (matched_text, context) tuples for any matches found.
+    """
+    matched_locations = []
     
     # Check specific semantic patterns
     
@@ -325,8 +451,18 @@ def check_semantic_similarity(item, document, item_concepts):
             r'(upon completion|after completing)'
         ]
         for pattern in patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Pattern 2: Textbooks and materials
     if 'textbook' in item_concepts:
@@ -336,8 +472,18 @@ def check_semantic_similarity(item, document, item_concepts):
             r'(text|book|reading)\s+(list|requirement|required)'
         ]
         for pattern in patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Pattern 3: Grade distribution/assessment
     if 'grade_distribution' in item_concepts:
@@ -348,19 +494,52 @@ def check_semantic_similarity(item, document, item_concepts):
             r'(grade|mark|score)\s+(weighting|weight|percentage|worth)'
         ]
         for pattern in patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
         
         # Also look for grade tables or distributions in list format
         grade_table_pattern = r'(assignment|quiz|exam|test|participation|project).*?(\d+%|\d+\s+percent)'
-        if re.search(grade_table_pattern, document, re.IGNORECASE):
-            return True
+        match = re.search(grade_table_pattern, document_lower, re.IGNORECASE)
+        if match:
+            start, end = match.span()
+            matched_text = original_document[start:end]
+            
+            # Get context
+            context_start = max(0, start - 100)
+            context_end = min(len(original_document), end + 200)
+            context = original_document[context_start:context_end]
+            
+            matched_locations.append((matched_text, context))
+            return matched_locations
     
     # Additional patterns for checking more specific items
     # Pattern 4: Class participation rules
     if 'participation' in item_concepts:
-        if any(term in document for term in ['class participation', 'participation grade', 'participate in class', 'participation will be']):
-            return True
+        for term in ['class participation', 'participation grade', 'participate in class', 'participation will be']:
+            if term in document_lower:
+                # Find the term in the document
+                start = document_lower.find(term)
+                if start >= 0:
+                    end = start + len(term)
+                    matched_text = original_document[start:end]
+                    
+                    # Get context
+                    context_start = max(0, start - 100)
+                    context_end = min(len(original_document), end + 200)
+                    context = original_document[context_start:context_end]
+                    
+                    matched_locations.append((matched_text, context))
+                    return matched_locations
     
     # Pattern 5: Assignment details
     if 'assignment' in item_concepts:
@@ -370,13 +549,28 @@ def check_semantic_similarity(item, document, item_concepts):
             r'(assignment|homework|project)\s+(due|deadline)'
         ]
         for pattern in assignment_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
-    return False
+    return []
 
-def check_special_entity_patterns(item, document):
-    """Check for special entity patterns that might be missed by other methods."""
+def check_special_entity_patterns_with_locations(item, original_document, document_lower):
+    """
+    Check for special entity patterns that might be missed by other methods.
+    Returns a list of (matched_text, context) tuples for any matches found.
+    """
+    matched_locations = []
+    
     # Special pattern for missed assignment policies
     if 'missed' in item and ('assignment' in item or 'assessment' in item):
         missed_patterns = [
@@ -388,8 +582,18 @@ def check_special_entity_patterns(item, document):
             r'(accommodation|consideration)\s+for\s+missed'
         ]
         for pattern in missed_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Special pattern for late policies
     if 'late' in item and ('assignment' in item or 'work' in item or 'policy' in item):
@@ -401,8 +605,18 @@ def check_special_entity_patterns(item, document):
             r'(grade|mark)\s+reduction\s+for\s+late'
         ]
         for pattern in late_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Special pattern for final exam details
     if 'final' in item and ('exam' in item or 'examination' in item):
@@ -414,8 +628,18 @@ def check_special_entity_patterns(item, document):
             r'(registrar|scheduled)\s+(exam|examination)'
         ]
         for pattern in final_exam_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Special pattern for class schedule
     if 'schedule' in item or 'topic' in item or 'calendar' in item:
@@ -426,8 +650,18 @@ def check_special_entity_patterns(item, document):
             r'(schedule|calendar)\s+of\s+(class|topic|reading)'
         ]
         for pattern in schedule_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
     # Special pattern for contacting instructor
     if 'contact' in item or 'instructor' in item or 'professor' in item:
@@ -438,10 +672,26 @@ def check_special_entity_patterns(item, document):
             r'(communicate|contact)\s+with\s+(me|instructor|professor)'
         ]
         for pattern in contact_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
+            match = re.search(pattern, document_lower, re.IGNORECASE)
+            if match:
+                start, end = match.span()
+                matched_text = original_document[start:end]
+                
+                # Get context
+                context_start = max(0, start - 100)
+                context_end = min(len(original_document), end + 200)
+                context = original_document[context_start:context_end]
+                
+                matched_locations.append((matched_text, context))
+                return matched_locations
     
-    return False
+    return []
+
+def check_special_entity_patterns(item, document):
+    """Check for special entity patterns that might be missed by other methods."""
+    # Call the updated version that returns locations, but discard the locations
+    locations = check_special_entity_patterns_with_locations(item, document, document.lower())
+    return len(locations) > 0
 
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
     """
@@ -506,13 +756,14 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if unprocessed_items:
             logging.info(f"Using traditional NLP for {len(unprocessed_items)} remaining items")
             for item in unprocessed_items:
-                is_present = check_item_in_document(item, outline_text)
+                is_present, locations = check_item_in_document(item, outline_text)
                 # Format the result to match the OpenAI structure for consistency
                 matching_results[item] = {
                     "present": is_present,
                     "confidence": 0.8 if is_present else 0.2,
                     "explanation": "Detected using pattern matching" if is_present else "Not found in document",
-                    "method": "traditional"  # Mark which method was used
+                    "method": "traditional",  # Mark which method was used
+                    "locations": locations  # Store the locations where matches were found
                 }
         
         # Count methods used for detailed logging

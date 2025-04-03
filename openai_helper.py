@@ -33,7 +33,14 @@ Checklist item: "{item}"
 
 Document text (excerpt): "{trimmed_document}"
 
-Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": "brief reason"}}"""
+Response format: 
+{{
+  "present": true/false,
+  "confidence": 0.0-1.0,
+  "explanation": "brief reason",
+  "matched_text": "exact text in the document that matches" (leave empty if not present),
+  "context_around_match": "provide about 50 characters before and after the matched text" (leave empty if not present)
+}}"""
         
         # Call the OpenAI API with shorter timeout
         response = client.chat.completions.create(
@@ -45,7 +52,7 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
             ],
             response_format={"type": "json_object"},
             temperature=0.2,  # Lower temperature for more consistent results
-            max_tokens=100,   # Further reduced token limit to prevent long processing times
+            max_tokens=150,   # Increased token limit to handle the location information
             timeout=20        # 20 second timeout to prevent hanging
         )
         
@@ -53,10 +60,30 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
         result = json.loads(response.choices[0].message.content)
         logger.info(f"OpenAI analysis complete for item: {item[:30]}...")
         
+        # Extract location information if present
+        locations = []
+        if result.get("present", False) and result.get("matched_text"):
+            matched_text = result.get("matched_text", "")
+            context = result.get("context_around_match", "")
+            if matched_text:
+                locations.append((matched_text, context or matched_text))
+                
+        # Also use traditional methods to find additional locations
+        if result.get("present", False):
+            from document_processor import check_item_in_document
+            _, additional_locations = check_item_in_document(item, document_text)
+            
+            # Add unique locations from traditional methods
+            existing_matches = {loc[0] for loc in locations}
+            for match_text, context in additional_locations:
+                if match_text not in existing_matches:
+                    locations.append((match_text, context))
+        
         return {
             "present": result.get("present", False),
             "confidence": result.get("confidence", 0.0),
-            "explanation": result.get("explanation", "No explanation provided")
+            "explanation": result.get("explanation", "No explanation provided"),
+            "locations": locations  # Add the locations to the result
         }
         
     except (APITimeoutError, RateLimitError, APIConnectionError) as e:
@@ -71,14 +98,16 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
         return {
             "present": False,
             "confidence": 0.0,
-            "explanation": "OpenAI API temporarily unavailable. Using fallback analysis."
+            "explanation": "OpenAI API temporarily unavailable. Using fallback analysis.",
+            "locations": []
         }
     except BadRequestError as e:
         logger.error(f"OpenAI API bad request: {str(e)}")
         return {
             "present": False,
             "confidence": 0.0,
-            "explanation": "Invalid request to OpenAI API. Using fallback analysis."
+            "explanation": "Invalid request to OpenAI API. Using fallback analysis.",
+            "locations": []
         }
     except Exception as e:
         logger.error(f"Error using OpenAI API: {str(e)}")
@@ -92,7 +121,8 @@ Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": 
         return {
             "present": False,
             "confidence": 0.0,
-            "explanation": "Error during AI analysis. Using fallback analysis."
+            "explanation": "Error during AI analysis. Using fallback analysis.",
+            "locations": []
         }
 
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3) -> Dict[str, Dict[str, Any]]:
@@ -147,7 +177,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             
             # Use traditional method as fallback with enhanced pattern matching
             from document_processor import check_item_in_document
-            is_present = check_item_in_document(item, document_text)
+            is_present, locations = check_item_in_document(item, document_text)
             
             # Provide more detailed explanations based on content type
             explanation = "Not found in document"
@@ -181,7 +211,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 "present": is_present,
                 "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
                 "explanation": explanation,
-                "method": "traditional (enhanced)"  # Mark which method was used
+                "method": "traditional (enhanced)",  # Mark which method was used
+                "locations": locations  # Store the matched locations for highlighting
             }
             api_failures += 1
             continue
@@ -254,7 +285,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 
                 # Use traditional method for this item too with enhanced pattern matching
                 from document_processor import check_item_in_document
-                is_present = check_item_in_document(item, document_text)
+                is_present, locations = check_item_in_document(item, document_text)
                 
                 # Provide more detailed explanations based on content type
                 explanation = "Not found in document"
@@ -288,7 +319,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                     "present": is_present,
                     "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
                     "explanation": explanation,
-                    "method": "traditional (after quota exceeded)"
+                    "method": "traditional (after quota exceeded)",
+                    "locations": locations  # Store the matched locations for highlighting
                 }
                 api_failures += 1
             else:
@@ -296,7 +328,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 logger.error(f"Error analyzing item {i+1} with OpenAI: {str(e)}")
                 
                 from document_processor import check_item_in_document
-                is_present = check_item_in_document(item, document_text)
+                is_present, locations = check_item_in_document(item, document_text)
                 
                 # Provide more detailed explanations based on content type
                 explanation = "Not found in document"
@@ -330,7 +362,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                     "present": is_present,
                     "confidence": 0.85 if is_present else 0.2,  # Increased confidence due to better pattern matching
                     "explanation": explanation,
-                    "method": "traditional (after API error)"
+                    "method": "traditional (after API error)",
+                    "locations": locations  # Store the matched locations for highlighting
                 }
                 api_failures += 1
     

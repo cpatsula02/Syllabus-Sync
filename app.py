@@ -160,6 +160,26 @@ def generate_pdf_report(checklist_items, matching_results):
     pdf.cell(0, 8, f"Items Missing: {missing_items}", ln=True)
     pdf.cell(0, 8, f"Completion Rate: {completion_rate}%", ln=True)
     
+    # Missing items section
+    if missing_items > 0:
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "Missing Items", ln=True)
+        pdf.set_font("Arial", "", 11)
+        
+        missing_count = 0
+        for item in checklist_items:
+            is_present = False
+            if isinstance(matching_results.get(item), dict):
+                is_present = matching_results[item].get('present', False)
+            elif isinstance(matching_results.get(item), bool):
+                is_present = matching_results[item]
+                
+            if not is_present:
+                missing_count += 1
+                pdf.set_font("Arial", "", 10)
+                pdf.cell(0, 6, f"{missing_count}. {item}", ln=True)
+    
     # Detailed checklist
     pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
@@ -171,11 +191,13 @@ def generate_pdf_report(checklist_items, matching_results):
         is_present = False
         explanation = ""
         method = "traditional"
+        locations = []
         
         if isinstance(matching_results.get(item), dict):
             is_present = matching_results[item].get('present', False)
             explanation = matching_results[item].get('explanation', '')
             method = matching_results[item].get('method', 'traditional')
+            locations = matching_results[item].get('locations', [])
         elif isinstance(matching_results.get(item), bool):
             is_present = matching_results[item]
             explanation = "Found in document" if is_present else "Not found in document"
@@ -214,6 +236,20 @@ def generate_pdf_report(checklist_items, matching_results):
             pdf.set_font("Arial", "I", 9)
             pdf.cell(0, 6, f"    Note: {explanation}", ln=True)
         
+        # Add location information if present
+        if is_present and locations and len(locations) > 0:
+            pdf.set_font("Arial", "B", 9)
+            pdf.cell(0, 6, f"    Matched Locations ({len(locations)}):", ln=True)
+            pdf.set_font("Arial", "I", 8)
+            
+            for idx, (match_text, _) in enumerate(locations[:3], 1):  # Limit to first 3 matches
+                # Truncate match text if too long
+                display_text = match_text[:50] + "..." if len(match_text) > 50 else match_text
+                pdf.cell(0, 5, f"      {idx}. \"{display_text}\"", ln=True)
+            
+            if len(locations) > 3:
+                pdf.cell(0, 5, f"      (and {len(locations) - 3} more matches...)", ln=True)
+        
         pdf.ln(2)
     
     # Add recommendations
@@ -250,7 +286,27 @@ def results():
                           checklist_items=checklist_items,
                           matching_results=matching_results)
                           
-# PDF download route temporarily removed
+# PDF download route
+@app.route('/download-pdf')
+def download_pdf():
+    # Get results from session
+    checklist_items = session.get('checklist_items', [])
+    matching_results = session.get('matching_results', {})
+    
+    if not checklist_items or not matching_results:
+        flash('No results found. Please upload files again.')
+        return redirect(url_for('index'))
+    
+    # Generate the PDF
+    pdf_output = generate_pdf_report(checklist_items, matching_results)
+    
+    # Return the PDF as a downloadable file
+    return send_file(
+        pdf_output, 
+        as_attachment=True,
+        download_name='course_outline_analysis.pdf',
+        mimetype='application/pdf'
+    )
 
 # Error handlers
 @app.errorhandler(413)
