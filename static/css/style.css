@@ -1,0 +1,219 @@
+:root {
+    /* University of Calgary Colors */
+    --uofc-red: #CC0000;
+    --uofc-yellow: #FFCC00;
+    --uofc-black: #1A1A1A;
+    --uofc-white: #FFFFFF;
+    --uofc-light-gray: #F8F9FA;
+    --uofc-dark-gray: #333333;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f5f5f5;
+    color: var(--uofc-black);
+}
+
+/* Navigation */
+.navbar {
+    background-color: var(--uofc-red);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: var(--uofc-red);
+    color: var(--uofc-white);
+    font-weight: 600;
+}
+
+.card-header.bg-light {
+    background-color: var(--uofc-light-gray) !important;
+    color: var(--uofc-black);
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.card-body {
+    padding: 2rem;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--uofc-red);
+    border-color: var(--uofc-red);
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #b00000;
+    border-color: #b00000;
+}
+
+.btn-secondary {
+    background-color: var(--uofc-dark-gray);
+    border-color: var(--uofc-dark-gray);
+}
+
+.btn-light {
+    background-color: var(--uofc-white);
+    border-color: #ddd;
+    color: var(--uofc-black);
+}
+
+/* Upload Container */
+.upload-container {
+    background-color: var(--uofc-light-gray);
+    border: 2px dashed #ddd;
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.upload-container:hover {
+    border-color: var(--uofc-yellow);
+}
+
+.upload-icon {
+    color: var(--uofc-red);
+}
+
+/* Footer */
+footer {
+    background-color: var(--uofc-dark-gray);
+    color: var(--uofc-white);
+}
+
+/* Progress steps */
+.step-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 24px;
+}
+
+/* Results page styling */
+.progress-circle {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: conic-gradient(var(--uofc-red) 0%, var(--uofc-red) var(--progress, 0%), #f0f0f0 var(--progress, 0%), #f0f0f0 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-circle::before {
+    content: '';
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background-color: white;
+}
+
+.progress-circle-value {
+    position: relative;
+    font-weight: bold;
+    color: var(--uofc-black);
+}
+
+.summary-icon {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.summary-box {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.2s;
+}
+
+.summary-box:hover {
+    transform: translateY(-3px);
+}
+
+.table-success {
+    --bs-table-bg: rgba(25, 135, 84, 0.1);
+}
+
+.table-danger {
+    --bs-table-bg: rgba(220, 53, 69, 0.1);
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.loading-animation {
+    animation: pulse 1.5s infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    .progress-circle {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .progress-circle::before {
+        width: 90px;
+        height: 90px;
+    }
+}
+
+/* Alert styling */
+.alert {
+    border-radius: 8px;
+    border-left: 4px solid transparent;
+}
+
+.alert-info {
+    border-left-color: var(--uofc-yellow);
+}
+
+.alert-warning {
+    border-left-color: #ffc107;
+}
+
+.alert-success {
+    border-left-color: #198754;
+}
+
+/* Background */
+.bg-primary {
+    background-color: var(--uofc-red) !important;
+}
+
+.badge.bg-success {
+    background-color: #198754 !important;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}

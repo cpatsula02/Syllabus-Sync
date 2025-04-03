@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="200" height="50">
+  <!-- University of Calgary Logo (Simplified version) -->
+  <style>
+    .uofc-red { fill: #CC0000; }
+    .uofc-white { fill: #FFFFFF; }
+    .uofc-black { fill: #1A1A1A; }
+    .uofc-yellow { fill: #FFCC00; }
+  </style>
+  
+  <!-- Shield Background -->
+  <rect x="5" y="5" width="40" height="40" rx="5" class="uofc-red" />
+  
+  <!-- Book Symbol -->
+  <rect x="15" y="15" width="20" height="15" rx="2" class="uofc-white" />
+  <path d="M15,15 L35,15 L35,30 L15,30 Z M25,15 L25,30" stroke="#CC0000" stroke-width="1" fill="none" />
+  
+  <!-- Flame Symbol -->
+  <path d="M25,12 Q28,8 25,5 Q22,8 25,12 Z" class="uofc-yellow" />
+  
+  <!-- Text "University of Calgary" -->
+  <text x="55" y="20" font-family="Arial" font-weight="bold" font-size="12" class="uofc-black">University of</text>
+  <text x="55" y="35" font-family="Arial" font-weight="bold" font-size="16" class="uofc-red">CALGARY</text>
+</svg>

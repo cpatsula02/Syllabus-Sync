@@ -1,0 +1,121 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">Course Outline Checklist Results</h1>
+                <a href="{{ url_for('index') }}" class="btn btn-light btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i> Back
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="results-summary mb-4">
+                    {% set total_items = checklist_items|length %}
+                    {% set present_items = matching_results.values()|select|list|length %}
+                    {% set missing_items = total_items - present_items %}
+                    {% set completion_percentage = (present_items / total_items * 100)|int if total_items > 0 else 0 %}
+                    
+                    <div class="row align-items-center">
+                        <div class="col-md-4 text-center">
+                            <div class="progress-circle mx-auto position-relative mb-3" data-value="{{ completion_percentage }}">
+                                <div class="progress-circle-value h2">{{ completion_percentage }}%</div>
+                            </div>
+                            <h3 class="h5">Completion Rate</h3>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="summary-box p-3 rounded bg-light mb-2">
+                                        <div class="d-flex align-items-center">
+                                            <div class="summary-icon me-3 rounded-circle bg-success text-white">
+                                                <i class="fas fa-check"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="h2 mb-0">{{ present_items }}</h4>
+                                                <p class="small mb-0">Items Present</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="summary-box p-3 rounded bg-light">
+                                        <div class="d-flex align-items-center">
+                                            <div class="summary-icon me-3 rounded-circle bg-danger text-white">
+                                                <i class="fas fa-times"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="h2 mb-0">{{ missing_items }}</h4>
+                                                <p class="small mb-0">Items Missing</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if missing_items > 0 %}
+                            <div class="alert alert-warning mt-3">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Your course outline is missing {{ missing_items }} required item{% if missing_items != 1 %}s{% endif %}. Please review the checklist below.
+                            </div>
+                            {% else %}
+                            <div class="alert alert-success mt-3">
+                                <i class="fas fa-check-circle me-2"></i>
+                                Congratulations! Your course outline meets all checklist requirements.
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 class="h4 mb-3">Detailed Checklist</h2>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col" style="width: 70%">Checklist Item</th>
+                                <th scope="col" style="width: 15%">Status</th>
+                                <th scope="col" style="width: 15%">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in checklist_items %}
+                            <tr class="{% if matching_results[item] %}table-success{% else %}table-danger{% endif %}">
+                                <td>{{ item }}</td>
+                                <td>
+                                    {% if matching_results[item] %}
+                                    <span class="badge bg-success">Present</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Missing</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not matching_results[item] %}
+                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
+                                        <i class="fas fa-copy me-1"></i> Copy
+                                    </button>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="d-flex justify-content-center mt-4">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-redo me-2"></i>Check Another Document
+                    </a>
+                    <button class="btn btn-secondary" id="printResults">
+                        <i class="fas fa-print me-2"></i>Print Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
