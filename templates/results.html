@@ -20,11 +20,34 @@
 
     <h1 class="mb-4">Analysis Results</h1>
 
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Summary</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>Present Items: {{ present_count }}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-times-circle me-2"></i>Missing Items: {{ missing_count }}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>Total Items: {{ total_count }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% if missing_count > 0 %}
     <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title text-danger">
-                <i class="fas fa-exclamation-circle me-2"></i>Missing Items ({{ missing_count }})
+                <i class="fas fa-exclamation-triangle me-2"></i>Missing Items Summary
             </h5>
             <ul class="list-group list-group-flush">
                 {% for result in results %}
@@ -38,8 +61,6 @@
         </div>
     </div>
     {% endif %}
-
-    <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Summary</h5>
             <div class="row">

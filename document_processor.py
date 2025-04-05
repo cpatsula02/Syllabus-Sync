@@ -512,14 +512,28 @@ def check_special_entity_patterns(item, document, additional_context=""):
 
     # Enhanced table detection for grade distribution
     if 'grade' in item_lower or 'weight' in item_lower or 'distribution' in item_lower:
-        # Look for table-like structures
+        # Look for table-like structures with more variations
         table_patterns = [
             r'\b\d+%\s*[-–]\s*[A-Za-z\s]+',  # 30% - Assignments
             r'[A-Za-z\s]+\s*[-–]\s*\d+%',    # Assignments - 30%
             r'\|\s*[A-Za-z\s]+\s*\|\s*\d+%\s*\|',  # |Assignments|30%|
             r'[A-Za-z\s]+:\s*\d+%',          # Assignments: 30%
             r'\d+\s*points?\s+[A-Za-z\s]+',  # 30 points Assignment
-            r'worth\s+\d+%'                   # worth 30%
+            r'worth\s+\d+%',                  # worth 30%
+            r'(?:final|midterm|exam|quiz|test|assignment|project)s?\s*[:=-]?\s*\d+%', # Exam: 30%
+            r'\(\s*\d+%\s*\)',               # (30%)
+            r'evaluation.*?(?:\n.*?)+?(?=\n\s*$)', # Evaluation section with percentages
+            r'grade.*?distribution.*?(?:\n.*?)+?(?=\n\s*$)', # Grade distribution section
+            r'assessment.*?weight.*?(?:\n.*?)+?(?=\n\s*$)',  # Assessment weights section
+            r'\b(?:total|sum)\s+(?:marks|grade|weight).*?100%' # Total/sum indicators
+        ]
+        
+        # Also check for structured content with dates
+        date_patterns = [
+            r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}',
+            r'\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b',
+            r'\bweek\s+\d+\b',
+            r'\b(?:due|deadline|scheduled|date):'
         ]
         
         if any(re.search(pattern, document_lower) for pattern in table_patterns):
@@ -561,10 +575,17 @@ def check_special_entity_patterns(item, document, additional_context=""):
     # Check for missed assessment policy
     if 'missed' in item_lower and ('assessment' in item_lower or 'policy' in item_lower):
         missed_patterns = [
-            r'missed\s+(?:assessment|assignment|exam|test)s?\s+(?:policy|procedure)',
-            r'(?:policy|procedure)\s+(?:for|on|regarding)\s+missed',
-            r'missing\s+(?:work|assignment|assessment)',
-            r'absence\s+policy'
+            r'missed\s+(?:assessment|assignment|exam|test)s?\s+(?:policy|procedure|guidelines?)',
+            r'(?:policy|procedure|guidelines?)\s+(?:for|on|regarding)\s+missed',
+            r'missing\s+(?:work|assignment|assessment|course\s+components?)',
+            r'absence\s+policy',
+            r'(?:what\s+to\s+do|procedure)\s+(?:if|when)\s+you\s+miss',
+            r'unable\s+to\s+(?:complete|submit|attend)',
+            r'deferral\s+(?:policy|procedure|request)',
+            r'alternate\s+(?:assessment|arrangement)',
+            r'make[\-\s]up\s+(?:work|assessment|exam)',
+            r'(?:missing|absence)\s+from\s+(?:class|exam|test)',
+            r'extenuating\s+circumstances'
         ]
         return any(re.search(pattern, document_lower) for pattern in missed_patterns)
 
