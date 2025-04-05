@@ -358,9 +358,12 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             api_failures += 1
             continue
         
-        # Add a delay between API calls to prevent rate limiting
-        if i > 0:
-            time.sleep(1.5)  # Increased delay to 1.5 seconds between API calls
+        # Add a very short delay between API calls to prevent rate limiting
+        if i > 0 and not api_quota_exceeded:
+            try:
+                time.sleep(0.3)  # Reduced delay to avoid timeouts/crashes
+            except Exception as sleep_error:
+                logger.warning(f"Sleep between items failed: {str(sleep_error)}")
         
         try:
             # Try to analyze with OpenAI API using multiple attempts if configured
@@ -373,8 +376,11 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 
                 if attempt > 0:
                     logger.info(f"Attempt {attempt+1}/{max_attempts} for {item_id}")
-                    # Add a small delay between retry attempts
-                    time.sleep(1.0)
+                    # Add a very small delay between retry attempts (with error handling)
+                    try:
+                        time.sleep(0.3)  # Reduced delay to avoid timeouts/crashes
+                    except Exception as sleep_error:
+                        logger.warning(f"Sleep between attempts failed: {str(sleep_error)}")
                 
                 try:
                     # Try to analyze with OpenAI API
@@ -421,10 +427,12 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             # Check if this is a quota exceeded error
             error_msg = str(e).lower()
             if "quota" in error_msg or "rate limit" in error_msg or "exceeded" in error_msg:
-                logger.warning(f"OpenAI API quota exceeded at item {i+1}. Will retry for each item with reduced rate.")
-                # We'll still try to use OpenAI for future items, just with a longer delay
-                time.sleep(2)  # Add extra delay before next item
-                # Don't set api_quota_exceeded = True so we keep trying future items
+                logger.warning(f"OpenAI API quota exceeded at item {i+1}. Switching to traditional analysis for all items.")
+                # Set the flag so we don't try using OpenAI again for future items
+                api_quota_exceeded = True
+                
+                # Skip the sleep completely - it was causing the system to crash
+                # time.sleep(2)  # Add extra delay before next item
                 
                 # Use traditional method for this item too with enhanced pattern matching
                 from document_processor import check_item_in_document

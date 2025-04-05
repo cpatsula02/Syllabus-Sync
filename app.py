@@ -87,9 +87,41 @@ def upload_files():
         checklist_file.save(checklist_path)
         outline_file.save(outline_path)
         
-        # Process the files and get results
-        checklist_items, matching_results = document_processor.process_documents(
-            checklist_path, outline_path, api_attempts=api_attempts, additional_context=additional_context)
+        # Read the outline text for later use in finding matching excerpts
+        outline_text = document_processor.extract_text(outline_path)
+        
+        # Store the outline text in the session for later use in match highlighting
+        session['outline_text'] = outline_text
+        
+        try:
+            # Process the files and get results
+            checklist_items, matching_results = document_processor.process_documents(
+                checklist_path, outline_path, api_attempts=api_attempts, additional_context=additional_context)
+        except Exception as process_error:
+            # Check if this is an OpenAI API quota exceeded error
+            error_msg = str(process_error).lower()
+            if "quota" in error_msg or "rate limit" in error_msg or "openai" in error_msg:
+                # Use fallback processing with traditional methods only
+                logging.warning("OpenAI API quota exceeded. Using fallback traditional processing.")
+                flash("OpenAI API quota has been exceeded. Analysis will use traditional pattern matching only, which may be less accurate but still functional.")
+                
+                # Extract the checklist items and analyze with traditional methods only
+                checklist_text = document_processor.extract_text(checklist_path)
+                checklist_items = document_processor.extract_checklist_items(checklist_text)
+                
+                # Process each item with traditional methods
+                matching_results = {}
+                for item in checklist_items:
+                    is_present = document_processor.check_item_in_document(item, outline_text)
+                    matching_results[item] = {
+                        "present": is_present,
+                        "confidence": 0.85 if is_present else 0.2,
+                        "explanation": "Found using pattern matching" if is_present else "Not found in document",
+                        "method": "traditional (API quota exceeded)"
+                    }
+            else:
+                # For other errors, re-raise
+                raise
         
         # Check if we have any results
         if not checklist_items:
@@ -100,12 +132,8 @@ def upload_files():
         session['checklist_items'] = checklist_items
         session['matching_results'] = matching_results
         
-        # Store outline text for match details functionality
-        try:
-            outline_text = document_processor.extract_text(outline_path)
-            session['outline_text'] = outline_text
-        except Exception as text_error:
-            logging.error(f"Error extracting outline text: {str(text_error)}")
+        # Outline text is already stored in the session above
+        # No need to extract it again
         
         return redirect(url_for('results'))
         
