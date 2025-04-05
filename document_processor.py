@@ -412,6 +412,58 @@ def check_special_entity_patterns(item, document):
             if re.search(pattern, document_lower):
                 return True
     
+    # 5. Handle instructor email patterns specifically for @ucalgary.ca domain
+    if any(word in item_lower for word in ['instructor', 'email', 'contact', 'professor']):
+        # Look for a paragraph or section with instructor-related terms first
+        instructor_sections = []
+        
+        # Define instructor-related section patterns
+        instructor_section_patterns = [
+            r'(instructor|professor|faculty|teacher|contact|course coordinator)\s*information',
+            r'contacting\s+(your|the)\s+(instructor|professor|faculty|teacher)',
+            r'(instructor|professor|faculty|teacher|contact)\s*:'
+        ]
+        
+        # Find potential instructor sections
+        paragraphs = document.split('\n\n')
+        for paragraph in paragraphs:
+            paragraph_lower = paragraph.lower()
+            if any(re.search(pattern, paragraph_lower) for pattern in instructor_section_patterns):
+                instructor_sections.append(paragraph)
+        
+        # If we found instructor sections, look for valid ucalgary email in them first
+        if instructor_sections:
+            for section in instructor_sections:
+                # Look for emails ending with @ucalgary.ca
+                ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', section)
+                if ucalgary_emails:
+                    return True
+        
+        # If no instructor sections with ucalgary emails were found, apply more strict rules for general document search
+        
+        # Look for context around email patterns
+        email_contexts = []
+        
+        # Search for potential instructor email context
+        instructor_email_patterns = [
+            r'(instructor|professor|faculty|teacher|contact)\s*:?\s*[^@\n]{0,40}?[A-Za-z0-9._%+-]+@ucalgary\.ca',
+            r'(instructor|professor|faculty|teacher|contact)[\s\S]{0,100}?[A-Za-z0-9._%+-]+@ucalgary\.ca',
+            r'email\s*:?\s*[A-Za-z0-9._%+-]+@ucalgary\.ca',
+            r'[A-Za-z0-9._%+-]+@ucalgary\.ca\s*\(\s*(instructor|professor|faculty|teacher|contact)\s*\)'
+        ]
+        
+        for pattern in instructor_email_patterns:
+            if re.search(pattern, document_lower):
+                return True
+        
+        # If we specifically need an instructor's email ending with @ucalgary.ca
+        # Do not match if only a general email is found without instructor context
+        general_ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', document)
+        
+        # Only return true if both an email with @ucalgary.ca AND instructor context exists
+        # This prevents matching random emails or example emails
+        return False
+    
     return False
 
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:

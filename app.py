@@ -180,11 +180,12 @@ def generate_pdf_report(checklist_items, matching_results):
             is_present = matching_results[item]
             explanation = "Found in document" if is_present else "Not found in document"
         
-        # Add item with status
-        status = "✓ Present" if is_present else "✗ Missing"
+        # Add item with status - use ASCII characters to avoid UTF-8 encoding issues
+        status = "Present" if is_present else "Missing"
+        status_marker = "+" if is_present else "X"
         
         pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 8, f"Item {i}: {status}", ln=True)
+        pdf.cell(0, 8, f"Item {i}: [{status_marker}] {status}", ln=True)
         
         # Word wrap for longer items
         pdf.set_font("Arial", "", 10)
@@ -207,12 +208,16 @@ def generate_pdf_report(checklist_items, matching_results):
         
         # Print the wrapped text
         for line in lines:
-            pdf.cell(0, 6, f"    {line}", ln=True)
+            # Ensure text is ASCII-compatible for FPDF
+            safe_line = line.encode('ascii', 'replace').decode('ascii')
+            pdf.cell(0, 6, f"    {safe_line}", ln=True)
         
         # Add explanation if available
         if explanation:
+            # Ensure explanation is ASCII-compatible for FPDF
+            safe_explanation = explanation.encode('ascii', 'replace').decode('ascii')
             pdf.set_font("Arial", "I", 9)
-            pdf.cell(0, 6, f"    Note: {explanation}", ln=True)
+            pdf.cell(0, 6, f"    Note: {safe_explanation}", ln=True)
         
         pdf.ln(2)
     
