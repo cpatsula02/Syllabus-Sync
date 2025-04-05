@@ -1097,7 +1097,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     Args:
         checklist_path: Path to the checklist document
         outline_path: Path to the course outline document
-        api_attempts: Number of API analysis attempts to make (1-10)
+        api_attempts: Number of API analysis attempts to make (1-10) - ignored in this version
         additional_context: Additional context about the course or specific situations
 
     Returns:
@@ -1120,60 +1120,58 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if not checklist_items:
             return [], {"error": "No checklist items could be extracted. Please check the format of your checklist."}
         
-        # If OpenAI helper is available, use it for advanced analysis
-        try:
-            from openai_helper import analyze_checklist_items_batch
+        # Skip OpenAI API completely - use only traditional methods
+        logging.info("Using traditional pattern matching for all items")
+        matching_results = {}
+        
+        # Process each checklist item using traditional methods with enhanced explanations
+        for item in checklist_items:
+            is_present = check_item_in_document(item, outline_text)
             
-            # Start with OpenAI processing for all items
-            logging.info("Starting item analysis with OpenAI")
-            matching_results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts)
-            api_result_count = sum(1 for result in matching_results.values() 
-                                  if isinstance(result, dict) and result.get('method', '').startswith('openai'))
+            # Create a more detailed explanation based on item content
+            item_lower = item.lower()
             
-            # Log how many items were processed with the API
-            logging.info(f"Analysis complete: {api_result_count} items processed with OpenAI, {len(checklist_items) - api_result_count} with traditional methods")
+            # Generate useful explanations based on content type
+            if is_present:
+                if 'policy' in item_lower or 'policies' in item_lower:
+                    explanation = "Policy content detected in document sections"
+                elif 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+                    explanation = "Found missed assignment/assessment policy content"
+                elif 'assignment' in item_lower or 'assessment' in item_lower:
+                    explanation = "Assignment/assessment details detected in document"
+                elif 'grade' in item_lower or 'grading' in item_lower or 'distribution' in item_lower:
+                    explanation = "Grade information found in document sections"
+                elif 'participation' in item_lower:
+                    explanation = "Class participation information detected"
+                elif 'textbook' in item_lower or 'reading' in item_lower or 'material' in item_lower:
+                    explanation = "Course materials/textbook information found"
+                elif 'objective' in item_lower or 'outcome' in item_lower:
+                    explanation = "Course objectives/outcomes detected"
+                elif 'schedule' in item_lower or 'calendar' in item_lower:
+                    explanation = "Course schedule/calendar information found"
+                elif 'contact' in item_lower or 'instructor' in item_lower:
+                    explanation = "Instructor contact information detected"
+                elif 'exam' in item_lower or 'test' in item_lower or 'quiz' in item_lower:
+                    explanation = "Exam/assessment information found"
+                elif 'late' in item_lower and ('submission' in item_lower or 'assignment' in item_lower):
+                    explanation = "Late submission policy information found"
+                elif 'academic' in item_lower and ('integrity' in item_lower or 'misconduct' in item_lower):
+                    explanation = "Academic integrity policy information found"
+                elif 'disability' in item_lower or 'accommodation' in item_lower:
+                    explanation = "Accommodation information detected"
+                elif 'prerequisite' in item_lower:
+                    explanation = "Course prerequisite information found"
+                else:
+                    explanation = "Content matched through document analysis"
+            else:
+                explanation = "Not found in document"
             
-            # For any items that weren't analyzed (if the OpenAI API was unavailable), analyze them with traditional methods
-            for item in checklist_items:
-                if item not in matching_results:
-                    matches = check_item_in_document(item, outline_text)
-                    matching_results[item] = {
-                        "present": matches,
-                        "confidence": 0.8 if matches else 0.2,
-                        "explanation": "Found match in document" if matches else "Not found in document",
-                        "method": "traditional"
-                    }
-            
-        except ImportError:
-            # Fallback to traditional methods if OpenAI helper is unavailable
-            logging.warning("OpenAI helper not available. Using traditional methods only.")
-            matching_results = {}
-            
-            # Process each checklist item using traditional methods
-            for item in checklist_items:
-                matches = check_item_in_document(item, outline_text)
-                matching_results[item] = {
-                    "present": matches, 
-                    "confidence": 0.8 if matches else 0.2,
-                    "explanation": "Found match in document" if matches else "Not found in document",
-                    "method": "traditional"
-                }
-                
-        except Exception as e:
-            # Handle any other errors
-            logging.error(f"Error processing documents with OpenAI: {str(e)}")
-            # Fall back to traditional methods
-            matching_results = {}
-            
-            # Process each checklist item using traditional methods
-            for item in checklist_items:
-                matches = check_item_in_document(item, outline_text)
-                matching_results[item] = {
-                    "present": matches, 
-                    "confidence": 0.7 if matches else 0.3,
-                    "explanation": "Found match in document" if matches else "Not found in document",
-                    "method": "traditional (after API error)"
-                }
+            matching_results[item] = {
+                "present": is_present,
+                "confidence": 0.85 if is_present else 0.2,
+                "explanation": explanation,
+                "method": "traditional"
+            }
         
         return checklist_items, matching_results
         
