@@ -195,8 +195,8 @@ Response format:
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,  # Lower temperature for more consistent results
-                max_tokens=200,   # Allow more tokens for detailed explanation and evidence
-                timeout=10        # Reduce timeout for faster retries
+                max_tokens=200    # Allow more tokens for detailed explanation and evidence
+                # Removed timeout parameter which was causing issues
             )
             
             # Extract and parse the response
@@ -358,12 +358,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             api_failures += 1
             continue
         
-        # Add a very short delay between API calls to prevent rate limiting
-        if i > 0 and not api_quota_exceeded:
-            try:
-                time.sleep(0.3)  # Reduced delay to avoid timeouts/crashes
-            except Exception as sleep_error:
-                logger.warning(f"Sleep between items failed: {str(sleep_error)}")
+        # No delay between API calls to avoid potential timeout issues
+        # Removed time.sleep call that was causing issues
         
         try:
             # Try to analyze with OpenAI API using multiple attempts if configured
@@ -376,11 +372,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 
                 if attempt > 0:
                     logger.info(f"Attempt {attempt+1}/{max_attempts} for {item_id}")
-                    # Add a very small delay between retry attempts (with error handling)
-                    try:
-                        time.sleep(0.3)  # Reduced delay to avoid timeouts/crashes
-                    except Exception as sleep_error:
-                        logger.warning(f"Sleep between attempts failed: {str(sleep_error)}")
+                    # No delay between retry attempts to avoid timeout issues
+                    # Removed time.sleep call that was causing issues
                 
                 try:
                     # Try to analyze with OpenAI API
