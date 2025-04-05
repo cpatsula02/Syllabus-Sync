@@ -19,5 +19,5 @@
   
   <!-- Text "University of Calgary" -->
   <text x="55" y="20" font-family="Arial" font-weight="bold" font-size="12" class="uofc-black">University of</text>
-  <text x="55" y="35" font-family="Arial" font-weight="bold" font-size="16" class="uofc-red">CALGARY</text>
+  <text x="55" y="35" font-family="Arial" font-weight="bold" font-size="16" class="uofc-black">CALGARY</text>
 </svg>
