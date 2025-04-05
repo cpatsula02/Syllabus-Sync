@@ -702,11 +702,11 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
             if match:
                 start, end = match.span(1)
                 matched_text = original_document[start:end]
-                locations.append((matched_text, matched_text))
+                matched_locations.append((matched_text, matched_text))
 
         # Return results
-        if locations:
-            return True, locations
+        if matched_locations:
+            return True, matched_locations
         return False, []
 
     return matched_locations
