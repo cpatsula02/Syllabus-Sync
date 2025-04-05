@@ -111,29 +111,96 @@ def extract_checklist_items(text: str) -> List[str]:
 
 def check_item_in_document(item: str, document_text: str) -> bool:
     """
-    Check if a checklist item is present in the document text using semantic understanding.
-    Uses multiple approaches to improve matching accuracy.
+    Advanced semantic matching to check if a checklist item is present in the document.
+    Uses multiple strategies including header recognition and semantic equivalence.
     """
-    # Clean and normalize text for comparison
     item_lower = item.lower()
     document_lower = document_text.lower()
 
-    # Split document into sections for better context awareness
-    sections = document_lower.split('\n\n')
+    # Define semantic equivalence groups
+    semantic_groups = {
+        'missed_work': ['missed', 'absence', 'deferral', 'extension', 'make-up', 'makeup'],
+        'assignment': ['assignment', 'work', 'task', 'project', 'submission', 'deliverable'],
+        'exam': ['exam', 'test', 'quiz', 'assessment', 'examination'],
+        'textbook': ['textbook', 'book', 'reading', 'material', 'resource'],
+        'grade': ['grade', 'mark', 'score', 'weight', 'distribution', 'percentage'],
+        'participation': ['participation', 'engage', 'discussion', 'contribute', 'attendance'],
+    }
 
-    # First try exact phrase matching
-    if item_lower in document_lower:
+    # Extract document sections with headers
+    sections = []
+    current_header = ""
+    current_content = []
+    
+    for line in document_text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Header detection patterns
+        header_patterns = [
+            r'^[A-Z][^a-z]{0,3}[A-Z].*:?$',  # All caps headers
+            r'^[A-Z][a-zA-Z\s]{2,50}:$',      # Title case with colon
+            r'^\d+\.\s+[A-Z].*:?$',           # Numbered headers
+            r'^[A-Z][a-zA-Z\s&]+\(?s?\)?:?$'  # Common section headers
+        ]
+        
+        is_header = any(re.match(pattern, line) for pattern in header_patterns)
+        
+        if is_header:
+            if current_header and current_content:
+                sections.append((current_header, ' '.join(current_content)))
+            current_header = line
+            current_content = []
+        else:
+            current_content.append(line)
+    
+    # Add last section
+    if current_header and current_content:
+        sections.append((current_header, ' '.join(current_content)))
+
+    # Check for semantic matches in each section
+    for header, content in sections:
+        header_lower = header.lower()
+        content_lower = content.lower()
+        
+        # Direct matches in header
+        if any(phrase in header_lower for phrase in re.findall(r'\b\w+\b', item_lower)):
+            # Verify content relevance
+            key_terms = set(re.findall(r'\b\w+\b', item_lower))
+            content_terms = set(re.findall(r'\b\w+\b', content_lower))
+            if len(key_terms & content_terms) >= 2:  # At least 2 matching terms
+                return True
+
+        # Semantic group matching
+        for group_terms in semantic_groups.values():
+            if any(term in item_lower for term in group_terms):
+                # If item matches a semantic group, check if content contains related terms
+                if any(term in content_lower for term in group_terms):
+                    return True
+
+        # Special case for policies
+        if 'policy' in item_lower or 'policies' in item_lower:
+            policy_indicators = ['policy', 'procedure', 'guideline', 'requirement', 'rule']
+            if any(indicator in header_lower for indicator in policy_indicators):
+                # Check content relevance
+                policy_type = re.findall(r'\b\w+\b', item_lower)
+                if any(word in content_lower for word in policy_type):
+                    return True
+
+        # Check for semantic equivalence in content
+        key_phrases = re.findall(r'\b\w+\b', item_lower)
+        content_phrases = re.findall(r'\b\w+\b', content_lower)
+        
+        # Calculate semantic similarity
+        shared_terms = set(key_phrases) & set(content_phrases)
+        if len(shared_terms) >= len(key_phrases) * 0.6:  # 60% match threshold
+            return True
+
+    # Special cases for specific content types
+    if check_special_entity_patterns(item, document_text):
         return True
 
-    # Then try semantic matching with key phrases
-    key_phrases = re.findall(r'\b\w+\b', item_lower)
-    key_phrases = [phrase for phrase in key_phrases if len(phrase) > 3]
-
-    # Check for matches in context
-    for section in sections:
-        matches = sum(1 for phrase in key_phrases if phrase in section)
-        if matches >= len(key_phrases) * 0.7:  # 70% match threshold
-            return True
     return False
 
 def extract_core_concepts(text):
