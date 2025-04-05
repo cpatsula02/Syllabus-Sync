@@ -1,18 +1,75 @@
+
 {% extends "layout.html" %}
 
 {% block content %}
 <div class="container mt-4">
-    <h1>Analysis Results</h1>
-    <div class="list-group">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Analysis Results</h1>
+        <button onclick="generatePDF()" class="btn btn-success">Export to PDF</button>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Summary</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="alert alert-success">
+                        Present Items: {{ present_count }}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-danger">
+                        Missing Items: {{ missing_count }}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-info">
+                        Total Items: {{ total_count }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="list-group" id="results-content">
     {% for result in results %}
-        <div class="list-group-item">
-            <h5 class="mb-1">{{ result.item }}</h5>
-            <p class="mb-1">{{ result.analysis }}</p>
+        <div class="list-group-item {% if result.present %}list-group-item-success{% else %}list-group-item-danger{% endif %}">
+            <div class="d-flex justify-content-between align-items-start">
+                <h5 class="mb-1">{{ result.item }}</h5>
+                <span class="badge {% if result.present %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ "✓ Present" if result.present else "✗ Missing" }}
+                </span>
+            </div>
+            <p class="mb-1">{{ result.explanation }}</p>
+            {% if result.evidence %}
+            <div class="mt-2">
+                <strong>Evidence:</strong>
+                <div class="evidence-box p-2 mt-1 bg-light">
+                    {{ result.evidence }}
+                </div>
+            </div>
+            {% endif %}
         </div>
     {% endfor %}
     </div>
+    
     <div class="mt-4">
         <a href="/" class="btn btn-primary">Analyze Another Document</a>
     </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+function generatePDF() {
+    const element = document.getElementById('results-content');
+    const opt = {
+        margin: 1,
+        filename: 'checklist-analysis-report.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+</script>
 {% endblock %}

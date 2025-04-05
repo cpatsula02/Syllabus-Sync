@@ -36,20 +36,32 @@ def index():
                 flash(analysis_results["error"])
                 return redirect(request.url)
 
-            # Format results for template
+            # Format results for template with enhanced data
             results = []
+            present_count = 0
+            missing_count = 0
+            
             for item in checklist_items:
                 result = analysis_results.get(item, {})
-                analysis_text = "✅ Present" if result.get("present", False) else "❌ Missing"
-                if "explanation" in result:
-                    analysis_text += f" - {result['explanation']}"
+                is_present = result.get("present", False)
+                
+                if is_present:
+                    present_count += 1
+                else:
+                    missing_count += 1
+                    
                 results.append({
                     "item": item,
-                    "analysis": analysis_text,
+                    "present": is_present,
+                    "explanation": result.get("explanation", ""),
                     "evidence": result.get("evidence", "")
                 })
 
-            return render_template('results.html', results=results)
+            return render_template('results.html', 
+                                results=results,
+                                present_count=present_count,
+                                missing_count=missing_count,
+                                total_count=len(checklist_items))
 
         except Exception as e:
             flash(f'An error occurred: {str(e)}')
