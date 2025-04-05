@@ -699,27 +699,13 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
             # Using a positive lookahead to ensure email exists near the context
             pattern = f'({context}(?:(?!example|sample).)*?{email_pattern})'
             match = re.search(pattern, document_lower, re.IGNORECASE | re.DOTALL)
-
             if match:
-                start, end = match.span()
-                context_and_email = original_document[start:end]
-
-                # Verify this isn't in a student/example section
-                lower_context = context_and_email.lower()
-                if not any(x in lower_context for x in ['student email', 'example', 'sample']):
-                    matched_text = context_and_email
-                    return True, [(matched_text, context_and_email)]
+                start, end = match.span(1)
+                matched_text = original_document[start:end]
+                return True, [(matched_text, matched_text)]
 
         # No valid instructor email found
         return False, []
-
-                # Get context
-                context_start = max(0, start - 100)
-                context_end = min(len(original_document), end + 200)
-                context = original_document[context_start:context_end]
-
-                matched_locations.append((matched_text, context))
-                return matched_locations
 
     return []
 
