@@ -141,9 +141,18 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
         return result
     except Exception as e:
         logger.error(f"Error using AI analysis: {str(e)}")
-        # Fall back to traditional analysis
-        from document_processor import check_item_in_document, find_matching_excerpt
-        is_present = check_item_in_document(item, document_text)
+        if "insufficient_quota" in str(e):
+            logger.warning("API quota exceeded - using enhanced traditional analysis")
+        # Fall back to enhanced traditional analysis with multiple checks
+        from document_processor import check_item_in_document, find_matching_excerpt, check_special_entity_patterns
+        
+        # Multiple validation approaches
+        is_present_basic = check_item_in_document(item, document_text)
+        is_present_special = check_special_entity_patterns(item, document_text)
+        found_excerpt, _ = find_matching_excerpt(item, document_text)
+        
+        # Require at least 2 out of 3 checks to pass for higher confidence
+        is_present = sum([is_present_basic, is_present_special, found_excerpt]) >= 2
         evidence = ""
         if is_present:
             found, excerpt = find_matching_excerpt(item, document_text)

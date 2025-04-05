@@ -484,6 +484,18 @@ def check_special_entity_patterns(item, document, additional_context=""):
     document_lower = document.lower()
     item_lower = item.lower()
     context_lower = additional_context.lower() if additional_context else ""
+    
+    # First check additional context for exclusions
+    if context_lower:
+        # If the context explicitly states something is not present/not applicable
+        exclusion_words = ['no', 'not', 'none', 'without', "doesn't have", "does not have"]
+        item_keywords = [word for word in item_lower.split() if len(word) > 3]
+        
+        for keyword in item_keywords:
+            for excl in exclusion_words:
+                pattern = f"{excl}\\s+[\\w\\s]*{keyword}"
+                if re.search(pattern, context_lower):
+                    return True  # Item is explicitly excluded, so mark as present
 
     # Check additional context first for exclusions
     if context_lower:
