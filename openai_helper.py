@@ -1,6 +1,11 @@
 import logging
+import os
 from typing import List, Dict, Any
 import re
+import openai
+
+# Configure OpenAI with API key
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
