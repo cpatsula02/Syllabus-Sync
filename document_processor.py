@@ -414,9 +414,27 @@ def check_special_entity_patterns(item, document):
     
     # 5. Handle instructor email patterns specifically for @ucalgary.ca domain
     if any(word in item_lower for word in ['instructor', 'email', 'contact', 'professor']):
-        # STRICT REQUIREMENT: Only consider valid if we find:
-        # 1. Email ending with @ucalgary.ca
-        # 2. In an instructor context
+        # First look for any email addresses
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        ucalgary_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        
+        # Look specifically for @ucalgary.ca emails
+        ucalgary_emails = re.findall(ucalgary_pattern, document)
+        
+        if ucalgary_emails:
+            # Check if the email appears in an instructor context
+            for email in ucalgary_emails:
+                email_idx = document.find(email)
+                if email_idx >= 0:
+                    # Look for instructor context in surrounding text (100 chars before and after)
+                    context_start = max(0, email_idx - 100)
+                    context_end = min(len(document), email_idx + len(email) + 100)
+                    context = document[context_start:context_end].lower()
+                    
+                    # Check for instructor-related terms in context
+                    instructor_terms = ['instructor', 'professor', 'faculty', 'teacher', 'lecturer']
+                    if any(term in context for term in instructor_terms):
+                        return True
         
         # First, find instructor-related sections in the document
         instructor_sections = []
