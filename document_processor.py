@@ -790,114 +790,139 @@ def check_special_entity_patterns(item, document):
     
     # 5. Handle instructor email patterns specifically for @ucalgary.ca domain
     if any(word in item_lower for word in ['instructor', 'email', 'contact', 'professor']):
-        # First look for any email addresses
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        ucalgary_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        # CRITICAL REQUIREMENT: Only consider valid if we find:
+        # 1. Email ending with @ucalgary.ca
+        # 2. In a clear instructor context
         
-        # Look specifically for @ucalgary.ca emails
-        ucalgary_emails = re.findall(ucalgary_pattern, document)
+        # IMPROVED DETECTION STRATEGY:
+        # 1. First look for email patterns specifically
+        # 2. Then verify the context is instructor-related
+        # 3. Use multiple fallback strategies if initial check fails
         
-        if ucalgary_emails:
-            # Check if the email appears in an instructor context
-            for email in ucalgary_emails:
-                email_idx = document.find(email)
-                if email_idx >= 0:
-                    # Look for instructor context in surrounding text (100 chars before and after)
-                    context_start = max(0, email_idx - 100)
-                    context_end = min(len(document), email_idx + len(email) + 100)
-                    context = document[context_start:context_end].lower()
-                    
-                    # Check for instructor-related terms in context
-                    instructor_terms = ['instructor', 'professor', 'faculty', 'teacher', 'lecturer']
-                    if any(term in context for term in instructor_terms):
-                        return True
+        # Define all possible email formats we might encounter
+        email_patterns = [
+            r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b',  # Standard email format
+            r'\b[A-Za-z0-9._%+-]+\s*\[\s*at\s*\]\s*ucalgary\s*\[\s*dot\s*\]\s*ca\b',  # Obfuscated format
+            r'\b[A-Za-z0-9._%+-]+\s*\(\s*at\s*\)\s*ucalgary\s*\(\s*dot\s*\)\s*ca\b',  # Alternative obfuscation
+        ]
         
-        # First, find instructor-related sections in the document
+        # FIND ALL EMAILS first, then check context
+        all_emails = []
+        for pattern in email_patterns:
+            emails_found = re.findall(pattern, document)
+            all_emails.extend(emails_found)
+            
+        # If no emails found at all, return false immediately
+        if not all_emails:
+            logging.debug(f"No ucalgary.ca email addresses found in document")
+            return False
+            
+        # CONTEXT VERIFICATION - multiple approaches
+        
+        # 1. Find all possible instructor sections
         instructor_sections = []
         
         # Define stronger instructor-related section patterns with clearer boundaries
         instructor_section_patterns = [
-            # Patterns with clear section headers or formatting
-            r'(instructor|professor|faculty|teacher|contact|course coordinator)\s*information',
-            r'contacting\s+(your|the)\s+(instructor|professor|faculty|teacher)',
-            r'(instructor|professor|faculty|teacher|contact)\s*:',
+            # Explicit instructor section headers
+            r'(?:^|\n|\r)\s*(?:instructor|professor|faculty|teacher)(?:\s+information|\s*:)',
+            r'(?:^|\n|\r)\s*contact(?:\s+information|\s*:)',
+            r'(?:^|\n|\r)\s*contacting\s+(?:your|the|an?)\s+(?:instructor|professor|faculty|teacher)',
+            r'(?:^|\n|\r)\s*course\s+(?:instructor|coordinator|professor|contact)(?:\s*:|\s+information)',
+            
             # Common formats for contact information sections
-            r'^\s*(instructor|professor|faculty|teacher|contact)\s*:.*?$',
-            r'^\s*(name|instructor name)\s*:.*?$'
+            r'(?:^|\n|\r)\s*(?:instructor|professor|faculty|teacher|contact)\s*:',
+            r'(?:^|\n|\r)\s*name\s*:.*?(?:instructor|professor|faculty)',
+            r'(?:^|\n|\r)\s*(?:instructor|professor|faculty|teacher)\s+name\s*:'
         ]
         
-        # Find potential instructor sections with stricter context
+        # Section-based approach: find instructor sections first
         paragraphs = document.split('\n\n')
-        for paragraph in paragraphs:
+        for i, paragraph in enumerate(paragraphs):
             paragraph_lower = paragraph.lower()
-            # Only consider paragraphs with instructor-related terms
-            if any(instructor_term in paragraph_lower for instructor_term in 
-                   ['instructor', 'professor', 'faculty', 'teacher', 'contact']):
-                if any(re.search(pattern, paragraph_lower) for pattern in instructor_section_patterns):
-                    instructor_sections.append(paragraph)
+            
+            # Check if this looks like an instructor section
+            if any(re.search(pattern, paragraph_lower, re.MULTILINE) for pattern in instructor_section_patterns):
+                # Found an instructor section - include this paragraph and next 2 paragraphs
+                section_text = paragraph
+                for j in range(1, 3):
+                    if i + j < len(paragraphs):
+                        section_text += "\n\n" + paragraphs[i+j]
+                instructor_sections.append(section_text)
         
-        # If no sections were found, try another approach with smaller chunks
-        if not instructor_sections:
-            lines = document.split('\n')
-            current_section = []
-            for line in lines:
-                line_lower = line.lower()
-                if any(instructor_term in line_lower for instructor_term in 
-                       ['instructor', 'professor', 'faculty', 'contact']):
-                    current_section.append(line)
-                    # Add the next few lines for context
-                    idx = lines.index(line)
-                    if idx + 3 < len(lines):
-                        current_section.extend(lines[idx+1:idx+4])
-                    instructor_sections.append('\n'.join(current_section))
-                    current_section = []
-        
-        # Now strictly validate for ucalgary.ca domain in these contexts
-        ucalgary_email_found = False
-        found_email = None
-        valid_context = False
-        
-        # Check instructor sections first (most reliable)
-        for section in instructor_sections:
-            # Find all emails ending with @ucalgary.ca
-            ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', section)
-            if ucalgary_emails:
-                ucalgary_email_found = True
-                found_email = ucalgary_emails[0]
-                
-                # Check if this section has instructor context within a close range
+        # If we have both emails and instructor sections, check if they overlap
+        if instructor_sections:
+            for section in instructor_sections:
                 section_lower = section.lower()
-                if any(term in section_lower for term in 
-                       ['instructor:', 'professor:', 'faculty:', 'contact:', 'instructor email',
-                        'professor email', 'email:', 'instructor name']):
-                    valid_context = True
-                    break
+                
+                # Check if any email appears in this section
+                for email in all_emails:
+                    if email.lower() in section_lower:
+                        logging.debug(f"Found email {email} in instructor section")
+                        return True
+                
+                # Also check for obfuscated emails in format
+                for pattern in email_patterns:
+                    if re.search(pattern, section, re.IGNORECASE):
+                        logging.debug(f"Found email pattern in instructor section")
+                        return True
+        
+        # 2. Contextual proximity approach
+        # If we reach here, we have emails but not in instructor sections
+        # Look for instructor terms near email addresses
+        for email in all_emails:
+            email_idx = document.lower().find(email.lower())
+            if email_idx >= 0:
+                # Look at 150 characters before and after the email
+                surrounding_text = document[max(0, email_idx-150):min(len(document), email_idx+len(email)+150)]
+                surrounding_lower = surrounding_text.lower()
+                
+                # Check for instructor context terms
+                instructor_context_terms = [
+                    'instructor', 'professor', 'faculty', 'teacher', 'lecturer', 
+                    'contact', 'office', 'hours', 'email'
+                ]
+                
+                context_score = sum(1 for term in instructor_context_terms if term in surrounding_lower)
+                
+                # If we have at least 2 context terms, this is likely an instructor email
+                if context_score >= 2:
+                    logging.debug(f"Found email {email} with instructor context (score: {context_score})")
                     
-                # Also check for instructor-email proximity pattern
-                if re.search(r'(instructor|professor|faculty).{0,30}(email|contact)', section_lower):
-                    valid_context = True
-                    break
+                    # Verify this isn't a generic university email not tied to instructor
+                    negative_patterns = [
+                        r'example', r'do not email', r'general inquiries', 
+                        r'department email', r'faculty email', r'university email',
+                        r'sample', r'template'
+                    ]
+                    
+                    # Check for negative context that would invalidate this match
+                    if not any(re.search(pattern, surrounding_lower) for pattern in negative_patterns):
+                        return True
         
-        # If we have a ucalgary email but no valid context, look more carefully for context
-        if ucalgary_email_found and not valid_context:
-            for email in re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', document):
-                # Look for instructor context within 100 characters before/after the email
-                email_idx = document.find(email)
-                if email_idx > 0:
-                    surrounding_text = document[max(0, email_idx-100):min(len(document), email_idx+100)]
-                    surrounding_lower = surrounding_text.lower()
-                    if any(term in surrounding_lower for term in 
-                          ['instructor', 'professor', 'faculty', 'contact', 'teacher']):
-                        valid_context = True
-                        break
+        # 3. Line-based instructor context
+        # If we reach here, try one more approach: look for lines that contain both
+        # instructor terms and emails
+        lines = document.split('\n')
+        for line in lines:
+            line_lower = line.lower()
+            
+            # Check if line contains instructor context
+            has_instructor_context = any(term in line_lower for term in 
+                                         ['instructor', 'professor', 'faculty', 'contact', 'email'])
+            
+            # Check if line contains email
+            has_email = any(re.search(pattern, line) for pattern in email_patterns)
+            
+            # If both conditions are true, this is a match
+            if has_instructor_context and has_email:
+                logging.debug(f"Found email with instructor context on same line")
+                return True
         
-        # Only return true if we found both a valid ucalgary.ca email AND proper instructor context
-        return ucalgary_email_found and valid_context
-        
-        # IMPORTANT: With this implementation, the function will return False if:
-        # 1. No @ucalgary.ca email is found at all
-        # 2. An @ucalgary.ca email is found, but not in proper instructor context
-        # This should significantly reduce false positives
+        # If we've exhausted all methods and still can't verify the context,
+        # this might be a false positive email somewhere in the document
+        logging.debug(f"Found ucalgary.ca emails but couldn't verify instructor context")
+        return False
     
     return False
 
