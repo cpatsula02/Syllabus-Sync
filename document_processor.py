@@ -104,41 +104,75 @@ def extract_checklist_items(text: str) -> List[str]:
     
     return unique_items
 
-def check_item_in_document(item: str, document_text: str) -> bool:
+def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
     """
     Advanced semantic matching with strict validation for critical elements.
     Uses multiple strategies including header recognition, semantic equivalence,
     and specific pattern validation for critical items.
+    
+    Implements a more strict matching algorithm to reduce false positives.
     """
     document_lower = document_text.lower()
     item_lower = item.lower()
     
-    # Check for direct matches
-    if item_lower in document_lower:
+    # ---- FIRST PASS: DIRECT MATCHING ----
+    # Check for substantial direct matches (over 80% of the item text)
+    if len(item_lower) > 15 and item_lower in document_lower:
         return True
     
+    # ---- SECOND PASS: CONCEPT MATCHING ----
     # Extract core concepts from the item and look for them in the document
     item_concepts = extract_core_concepts(item_lower)
     if not item_concepts:
         return False
     
-    # Get document sections
+    # Special handling for specific item types to reduce false positives
+    is_grade_item = any(term in item_lower for term in [
+        'grade distribution', 'weight', 'assessment', 'table',
+        'due date', 'participation', 'group project', 'final exam',
+        'take home', 'class schedule', 'missed assessment', 'late policy'
+    ])
+    
+    is_policy_item = any(term in item_lower for term in [
+        'policy', 'policies', 'guideline', 'rule', 'regulation', 
+        'requirement', 'procedure', 'standard', 'integrity'
+    ])
+    
+    is_instructor_item = any(term in item_lower for term in [
+        'instructor', 'professor', 'faculty', 'teacher', 
+        'contact', 'email', 'office hours'
+    ])
+    
+    # Get document sections with improved section recognition
     sections = extract_document_sections(document_lower)
+    
+    # ---- THIRD PASS: SECTION-BASED MATCHING ----
+    # Apply more strict matching criteria for certain item types
+    match_threshold = 0.7 if is_grade_item or is_policy_item else 0.5
     for section_title, section_content in sections.items():
         # Check if section title is related to the item
         if sections_are_related(section_title, item_concepts):
-            # Check if section content contains the concepts
-            if content_contains_concepts(section_content, item_concepts):
+            # Apply stricter content matching for grade/policy items
+            if content_contains_concepts(section_content, item_concepts, match_threshold):
                 return True
     
+    # ---- FOURTH PASS: SPECIALIZED PATTERN MATCHING ----
     # Special handling for common policy types
     policy_type = extract_policy_type(item_lower)
     if policy_type:
-        policy_pattern = rf"{policy_type}\s+(policy|policies|guidelines|requirements)"
-        return bool(re.search(policy_pattern, document_lower))
+        # More specific policy pattern matching
+        policy_patterns = [
+            rf"{policy_type}\s+(policy|policies|guidelines|requirements|procedures)",
+            rf"(policy|policies|guidelines|requirements|procedures)\s+on\s+{policy_type}",
+            rf"(policy|policies|guidelines|requirements|procedures)\s+for\s+{policy_type}"
+        ]
+        for pattern in policy_patterns:
+            if re.search(pattern, document_lower):
+                return True
     
-    # Advanced pattern matching for remaining cases
-    return check_special_entity_patterns(item_lower, document_lower)
+    # ---- FIFTH PASS: CONTEXTUAL PATTERN MATCHING ----
+    # Advanced pattern matching with additional context awareness
+    return check_special_entity_patterns(item_lower, document_lower, additional_context)
 
 def extract_core_concepts(text):
     """Extract core concepts from text for semantic matching."""
@@ -238,19 +272,36 @@ def sections_are_related(section_title, item_concepts):
     
     return False
 
-def content_contains_concepts(section_content, item_concepts):
-    """Check if section content contains the concepts from the checklist item."""
+def content_contains_concepts(section_content, item_concepts, threshold=0.5):
+    """
+    Check if section content contains the concepts from the checklist item.
+    
+    Args:
+        section_content: The content of a document section
+        item_concepts: The key concepts extracted from a checklist item
+        threshold: The minimum match ratio (0.0-1.0) required to consider content related
+                  Higher values create stricter matching (fewer false positives)
+    
+    Returns:
+        Boolean indicating if the content contains enough matching concepts
+    """
     # Use regular expressions to find words instead of nltk.word_tokenize
     content_words = re.findall(r'\b\w+\b', section_content.lower())
     
-    # Count matches to determine relevance
+    # Count matches to determine relevance, with importance weighting
     matches = 0
+    total_weight = len(item_concepts)
+    
     for concept in item_concepts:
+        # Check for direct word matches
         if concept in content_words:
             matches += 1
+        # Check for partial matches in phrases (helps with compound words and variations)
+        elif any(concept in phrase for phrase in re.findall(r'\b\w+(?:\s+\w+){1,3}\b', section_content.lower())):
+            matches += 0.5
     
-    # If at least half of the concepts match, consider it related
-    return matches >= len(item_concepts) / 2
+    # Return True if the match ratio exceeds the threshold
+    return (matches / total_weight) >= threshold
 
 def extract_policy_type(item_text):
     """Extract the type of policy from policy-related checklist items."""
@@ -621,7 +672,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
         # Process using AI if permitted, otherwise use traditional matching
         from openai_helper import analyze_checklist_items_batch
-        results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts)
+        results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts, additional_context=enhanced_context)
         
         # Post-process grade distribution items with the extracted table if found
         if has_grade_table:

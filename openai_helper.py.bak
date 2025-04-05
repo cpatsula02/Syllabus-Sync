@@ -437,6 +437,33 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
             'evidence': excerpt if found_excerpt else "",
             'method': 'fallback_academic_review'
         }
+    except Exception as e:
+        logger.error(f"Error using AI analysis: {str(e)}")
+        if "insufficient_quota" in str(e):
+            logger.warning("API quota exceeded - using enhanced traditional analysis")
+        # Fall back to enhanced traditional analysis with multiple checks
+        from document_processor import check_item_in_document, find_matching_excerpt, check_special_entity_patterns
+        
+        # Multiple validation approaches
+        is_present_basic = check_item_in_document(item, document_text)
+        is_present_special = check_special_entity_patterns(item, document_text)
+        found_excerpt, _ = find_matching_excerpt(item, document_text)
+        
+        # Require at least 2 out of 3 checks to pass for higher confidence
+        is_present = sum([is_present_basic, is_present_special, found_excerpt]) >= 2
+        evidence = ""
+        if is_present:
+            found, excerpt = find_matching_excerpt(item, document_text)
+            if found and excerpt:
+                evidence = excerpt
+
+        return {
+            'present': is_present,
+            'confidence': 0.85 if is_present else 0.15,
+            'explanation': f"Fallback analysis after AI error: {'Item is present in document' if is_present else 'Item not found in document'}",
+            'evidence': evidence,
+            'method': 'fallback_academic_review'
+        }
 
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
