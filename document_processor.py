@@ -362,6 +362,70 @@ def check_special_entity_patterns(item, document):
     document_lower = document.lower()
     item_lower = item.lower()
     
+    # Check for course objectives with numbering
+    if any(word in item_lower for word in ['objective', 'learning outcome', 'goal']):
+        objective_patterns = [
+            r'(?:course\s+)?objectives?[:]\s*\n\s*(?:\d+\.|\-|\*)\s+\w+',
+            r'learning\s+outcomes?[:]\s*\n\s*(?:\d+\.|\-|\*)\s+\w+',
+            r'course\s+goals?[:]\s*\n\s*(?:\d+\.|\-|\*)\s+\w+'
+        ]
+        return any(re.search(pattern, document_lower, re.MULTILINE) for pattern in objective_patterns)
+    
+    # Check for tools/platforms/resources section
+    if any(word in item_lower for word in ['tool', 'platform', 'resource', 'material']):
+        resource_patterns = [
+            r'(?:required|recommended)\s+(?:tools?|platforms?|resources?|materials?)',
+            r'technology\s+requirements?',
+            r'learning\s+(?:tools?|platforms?|resources?)',
+            r'(?:course|required)\s+materials?\s+and\s+resources?'
+        ]
+        return any(re.search(pattern, document_lower) for pattern in resource_patterns)
+    
+    # Check for course workload section
+    if any(word in item_lower for word in ['workload', 'time', 'hours']):
+        workload_patterns = [
+            r'course\s+workload',
+            r'expected\s+(?:hours?|time)',
+            r'weekly\s+(?:hours?|workload)',
+            r'time\s+commitment',
+            r'student\s+effort'
+        ]
+        return any(re.search(pattern, document_lower) for pattern in workload_patterns)
+    
+    # Check for missed assessment policy
+    if 'missed' in item_lower and ('assessment' in item_lower or 'policy' in item_lower):
+        missed_patterns = [
+            r'missed\s+(?:assignments?|assessments?)',
+            r'missing\s+(?:work|assignments?|assessments?)',
+            r'absence\s+policy',
+            r'missed\s+.*?\s+policy'
+        ]
+        return any(re.search(pattern, document_lower) for pattern in missed_patterns)
+    
+    # Check for late policy
+    if 'late' in item_lower and 'policy' in item_lower:
+        late_patterns = [
+            r'late\s+(?:submission|work|assignment)s?\s+policy',
+            r'late\s+policy',
+            r'policies?\s+(?:on|regarding)\s+late'
+        ]
+        return any(re.search(pattern, document_lower) for pattern in late_patterns)
+    
+    # Check for contacting instructor section
+    if any(word in item_lower for word in ['contact', 'instructor', 'professor']):
+        contact_patterns = [
+            r'(?:contacting|contact)\s+(?:your|the)\s+instructor',
+            r'instructor\s+contact\s+information',
+            r'(?:office|contact)\s+hours',
+            r'how\s+to\s+contact'
+        ]
+        return any(re.search(pattern, document_lower) for pattern in contact_patterns)
+    
+    # Check for valid links
+    if any(word in item_lower for word in ['link', 'url', 'hyperlink']):
+        url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+        return bool(re.findall(url_pattern, document))
+    
     # 1. Handle exam date patterns
     if any(word in item_lower for word in ['exam', 'examination', 'test', 'quiz', 'final']):
         exam_patterns = [
