@@ -5,7 +5,7 @@
     <div class="col-md-10">
         <div class="card shadow-lg">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h1 class="h3 mb-0">Course Outline Checklist Results</h1>
+                <h1 class="h3 mb-0">Syllabus Sync Analysis Results</h1>
                 <a href="{{ url_for('index') }}" class="btn btn-light btn-sm">
                     <i class="fas fa-arrow-left me-1"></i> Back
                 </a>
@@ -84,9 +84,9 @@
                     <table class="table table-hover">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col" style="width: 65%">Checklist Item</th>
-                                <th scope="col" style="width: 20%">Status</th>
-                                <th scope="col" style="width: 15%">Action</th>
+                                <th scope="col" style="width: 50%">Checklist Item</th>
+                                <th scope="col" style="width: 35%">Match Details</th>
+                                <th scope="col" style="width: 15%">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -117,20 +117,27 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    <div class="d-flex align-items-center mb-2">
+                                        {% if is_present %}
+                                        <span class="badge bg-success">Present</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Missing</span>
+                                        {% endif %}
+                                        
+                                        {% if method and method.startswith("openai") %}
+                                        <span class="badge bg-primary ms-1">AI Analysis</span>
+                                        {% elif method %}
+                                        <span class="badge bg-secondary ms-1">{{ method }}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                        {% endif %}
+                                    </div>
+                                    
                                     {% if is_present %}
-                                    <span class="badge bg-success">Present</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">Missing</span>
-                                    {% endif %}
-                                    {% if method and method.startswith("openai") %}
-                                    <span class="badge bg-primary ms-1">AI Analysis</span>
-                                    {% if "attempt" in method %}
-                                    <div class="small text-muted mt-1">{{ method }}</div>
-                                    {% endif %}
-                                    {% elif method %}
-                                    <span class="badge bg-secondary ms-1">{{ method }}</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary ms-1">Pattern Matching</span>
+                                    <button class="btn btn-sm btn-outline-success view-match-btn" 
+                                            data-item="{{ item }}" data-bs-toggle="modal" data-bs-target="#matchDetailsModal">
+                                        <i class="fas fa-search me-1"></i> View Match
+                                    </button>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -166,7 +173,39 @@
                 </div>
             </div>
             <div class="card-footer text-center">
-                <p class="mb-0 small text-muted">University of Calgary - Course Outline Checker</p>
+                <p class="mb-0 small text-muted">Syllabus Sync - University of Calgary</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Match Details Modal -->
+<div class="modal fade" id="matchDetailsModal" tabindex="-1" aria-labelledby="matchDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="matchDetailsModalLabel">Match Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3" id="modalItemText"></h6>
+                <div class="alert alert-success">
+                    <div class="mb-2"><strong>Match found in document:</strong></div>
+                    <div id="matchExcerpt" class="p-2 bg-light rounded border">
+                        <p class="placeholder-glow">
+                            <span class="placeholder col-12"></span>
+                            <span class="placeholder col-12"></span>
+                            <span class="placeholder col-10"></span>
+                        </p>
+                    </div>
+                </div>
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle me-1"></i> 
+                    The matched content is shown above. Key terms and related content were used to identify this match.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -191,6 +230,30 @@
                         button.classList.add('btn-outline-primary');
                     }, 2000);
                 });
+            });
+        });
+        
+        // Handle view match button clicks
+        document.querySelectorAll('.view-match-btn').forEach(function(button) {
+            button.addEventListener('click', function() {
+                var item = this.getAttribute('data-item');
+                document.getElementById('modalItemText').textContent = item;
+                document.getElementById('matchExcerpt').innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div> Fetching match details...';
+                
+                // Fetch the match details
+                fetch('/get-match-details?item=' + encodeURIComponent(item))
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.found) {
+                            document.getElementById('matchExcerpt').textContent = data.excerpt;
+                        } else {
+                            document.getElementById('matchExcerpt').textContent = 'No specific excerpt available. The item was detected through pattern matching.';
+                        }
+                    })
+                    .catch(error => {
+                        document.getElementById('matchExcerpt').textContent = 'Error fetching match details. Please try again.';
+                        console.error('Error:', error);
+                    });
             });
         });
     });

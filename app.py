@@ -1,11 +1,12 @@
 import os
 import logging
 import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file, jsonify
 from werkzeug.utils import secure_filename
 import document_processor
 from fpdf import FPDF
 import io
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -30,7 +31,7 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('index.html')
+    return render_template('index.html', year=datetime.datetime.now().year)
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_files():
@@ -98,6 +99,13 @@ def upload_files():
         # Store results in session for the results page
         session['checklist_items'] = checklist_items
         session['matching_results'] = matching_results
+        
+        # Store outline text for match details functionality
+        try:
+            outline_text = document_processor.extract_text(outline_path)
+            session['outline_text'] = outline_text
+        except Exception as text_error:
+            logging.error(f"Error extracting outline text: {str(text_error)}")
         
         return redirect(url_for('results'))
         
@@ -254,7 +262,8 @@ def results():
     
     return render_template('results.html', 
                           checklist_items=checklist_items,
-                          matching_results=matching_results)
+                          matching_results=matching_results,
+                          year=datetime.datetime.now().year)
                           
 # PDF download route
 @app.route('/download-pdf')
@@ -283,6 +292,27 @@ def download_pdf():
 def too_large(e):
     flash('File too large. Maximum size is 16 MB.')
     return redirect(url_for('index'))
+
+@app.route('/get-match-details')
+def get_match_details():
+    """Get match details for a checklist item in the document"""
+    item = request.args.get('item', '')
+    
+    if not item:
+        return jsonify({"found": False, "error": "No checklist item provided"})
+    
+    # Get the document text from the session
+    outline_text = session.get('outline_text', '')
+    if not outline_text:
+        return jsonify({"found": False, "error": "No document text available"})
+    
+    # Use the find_matching_excerpt function to find a relevant excerpt
+    try:
+        from document_processor import find_matching_excerpt
+        found, excerpt = find_matching_excerpt(item, outline_text)
+        return jsonify({"found": found, "excerpt": excerpt})
+    except Exception as e:
+        return jsonify({"found": False, "error": str(e)})
 
 @app.errorhandler(500)
 def server_error(e):

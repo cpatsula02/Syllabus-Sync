@@ -557,3 +557,96 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         # Handle any errors during processing
         logging.error(f"Error processing documents: {str(e)}")
         return [], {"error": f"An error occurred: {str(e)}"}
+
+def find_matching_excerpt(item, document_text):
+    """
+    Find a relevant excerpt in the document that matches the given checklist item.
+    Returns a highlighted excerpt showing where the item was found.
+    
+    Args:
+        item: The checklist item to find in the document
+        document_text: The full text of the document to search
+        
+    Returns:
+        A tuple of (found, excerpt) where:
+        - found: Boolean indicating if a match was found
+        - excerpt: String containing the excerpt with matching keywords highlighted,
+                  or None if no match was found
+    """
+    # Extract key terms from the checklist item
+    item_lower = item.lower()
+    key_terms = []
+    
+    # Extract nouns and key phrases from the item
+    words = re.findall(r'\b\w+\b', item_lower)
+    for word in words:
+        if len(word) > 3 and word not in ['and', 'the', 'that', 'this', 'with', 'from', 'have', 'for', 'are', 'should', 'would', 'could']:
+            key_terms.append(word)
+    
+    # Add key phrases based on the checklist item content
+    if 'grade' in item_lower:
+        key_terms.extend(['grade', 'grading', 'marks', 'evaluation'])
+    if 'exam' in item_lower:
+        key_terms.extend(['exam', 'examination', 'test', 'final'])
+    if 'syllabus' in item_lower or 'course outline' in item_lower:
+        key_terms.extend(['syllabus', 'outline', 'course'])
+    if 'textbook' in item_lower:
+        key_terms.extend(['textbook', 'book', 'reading', 'material'])
+    if 'assignment' in item_lower:
+        key_terms.extend(['assignment', 'project', 'homework', 'submission'])
+    if 'instructor' in item_lower:
+        key_terms.extend(['instructor', 'professor', 'faculty', 'teacher', 'contact'])
+    
+    # Remove duplicates and sort by length (longer terms first)
+    key_terms = list(set(key_terms))
+    key_terms.sort(key=len, reverse=True)
+    
+    # Split document into paragraphs and find the best match
+    paragraphs = document_text.split('\n\n')
+    best_score = 0
+    best_paragraph = ""
+    best_matches = []
+    
+    for paragraph in paragraphs:
+        if len(paragraph.strip()) < 10:  # Skip very short paragraphs
+            continue
+            
+        paragraph_lower = paragraph.lower()
+        score = 0
+        matches = []
+        
+        for term in key_terms:
+            if term in paragraph_lower:
+                score += 1
+                matches.append(term)
+                
+        if score > best_score:
+            best_score = score
+            best_paragraph = paragraph
+            best_matches = matches
+    
+    # If we found a good match
+    if best_score >= 2:  # Require at least 2 keyword matches for relevance
+        # Prepare the excerpt, highlighting the matching terms
+        excerpt = best_paragraph
+        
+        # If the paragraph is too long, get a relevant section around the matched terms
+        if len(excerpt) > 300:
+            # Find the position of the first matched term
+            first_match_pos = min([excerpt.lower().find(term) for term in best_matches if excerpt.lower().find(term) != -1], default=0)
+            
+            # Extract a portion around the first match
+            start_pos = max(0, first_match_pos - 100)
+            end_pos = min(len(excerpt), first_match_pos + 200)
+            
+            # Adjust to not cut off in the middle of words
+            while start_pos > 0 and excerpt[start_pos].isalnum():
+                start_pos -= 1
+            while end_pos < len(excerpt) and excerpt[end_pos].isalnum():
+                end_pos += 1
+                
+            excerpt = ("..." if start_pos > 0 else "") + excerpt[start_pos:end_pos] + ("..." if end_pos < len(excerpt) else "")
+        
+        return True, excerpt
+    
+    return False, None
