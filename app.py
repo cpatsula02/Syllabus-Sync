@@ -228,6 +228,53 @@ def generate_pdf_report(checklist_items, matching_results):
             pdf.set_font("Arial", "I", 9)
             pdf.cell(0, 6, f"    Note: {safe_explanation}", ln=True)
         
+        # Add matching excerpt if available and item is present
+        if is_present:
+            pdf.ln(1)
+            pdf.set_font("Arial", "B", 9)
+            pdf.cell(0, 6, "    Matching Excerpt:", ln=True)
+            pdf.set_font("Arial", "", 9)
+            
+            # Get the outline text from the session
+            outline_text = session.get('outline_text', '')
+            
+            if outline_text:
+                try:
+                    from document_processor import find_matching_excerpt
+                    found, excerpt = find_matching_excerpt(item, outline_text)
+                    
+                    if found and excerpt:
+                        # Format the excerpt to fit PDF and make it ASCII-compatible
+                        if len(excerpt) > 250:
+                            excerpt = excerpt[:247] + "..."
+                            
+                        safe_excerpt = excerpt.encode('ascii', 'replace').decode('ascii')
+                        
+                        # Draw a highlighted box for the excerpt
+                        pdf.set_fill_color(232, 255, 232)  # Light green background
+                        # Multi-line cell with wrapping
+                        excerpt_lines = []
+                        excerpt_text = safe_excerpt
+                        
+                        while len(excerpt_text) > 75:
+                            # Find a good breaking point
+                            break_point = excerpt_text[:75].rfind(' ')
+                            if break_point == -1:
+                                break_point = 75
+                                
+                            excerpt_lines.append(excerpt_text[:break_point])
+                            excerpt_text = excerpt_text[break_point+1:]
+                        
+                        if excerpt_text:
+                            excerpt_lines.append(excerpt_text)
+                            
+                        # Print the wrapped excerpt text with highlighting
+                        for line in excerpt_lines:
+                            pdf.cell(0, 6, f"        {line}", ln=True, fill=True)
+                except Exception as e:
+                    # If there's an error, just skip the excerpt
+                    pass
+        
         pdf.ln(2)
     
     # Add recommendations
@@ -280,11 +327,11 @@ def download_pdf():
     # Generate the PDF
     pdf_output = generate_pdf_report(checklist_items, matching_results)
     
-    # Return the PDF as a downloadable file
+    # Return the PDF to view in the browser (not as a download)
     return send_file(
         pdf_output, 
-        as_attachment=True,
-        download_name='course_outline_analysis.pdf',
+        as_attachment=False,  # Changed to False to display in browser
+        download_name='syllabus_sync_analysis.pdf',
         mimetype='application/pdf'
     )
 
