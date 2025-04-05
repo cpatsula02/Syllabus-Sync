@@ -1,19 +1,9 @@
 import os
 import re
-import nltk
 import logging
 import pdfplumber
 from docx import Document
 from typing import List, Dict, Tuple, Any, Optional
-from nltk.corpus import stopwords
-
-# Initialize NLTK
-try:
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('stopwords')
-    nltk.download('punkt')
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -153,8 +143,20 @@ def check_item_in_document(item: str, document_text: str) -> bool:
 def extract_core_concepts(text):
     """Extract core concepts from text for semantic matching."""
     # Remove common stopwords and keep only significant terms
-    words = nltk.word_tokenize(text.lower())
-    filtered_words = [w for w in words if w.isalnum() and w not in stopwords.words('english')]
+    # Use a basic regex-based tokenizer instead of nltk.word_tokenize
+    words = re.findall(r'\b\w+\b', text.lower())
+    
+    # Common English stopwords to filter out
+    common_stopwords = ['a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 
+                       'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 
+                       'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from',
+                       'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 
+                       'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+                       'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other',
+                       'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+                       'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
+    
+    filtered_words = [w for w in words if w.isalnum() and w not in common_stopwords]
     
     # Focus on key descriptive terms most likely to identify concepts
     return [word for word in filtered_words if len(word) > 3]
@@ -211,7 +213,8 @@ def extract_document_sections(document_text):
 
 def sections_are_related(section_title, item_concepts):
     """Check if a section title is related to the concepts in the checklist item."""
-    section_words = nltk.word_tokenize(section_title.lower())
+    # Use a simple split instead of nltk.word_tokenize
+    section_words = re.findall(r'\b\w+\b', section_title.lower())
     
     # Check for concept overlaps
     for concept in item_concepts:
@@ -237,7 +240,8 @@ def sections_are_related(section_title, item_concepts):
 
 def content_contains_concepts(section_content, item_concepts):
     """Check if section content contains the concepts from the checklist item."""
-    content_words = nltk.word_tokenize(section_content.lower())
+    # Use regular expressions to find words instead of nltk.word_tokenize
+    content_words = re.findall(r'\b\w+\b', section_content.lower())
     
     # Count matches to determine relevance
     matches = 0
@@ -419,8 +423,18 @@ def find_matching_excerpt(item, document_text):
     """
     # Extract key concepts from the checklist item
     item_lower = item.lower()
+    # Common English stopwords to filter out
+    common_stopwords = ['a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 
+                      'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 
+                      'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from',
+                      'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 
+                      'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+                      'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other',
+                      'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+                      'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
+    
     keywords = [word for word in re.findall(r'\b\w+\b', item_lower) 
-               if word not in stopwords.words('english') and len(word) > 3]
+               if word not in common_stopwords and len(word) > 3]
     
     # Add additional terms based on common university document sections
     if 'instructor' in item_lower:
