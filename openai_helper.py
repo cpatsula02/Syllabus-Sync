@@ -103,24 +103,92 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
 
     This function provides advanced semantic understanding of whether
     the requirement in the checklist item is fulfilled in the course outline.
+    
+    Special handling is provided for grade table items which need more precise analysis.
     """
     try:
-        prompt = f"""
-        As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
-        is addressed in the course outline. The same concept may be expressed with different phrasing or formatting.
+        # Determine if this is a grade distribution related item
+        is_grade_item = any(term in item.lower() for term in [
+            'grade distribution', 
+            'weight', 
+            'assessment',
+            'due date',
+            'participation',
+            'group project',
+            'final exam',
+            'take home',
+            'class schedule',
+            'missed assessment policy',
+            'late policy'
+        ])
+        
+        # Create a more specialized prompt for grade table items
+        if is_grade_item:
+            prompt = f"""
+            As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
+            related to GRADE DISTRIBUTION or ASSESSMENT POLICIES is addressed in the course outline.
+            
+            This item requires precise identification of specific details or tables in the document.
+            
+            CHECKLIST ITEM: {item}
+            
+            COURSE OUTLINE TEXT: {document_text[:4500]}...
+            
+            IMPORTANT GUIDELINES FOR ASSESSMENT/GRADE ITEMS:
+            1. Grade Distribution Tables or weighted assessments should include:
+               - Clear assessment component names
+               - Explicit weights/percentages that add up to 100%
+               - Due dates or timeline information
+            
+            2. Missed Assessment Policies should have:
+               - Clear procedures for missed assessments
+               - Explicit mention of documentation or legitimate excuses
+            
+            3. Late Policies should include:
+               - Specific penalties or procedures for late submissions
+               - Clear guidelines on how late work is handled
+            
+            4. Class Participation details should include:
+               - How participation is measured or evaluated
+               - Clear expectations for students
+            
+            5. Exams (final, midterm, take-home) should include:
+               - Format details
+               - Duration or timing information
+               - Content scope
+            
+            BE STRICT IN YOUR EVALUATION. If the document doesn't EXPLICITLY address 
+            these requirements with sufficient detail, mark as not present.
+            
+            Provide a JSON response with the following fields:
+            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
+            - "confidence": number between 0 and 1 indicating confidence in the decision
+            - "explanation": detailed explanation of why the item is or is not present
+            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
+            - "method": should be "ai_grade_analysis"
+            """
+        else:
+            # Standard prompt for regular items
+            prompt = f"""
+            As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
+            is addressed in the course outline. The same concept may be expressed with different phrasing or formatting.
 
-        CHECKLIST ITEM: {item}
+            CHECKLIST ITEM: {item}
 
-        COURSE OUTLINE TEXT: {document_text[:4000]}...
+            COURSE OUTLINE TEXT: {document_text[:4000]}...
 
-        Provide a JSON response with the following fields:
-        - "present": boolean indicating if the item is addressed in the outline
-        - "confidence": number between 0 and 1 indicating confidence in the decision
-        - "explanation": detailed explanation of why the item is or is not present
-        - "evidence": if present, provide the exact text from the outline that addresses this item
-        - "method": should be "ai_analysis"
-        """
+            Provide a JSON response with the following fields:
+            - "present": boolean indicating if the item is addressed in the outline
+            - "confidence": number between 0 and 1 indicating confidence in the decision
+            - "explanation": detailed explanation of why the item is or is not present
+            - "evidence": if present, provide the exact text from the outline that addresses this item
+            - "method": should be "ai_analysis"
+            """
 
+        # Adjust temperature and tokens based on item type
+        temperature = 0.2 if is_grade_item else 0.3
+        max_tokens = 800 if is_grade_item else 600
+        
         response = openai.chat.completions.create(
             model=MODEL,
             messages=[
@@ -128,7 +196,8 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.3
+            temperature=temperature,
+            max_tokens=max_tokens
         )
 
         # Parse the JSON response
@@ -137,6 +206,28 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
         # Ensure all required fields are present
         if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
             raise ValueError("API response missing required fields")
+            
+        # Additional validation for grade table items
+        if is_grade_item and result.get("present", False):
+            evidence = result.get("evidence", "").lower()
+            item_lower = item.lower()
+            
+            # Apply stricter validation for grade table items
+            if 'grade distribution' in item_lower or 'weight' in item_lower:
+                # Check for actual percentages/weights in evidence
+                has_percentages = '%' in evidence or 'percent' in evidence
+                has_weights = 'weight' in evidence or any(re.search(r'\b\d+\s*%', evidence) for _ in range(1))
+                
+                if not (has_percentages or has_weights):
+                    # Lower confidence if percentages/weights are missing
+                    result["confidence"] = max(0.2, result["confidence"] - 0.3)
+                    result["explanation"] += " (Warning: Evidence may lack explicit grade weights)"
+                    
+            elif 'due date' in item_lower:
+                # Check if evidence contains date-like information
+                if not any(term in evidence for term in ['date', 'due', 'deadline', 'submit by']):
+                    result["confidence"] = max(0.2, result["confidence"] - 0.3)
+                    result["explanation"] += " (Warning: Evidence may lack explicit due dates)"
 
         return result
     except Exception as e:
