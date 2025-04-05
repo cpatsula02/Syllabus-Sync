@@ -134,6 +134,7 @@ def generate_pdf_report(checklist_items, matching_results):
     
     # Set up fonts
     pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Syllabus Sync", ln=True, align="C")
     pdf.cell(0, 10, "University of Calgary", ln=True, align="C")
     pdf.cell(0, 10, "Course Outline Analysis Report", ln=True, align="C")
     

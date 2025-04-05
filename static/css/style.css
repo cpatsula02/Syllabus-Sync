@@ -26,6 +26,10 @@ body {
     align-items: center;
 }
 
+.navbar-brand span {
+    color: var(--uofc-black);
+}
+
 /* Cards */
 .card {
     border: none;
