@@ -156,8 +156,8 @@ def upload_files():
         elif "format" in error_msg:
             flash('There was an issue with the file format. Please ensure you are uploading PDF or DOCX files.')
         else:
-            flash('An error occurred while processing your files. Please try again.')
-            logging.error(f"Unexpected error: {str(e)}")
+            flash('An error occurred during processing. Please ensure your files are properly formatted.')
+            logging.error(f"Processing error details: {str(e)}", exc_info=True)
         
         return redirect(request.url)
     finally:
