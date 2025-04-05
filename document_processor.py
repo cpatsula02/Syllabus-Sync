@@ -104,6 +104,8 @@ def extract_checklist_items(text: str) -> List[str]:
 
     # Log how many items were found
     logging.info(f"Found {len(checklist_items)} numbered or bulleted checklist items")
+    for i, item in enumerate(checklist_items, 1):
+        logging.info(f"Checklist item {i}: {item}")
 
     return checklist_items
 
