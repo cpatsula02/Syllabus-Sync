@@ -1107,27 +1107,287 @@ def check_special_entity_patterns(item, document):
 
     return False
 
-def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+def find_matching_excerpt(item, document_text):
     """
-    Process both documents and return checklist items and matching results with detailed breakdown.
+    Find a relevant excerpt in the document that matches the given checklist item.
+
+    This function acts as a university academic reviewer, focusing on whether the 
+    requirement described in the checklist item is meaningfully fulfilled in the 
+    course outline. It identifies the exact section or sentence(s) from the course 
+    outline that fulfill the requirement.
+
+    The analysis considers that the same concept may be expressed with different phrasing, 
+    formatting, or section titles, and uses deep understanding of intent and meaning to
+    determine whether the course outline addresses the requirement.
 
     Args:
-        checklist_path: Path to the checklist document
-        outline_path: Path to the course outline document
-        api_attempts: Number of API analysis attempts to make (1-10) - ignored in this version
-        additional_context: Additional context about the course or specific situations
+        item: The checklist item to find in the document
+        document_text: The full text of the document to search
 
     Returns:
-        A tuple of (checklist_items, matching_results)
+        A tuple of (found, excerpt) where:
+        - found: Boolean indicating if a match was found
+        - excerpt: String containing the excerpt with matching keywords highlighted,
+                  or None if no match was found
     """
-    try:
-        # Extract text from both documents
-        checklist_text = extract_text(checklist_path)
-        outline_text = extract_text(outline_path)
+    # Extract key terms from the checklist item
+    item_lower = item.lower()
+    key_terms = []
 
-        # Add additional context to the outline if provided
-        if additional_context:
-            outline_text += f"\n\nADDITIONAL CONTEXT:\n{additional_context}"
+    # Handle email requirements specially 
+    is_email_requirement = any(keyword in item_lower for keyword in ['email', 'contact', 'instructor']) and '@' in item_lower
+
+    # Extract more meaningful key terms from the item
+    # Use word boundaries to find complete words
+    words = re.findall(r'\b\w+\b', item_lower)
+    for word in words:
+        # More aggressive filtering of common words
+        if len(word) > 3 and word not in ['and', 'the', 'that', 'this', 'with', 'from', 'have', 
+                                          'for', 'are', 'should', 'would', 'could', 'will', 
+                                          'been', 'must', 'they', 'their', 'there', 'than', 
+                                          'when', 'what', 'where', 'which', 'who', 'whom', 'whose']:
+            key_terms.append(word)
+
+    # Add context-specific key terms based on the checklist item type
+    if 'grade' in item_lower or 'grading' in item_lower:
+        key_terms.extend(['grade', 'grading', 'marks', 'evaluation', 'assessment', 'percentage', 'score', 'distribution'])
+    if 'exam' in item_lower or 'test' in item_lower:
+        key_terms.extend(['exam', 'examination', 'test', 'final', 'midterm', 'quiz'])
+    if 'syllabus' in item_lower or 'course outline' in item_lower:
+        key_terms.extend(['syllabus', 'outline', 'course', 'description', 'information'])
+    if 'textbook' in item_lower or 'reading' in item_lower:
+        key_terms.extend(['textbook', 'book', 'reading', 'material', 'literature', 'resource', 'required'])
+    if 'assignment' in item_lower or 'homework' in item_lower:
+        key_terms.extend(['assignment', 'project', 'homework', 'submission', 'due', 'deadline', 'deliverable'])
+    if 'instructor' in item_lower or 'professor' in item_lower:
+        key_terms.extend(['instructor', 'professor', 'faculty', 'teacher', 'contact', 'office', 'hours', 'email'])
+    if 'policy' in item_lower:
+        key_terms.extend(['policy', 'policies', 'rule', 'regulation', 'guideline', 'requirement'])
+    if 'academic' in item_lower and 'integrity' in item_lower:
+        key_terms.extend(['academic', 'integrity', 'honesty', 'plagiarism', 'misconduct', 'cheating'])
+    if 'missed' in item_lower and ('assignment' in item_lower or 'exam' in item_lower):
+        key_terms.extend(['missed', 'missing', 'absence', 'absent', 'late', 'extension', 'deferral'])
+    if 'accommodation' in item_lower:
+        key_terms.extend(['accommodation', 'disability', 'access', 'accessib', 'student', 'service'])
+
+    # For email requirements, add specific email-related terms
+    if is_email_requirement:
+        key_terms.extend(['email', '@ucalgary.ca', 'contact', 'instructor', 'professor'])
+
+    # Remove duplicates and sort by length (longer terms first)
+    key_terms = list(set(key_terms))
+    key_terms.sort(key=len, reverse=True)
+
+    # Use two approaches: paragraph-based and section-based
+
+    # 1. Paragraph-based approach (for shorter documents)
+    paragraphs = document_text.split('\n\n')
+    best_paragraph_score = 0
+    best_paragraph = ""
+    best_paragraph_matches = []
+
+    for paragraph in paragraphs:
+        if len(paragraph.strip()) < 10:  # Skip very short paragraphs
+            continue
+
+        paragraph_lower = paragraph.lower()
+        score = 0
+        matches = []
+
+        for term in key_terms:
+            if term in paragraph_lower:
+                # Weight longer terms more heavily
+                term_weight = 1 + (len(term) / 20)  # e.g., a 10-letter term gets score 1.5
+                score += term_weight
+                matches.append(term)
+
+        if score > best_paragraph_score:
+            best_paragraph_score = score
+            best_paragraph = paragraph
+            best_paragraph_matches = matches
+
+    # 2. Section-based approach (for structured documents)
+    # Look for multiple paragraphs under the same heading
+    section_matches = []
+    current_section = ""
+    current_section_title = ""
+    current_section_score = 0
+    current_section_matches = []
+
+    for i, paragraph in enumerate(paragraphs):
+        # Detect if this paragraph looks like a section title
+        is_title = (len(paragraph.strip()) < 100 and 
+                   (paragraph.strip().endswith(':') or 
+                    paragraph.strip().isupper() or 
+                    any(term in paragraph.lower() for term in ['course', 'instructor', 'grade', 'assignment', 
+                                                              'policy', 'outline', 'textbook', 'exam'])))
+
+        # If it's a title, start a new section
+        if is_title:
+            # Score and save the previous section if it exists
+            if current_section and current_section_score > 0:
+                section_matches.append((current_section, current_section_score, current_section_matches, current_section_title))
+
+            # Start a new section
+            current_section_title = paragraph
+            current_section = paragraph + "\n\n"
+            current_section_score = 0
+            current_section_matches = []
+        else:
+            # Add to the current section
+            current_section += paragraph + "\n\n"
+
+            # Score this paragraph and add to section score
+            paragraph_lower = paragraph.lower()
+            for term in key_terms:
+                if term in paragraph_lower:
+                    term_weight = 1 + (len(term) / 20)
+                    current_section_score += term_weight
+                    if term not in current_section_matches:
+                        current_section_matches.append(term)
+
+    # Add the last section if it exists
+    if current_section and current_section_score > 0:
+        section_matches.append((current_section, current_section_score, current_section_matches, current_section_title))
+
+    # Find the best-matching section
+    best_section = ""
+    best_section_score = 0
+    best_section_matches = []
+
+    for section, score, matches, title in section_matches:
+        if score > best_section_score:
+            best_section = section
+            best_section_score = score
+            best_section_matches = matches
+
+    # Determine which approach gave better results
+    use_section = (best_section_score > best_paragraph_score * 1.2)  # Prefer section if significantly better
+
+    # Special handling for email requirements - need to find specifically @ucalgary.ca
+    if is_email_requirement:
+        # First look for ucalgary.ca emails in best matches
+        ucalgary_email_regex = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        best_content = best_section if use_section else best_paragraph
+
+        # Extract all ucalgary.ca emails
+        ucalgary_emails = re.findall(ucalgary_email_regex, best_content)
+
+        # If found, create excerpt focused on the email
+        if ucalgary_emails:
+            email = ucalgary_emails[0]
+            email_idx = best_content.find(email)
+
+            # Extract content around the email
+            start_pos = max(0, email_idx - 150)
+            end_pos = min(len(best_content), email_idx + len(email) + 150)
+
+            # Adjust to not cut off in the middle of words
+            while start_pos > 0 and best_content[start_pos].isalnum():
+                start_pos -= 1
+            while end_pos < len(best_content) and best_content[end_pos].isalnum():
+                end_pos += 1
+
+            excerpt = ("..." if start_pos > 0 else "") + best_content[start_pos:end_pos] + ("..." if end_pos < len(best_content) else "")
+            return True, excerpt
+
+    # Regular handling for non-email requirements or if email not found
+    if use_section:
+        best_matches = best_section_matches
+        best_score = best_section_score
+        best_content = best_section
+    else:
+        best_matches = best_paragraph_matches
+        best_score = best_paragraph_score
+        best_content = best_paragraph
+
+    # Only consider it a match if we have enough matching terms or a high score
+    # Higher threshold for longer items to avoid false positives
+    min_score_threshold = 2 + (len(item) / 100)
+
+    if best_score >= min_score_threshold or len(best_matches) >= 3:
+        # If the content is too long, extract a focused excerpt
+        if len(best_content) > 400:
+            # Find the highest concentration of matching terms
+            match_positions = []
+            for term in best_matches:
+                # Find all occurrences of this term
+                term_lower = term.lower()
+                content_lower = best_content.lower()
+                start_idx = 0
+                while start_idx < len(content_lower):
+                    pos = content_lower.find(term_lower, start_idx)
+                    if pos == -1:
+                        break
+                    match_positions.append((pos, term))
+                    start_idx = pos + 1
+
+            # Find the area with the highest density of matches
+            if match_positions:
+                # Sort by position
+                match_positions.sort(key=lambda x: x[0])
+
+                # Use sliding window to find region with most matches
+                best_region_start = 0
+                best_region_end = 0
+                best_region_matches = 0
+                window_size = 300
+
+                for i in range(len(match_positions)):
+                    window_end = match_positions[i][0]
+                    window_start = window_end - window_size
+
+                    # Count matches in this window
+                    matches_in_window = sum(1 for pos, _ in match_positions if window_start <= pos <= window_end)
+
+                    if matches_in_window > best_region_matches:
+                        best_region_matches = matches_in_window
+                        best_region_start = window_start
+                        best_region_end = window_end
+
+                # Adjust the window to include some context
+                start_pos = max(0, best_region_start - 50)
+                end_pos = min(len(best_content), best_region_end + 150)
+
+                # Adjust to not cut off in the middle of words
+                while start_pos > 0 and best_content[start_pos].isalnum():
+                    start_pos -= 1
+                while end_pos < len(best_content) and best_content[end_pos].isalnum():
+                    end_pos += 1
+
+                excerpt = ("..." if start_pos > 0 else "") + best_content[start_pos:end_pos] + ("..." if end_pos < len(best_content) else "")
+                return True, excerpt
+            else:
+                # If no match positions (shouldn't happen), use the first part of the content
+                excerpt = best_content[:400] + "..."
+                return True, excerpt
+        else:
+            # Content is short enough to use as is
+            return True, best_content
+
+    # If we reach here, no good match was found
+    return False, None
+
+def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+    try:
+        # Validate file paths
+        if not os.path.exists(checklist_path):
+            raise FileNotFoundError(f"Checklist file not found: {checklist_path}")
+        if not os.path.exists(outline_path):
+            raise FileNotFoundError(f"Course outline file not found: {outline_path}")
+
+        # Extract and validate text from both documents
+        checklist_text = extract_text(checklist_path)
+        if not checklist_text.strip():
+            raise ValueError("Checklist file is empty")
+
+        outline_text = extract_text(outline_path)
+        if not outline_text.strip():
+            raise ValueError("Course outline file is empty")
+
+        # Log document sizes for debugging
+        logging.info(f"Checklist text length: {len(checklist_text)}")
+        logging.info(f"Outline text length: {len(outline_text)}")
 
         # Extract checklist items from the checklist document
         checklist_items = extract_checklist_items(checklist_text)
@@ -1192,10 +1452,16 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
         return checklist_items, matching_results
 
+    except FileNotFoundError as e:
+        logging.error(f"File not found: {str(e)}")
+        return [], {"error": str(e)}
+    except ValueError as e:
+        logging.error(f"Invalid input: {str(e)}")
+        return [], {"error": str(e)}
     except Exception as e:
         # Handle any errors during processing
-        logging.error(f"Error processing documents: {str(e)}")
-        return [], {"error": f"An error occurred: {str(e)}"}
+        logging.exception(f"An unexpected error occurred: {str(e)}")
+        return [], {"error": f"An unexpected error occurred: {str(e)}"}
 
 def find_matching_excerpt(item, document_text):
     """
