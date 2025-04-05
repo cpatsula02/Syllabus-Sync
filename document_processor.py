@@ -111,11 +111,95 @@ def extract_checklist_items(text: str) -> List[str]:
 
 def check_item_in_document(item: str, document_text: str) -> bool:
     """
-    Advanced semantic matching to check if a checklist item is present in the document.
-    Uses multiple strategies including header recognition and semantic equivalence.
+    Advanced semantic matching with strict validation for critical elements.
+    Uses multiple strategies including header recognition, semantic equivalence,
+    and specific pattern validation for critical items.
     """
     item_lower = item.lower()
     document_lower = document_text.lower()
+
+    # Strict validation for critical elements
+    if '@ucalgary.ca' in item_lower:
+        # Specifically check for valid ucalgary.ca email pattern
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        if not re.search(email_pattern, document_text):
+            return False
+
+    if 'late policy' in item_lower or 'late submission' in item_lower:
+        late_patterns = [
+            r'late\s+(?:submission|assignment|work)s?\s+(?:policy|policies|rule|guideline)',
+            r'(?:policy|policies|penalty|penalties)\s+(?:for|on|regarding)\s+late\s+(?:submission|work|assignment)',
+            r'late\s+(?:work|submission|assignment)s?\s+(?:will|shall|must|may|are|is)\s+(?:not\s+)?(?:be\s+)?(?:accepted|penalized|subject)'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in late_patterns):
+            return False
+
+    if 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+        missed_patterns = [
+            r'miss(?:ed|ing)\s+(?:assignment|assessment|work|exam)s?\s+(?:policy|procedure|rule)',
+            r'(?:policy|procedure)\s+(?:for|on|regarding)\s+miss(?:ed|ing)\s+(?:assignment|assessment|work)',
+            r'(?:if|when)\s+you\s+miss\s+(?:an?\s+)?(?:assignment|assessment|exam)',
+            r'deferral\s+(?:policy|procedure|request)',
+            r'absence\s+(?:policy|procedure)'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in missed_patterns):
+            return False
+
+    if 'grade distribution' in item_lower or 'grading scheme' in item_lower:
+        grade_patterns = [
+            r'grade\s+(?:distribution|breakdown)',
+            r'grading\s+(?:scheme|structure|system)',
+            r'(?:course|final)\s+grade\s+(?:calculation|determination)',
+            r'(?:assignment|assessment|component)\s+weight(?:ing)?s?',
+            r'\b\d+%\s*(?:[-–]\s*\d+%)?(?:\s*:\s*|\s+for\s+)\w+'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in grade_patterns):
+            return False
+
+    if 'textbook' in item_lower or 'required reading' in item_lower:
+        textbook_patterns = [
+            r'(?:required|recommended)\s+(?:text|textbook|reading|material)',
+            r'textbooks?\s*(?::|and\s+materials?)',
+            r'course\s+materials?\s*:',
+            r'reading\s+list',
+            r'required\s+materials?\s+and\s+texts?'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in textbook_patterns):
+            return False
+
+    if 'final exam' in item_lower:
+        exam_patterns = [
+            r'final\s+exam(?:ination)?\s+(?:date|time|schedule|weight|worth|value)',
+            r'final\s+exam(?:ination)?\s+(?:will|shall|must|may|is|are)\s+(?:be|worth|count|scheduled)',
+            r'(?:date|time|schedule)\s+of\s+(?:the\s+)?final\s+exam',
+            r'final\s+exam(?:ination)?\s*:\s*\d+%'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in exam_patterns):
+            return False
+
+    if 'instructor' in item_lower and 'contact' in item_lower:
+        contact_patterns = [
+            r'(?:instructor|professor|faculty)\s+contact\s+information',
+            r'contact(?:ing)?\s+(?:the|your)\s+(?:instructor|professor)',
+            r'instructor\s+(?:email|office\s+hours?|availability)',
+            r'office\s+hours?\s*:',
+            r'(?:email|contact)\s*:\s*[^\s]+@(?:ucalgary\.ca|[^\s]+)'
+        ]
+        if not any(re.search(pattern, document_lower) for pattern in contact_patterns):
+            return False
+
+    # Enhanced semantic matching for remaining items
+    key_terms = extract_core_concepts(item_lower)
+    section_matches = extract_document_sections(document_lower)
+    
+    # Check if any section contains the key terms with high confidence
+    for section_title, content in section_matches.items():
+        if sections_are_related(section_title, key_terms):
+            if content_contains_concepts(content, key_terms):
+                return True
+
+    # Additional pattern matching for specific content types
+    return check_special_entity_patterns(item, document_text)
 
     # Define semantic equivalence groups
     semantic_groups = {
