@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template, jsonify, redirect, flash
 from werkzeug.utils import secure_filename
 import os
@@ -32,9 +31,15 @@ def index():
             # Get additional context if provided
             additional_context = request.form.get('additional_context', '').strip()
 
-            # Process files with increased API attempts for better accuracy
-            checklist_items, analysis_results = process_documents(checklist_path, outline_path, api_attempts=10, additional_context=additional_context)
-            
+            # Get number of API attempts
+            try:
+                api_attempts = int(request.form.get('api_attempts', 3))
+            except ValueError:
+                api_attempts = 3  # Default to 3 attempts if invalid value
+
+            # Process files with specified API attempts and context
+            checklist_items, analysis_results = process_documents(checklist_path, outline_path, api_attempts=api_attempts, additional_context=additional_context)
+
             if "error" in analysis_results:
                 flash(analysis_results["error"])
                 return redirect(request.url)
@@ -43,16 +48,16 @@ def index():
             results = []
             present_count = 0
             missing_count = 0
-            
+
             for item in checklist_items:
                 result = analysis_results.get(item, {})
                 is_present = result.get("present", False)
-                
+
                 if is_present:
                     present_count += 1
                 else:
                     missing_count += 1
-                    
+
                 results.append({
                     "item": item,
                     "present": is_present,

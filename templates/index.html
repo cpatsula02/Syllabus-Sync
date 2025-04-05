@@ -12,7 +12,7 @@
                     Upload your checklist document and course outline to verify if your course outline meets all the required guidelines.
                 </p>
                 
-                <form action="{{ url_for('index') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+                <form action="{{ url_for('index') }}" method="post" enctype="multipart/form-data" id="uploadForm" class="needs-validation" novalidate>
                     <div class="row mb-4">
                         <div class="col-md-6">
                             <div class="upload-container p-4 text-center border rounded mb-3 mb-md-0">
@@ -35,6 +35,32 @@
                                 <p class="small text-muted mb-3">Upload your course outline document to verify (PDF or DOCX)</p>
                                 <div class="input-group">
                                     <input type="file" class="form-control" id="outline" name="outline" accept=".pdf,.docx" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="api_attempts" class="form-label"><i class="fas fa-sync-alt me-2"></i>Analysis Attempts</label>
+                                <select class="form-select" id="api_attempts" name="api_attempts">
+                                    <option value="1">1 attempt (fastest)</option>
+                                    <option value="3" selected>3 attempts (recommended)</option>
+                                    <option value="5">5 attempts (thorough)</option>
+                                    <option value="10">10 attempts (most thorough)</option>
+                                </select>
+                                <div class="form-text text-muted">
+                                    More attempts may improve accuracy but takes longer to process
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="additional_context" class="form-label"><i class="fas fa-info-circle me-2"></i>Additional Context (Optional)</label>
+                                <textarea class="form-control" id="additional_context" name="additional_context" rows="3" placeholder="Add any additional information about your course that may help with analysis. E.g., 'This course has no take-home exams' or 'This is an online course with no in-person components'"></textarea>
+                                <div class="form-text text-muted">
+                                    This information will help improve the analysis results
                                 </div>
                             </div>
                         </div>
