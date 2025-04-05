@@ -387,12 +387,20 @@ def get_match_details():
     if not item:
         return jsonify({"found": False, "error": "No checklist item provided"})
     
-    # Get the document text from the session
+    # Get the document text and matching results from the session
     outline_text = session.get('outline_text', '')
+    matching_results = session.get('matching_results', {})
+    
     if not outline_text:
         return jsonify({"found": False, "error": "No document text available"})
     
-    # Use the find_matching_excerpt function to find a relevant excerpt
+    # Check if we have evidence in the matching_results
+    if item in matching_results and isinstance(matching_results[item], dict) and 'evidence' in matching_results[item]:
+        evidence = matching_results[item]['evidence']
+        if evidence:
+            return jsonify({"found": True, "excerpt": evidence})
+    
+    # If no evidence in matching_results or evidence is empty, use the find_matching_excerpt function
     try:
         from document_processor import find_matching_excerpt
         found, excerpt = find_matching_excerpt(item, outline_text)

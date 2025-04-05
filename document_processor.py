@@ -109,10 +109,15 @@ def extract_checklist_items(text: str) -> List[str]:
 
 def check_item_in_document(item: str, document_text: str) -> bool:
     """
-    Check if a checklist item is present in the document text.
-    Uses advanced semantic matching to identify related content even when wording differs.
+    Check if a checklist item is present in the document text using semantic understanding.
+    This function acts as a university academic reviewer, focusing on whether the requirement
+    described in the checklist item is meaningfully fulfilled in the course outline.
     
-    Enhanced to handle specific problem areas that were causing false positives/negatives:
+    The analysis considers that the same concept may be expressed with different phrasing, 
+    formatting, or section titles, and uses deep understanding of intent and meaning to
+    determine whether the course outline addresses the requirement.
+    
+    Enhanced to handle specific academic document components:
     - Course objectives listed & numbered
     - Tools and platforms resources
     - Course workload section
@@ -1183,7 +1188,15 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 def find_matching_excerpt(item, document_text):
     """
     Find a relevant excerpt in the document that matches the given checklist item.
-    Returns a highlighted excerpt showing where the item was found.
+    
+    This function acts as a university academic reviewer, focusing on whether the 
+    requirement described in the checklist item is meaningfully fulfilled in the 
+    course outline. It identifies the exact section or sentence(s) from the course 
+    outline that fulfill the requirement.
+    
+    The analysis considers that the same concept may be expressed with different phrasing, 
+    formatting, or section titles, and uses deep understanding of intent and meaning to
+    determine whether the course outline addresses the requirement.
     
     Args:
         item: The checklist item to find in the document

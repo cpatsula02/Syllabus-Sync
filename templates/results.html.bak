@@ -160,9 +160,9 @@
                 <div class="mt-4">
                     <div class="alert alert-info">
                         <h5><i class="fas fa-info-circle me-2"></i>About This Analysis</h5>
-                        <p>This tool uses semantic understanding to check if your course outline meets the university's requirements.</p>
+                        <p>This tool uses a combination of pattern matching and AI-powered analysis to check if your course outline meets the university's requirements.</p>
                         <ul class="mb-0">
-                            <li><span class="badge bg-primary">Academic Review</span> - Uses deep analysis to understand content semantically</li>
+                            <li><span class="badge bg-primary">AI Analysis</span> - Uses advanced AI to understand content semantically</li>
                             <li><span class="badge bg-secondary">Pattern Matching</span> - Uses traditional text analysis techniques</li>
                         </ul>
                     </div>
@@ -207,7 +207,7 @@
                 </div>
                 <div class="text-muted small">
                     <i class="fas fa-info-circle me-1"></i> 
-                    <strong>Academic Review:</strong> This match was identified using deep semantic understanding of both the course outline and the checklist requirement.
+                    The matched content is shown above. Key terms and related content were used to identify this match.
                 </div>
             </div>
             <div class="modal-footer">
@@ -276,53 +276,90 @@
                             if (itemText.includes('late') || itemText.includes('deadline')) {
                                 keyTerms.push('late', 'deadline', 'penalty');
                             }
-                            if (itemText.includes('academic') && (itemText.includes('integrity') || itemText.includes('misconduct'))) {
-                                keyTerms.push('academic', 'integrity', 'misconduct', 'plagiarism', 'cheating');
-                            }
-                            if (itemText.includes('grade') || itemText.includes('grading')) {
-                                keyTerms.push('grade', 'grading', 'assessment', 'evaluation', 'weight', 'percentage');
+                            if (itemText.includes('grade')) {
+                                keyTerms.push('grade', 'grading', 'assessment', 'mark');
                             }
                             
-                            // Highlight key terms in the excerpt
+                            // Highlight the matching terms in the excerpt
                             let highlightedExcerpt = data.excerpt;
-                            let hasHighlights = false;
                             
+                            // Sort terms by length (longest first) to avoid highlighting parts of words
+                            keyTerms.sort((a, b) => b.length - a.length);
+                            
+                            // Create a safe version for case-insensitive matching
+                            const excerptLower = data.excerpt.toLowerCase();
+                            
+                            // Create spans with different highlight colors for better visibility
+                            const highlightColors = ['#c2f0c2', '#d6f5d6', '#e6ffe6']; // Different shades of green
+                            let colorIndex = 0;
+                            
+                            // First find all matches to avoid overlapping highlights
+                            const matches = [];
                             keyTerms.forEach(term => {
-                                // Use regex with word boundaries to avoid partial matches
-                                const regex = new RegExp('\\b' + term + '\\b', 'gi');
-                                if (regex.test(highlightedExcerpt)) {
-                                    hasHighlights = true;
-                                    highlightedExcerpt = highlightedExcerpt.replace(
-                                        regex, 
-                                        '<span style="background-color: #c2f0c2; font-weight: bold;">$&</span>'
-                                    );
+                                const termLower = term.toLowerCase();
+                                let startPos = 0;
+                                while (startPos < excerptLower.length) {
+                                    const matchPos = excerptLower.indexOf(termLower, startPos);
+                                    if (matchPos === -1) break;
+                                    
+                                    matches.push({
+                                        start: matchPos,
+                                        end: matchPos + termLower.length,
+                                        term: data.excerpt.substring(matchPos, matchPos + termLower.length),
+                                        original: term
+                                    });
+                                    
+                                    startPos = matchPos + 1;
                                 }
                             });
                             
-                            // Special handling for email addresses - highlight without word boundaries
-                            if (itemText.includes('email') || itemText.includes('contact')) {
-                                const emailRegex = /[A-Za-z0-9._%+-]+@ucalgary\.ca/g;
-                                if (emailRegex.test(highlightedExcerpt)) {
-                                    hasHighlights = true;
-                                    highlightedExcerpt = highlightedExcerpt.replace(
-                                        emailRegex,
-                                        '<span style="background-color: #c2f0c2; font-weight: bold;">$&</span>'
-                                    );
+                            // Sort matches by position
+                            matches.sort((a, b) => a.start - b.start);
+                            
+                            // Remove overlapping matches
+                            const filteredMatches = [];
+                            let lastEnd = -1;
+                            
+                            matches.forEach(match => {
+                                if (match.start >= lastEnd) {
+                                    filteredMatches.push(match);
+                                    lastEnd = match.end;
                                 }
-                            }
+                            });
                             
-                            document.getElementById('matchExcerpt').innerHTML = highlightedExcerpt;
+                            // Build the highlighted excerpt
+                            let result = '';
+                            let lastPos = 0;
                             
-                            // Show highlight explanation if we have highlights
-                            if (hasHighlights) {
-                                document.getElementById('highlightExplanation').style.display = 'block';
-                            }
+                            filteredMatches.forEach(match => {
+                                // Add text before this match
+                                result += data.excerpt.substring(lastPos, match.start);
+                                
+                                // Add the highlighted match
+                                const color = highlightColors[colorIndex % highlightColors.length];
+                                result += `<span class="highlight" style="background-color: ${color}; font-weight: bold;">${match.term}</span>`;
+                                
+                                lastPos = match.end;
+                                colorIndex++;
+                            });
+                            
+                            // Add any remaining text
+                            result += data.excerpt.substring(lastPos);
+                            
+                            // Display the highlighted excerpt
+                            document.getElementById('matchExcerpt').innerHTML = result;
+                            
+                            // Show explanation of highlighted terms if matches were found
+                            document.getElementById('highlightExplanation').style.display = filteredMatches.length > 0 ? 'block' : 'none';
                         } else {
-                            document.getElementById('matchExcerpt').innerHTML = '<div class="alert alert-warning">No detailed match information available.</div>';
+                            document.getElementById('matchExcerpt').textContent = 'No specific excerpt available. The item was detected through pattern matching.';
+                            document.getElementById('highlightExplanation').style.display = 'none';
                         }
                     })
                     .catch(error => {
-                        document.getElementById('matchExcerpt').innerHTML = '<div class="alert alert-danger">Error fetching match details: ' + error.message + '</div>';
+                        document.getElementById('matchExcerpt').textContent = 'Error fetching match details. Please try again.';
+                        document.getElementById('highlightExplanation').style.display = 'none';
+                        console.error('Error:', error);
                     });
             });
         });
