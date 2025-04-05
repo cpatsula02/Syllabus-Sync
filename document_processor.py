@@ -684,16 +684,34 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
     
     # Special pattern for contacting instructor
     if 'contact' in item or 'instructor' in item or 'professor' in item or 'email' in item:
-        contact_patterns = [
-            r'[a-zA-Z0-9._%+-]+@ucalgary\.ca\b',  # University email pattern
-            r'(instructor|professor|faculty)\s+email\s*:?\s*[a-zA-Z0-9._%+-]+@ucalgary\.ca\b',
-            r'email\s*:?\s*[a-zA-Z0-9._%+-]+@ucalgary\.ca\b'
+        # First look for instructor-related context
+        instructor_contexts = [
+            r'(?:instructor|professor|faculty|teacher|prof\.?|dr\.?)',
+            r'instructor\s+information',
+            r'contact\s+information',
+            r'(?:course|class)\s+instructor'
         ]
-        for pattern in contact_patterns:
-            match = re.search(pattern, document_lower, re.IGNORECASE)
+        
+        email_pattern = r'[a-zA-Z0-9._%+-]+@ucalgary\.ca\b'
+        
+        for context in instructor_contexts:
+            # Look for context followed by email within reasonable distance
+            # Using a positive lookahead to ensure email exists near the context
+            pattern = f'({context}(?:(?!example|sample).)*?{email_pattern})'
+            match = re.search(pattern, document_lower, re.IGNORECASE | re.DOTALL)
+            
             if match:
                 start, end = match.span()
-                matched_text = original_document[start:end]
+                context_and_email = original_document[start:end]
+                
+                # Verify this isn't in a student/example section
+                lower_context = context_and_email.lower()
+                if not any(x in lower_context for x in ['student email', 'example', 'sample']):
+                    matched_text = context_and_email
+                    return True, [(matched_text, context_and_email)]
+        
+        # No valid instructor email found
+        return False, []
                 
                 # Get context
                 context_start = max(0, start - 100)
