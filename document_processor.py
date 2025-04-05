@@ -702,12 +702,14 @@ def check_special_entity_patterns_with_locations(item, original_document, docume
             if match:
                 start, end = match.span(1)
                 matched_text = original_document[start:end]
-                return True, [(matched_text, matched_text)]
+                locations.append((matched_text, matched_text))
 
-        # No valid instructor email found
+        # Return results
+        if locations:
+            return True, locations
         return False, []
 
-    return []
+    return matched_locations
 
 def check_special_entity_patterns(item, document):
     """Check for special entity patterns that might be missed by other methods."""
