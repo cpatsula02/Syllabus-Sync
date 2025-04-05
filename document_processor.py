@@ -111,11 +111,323 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     """
     Check if a checklist item is present in the document text.
     Uses advanced semantic matching to identify related content even when wording differs.
+    
+    Enhanced to handle specific problem areas that were causing false positives/negatives:
+    - Course objectives listed & numbered
+    - Tools and platforms resources
+    - Course workload section
+    - Missed assessment policy header
+    - Late policy header
+    - Contacting instructor section
+    - Link validation
     """
     # Clean and normalize text for comparison
     item_lower = item.lower()
     document_lower = document_text.lower()
-
+    
+    # 1. IDENTIFY SPECIAL CASES that need specialized handling
+    # These are known problem areas where we need custom detection logic
+    
+    # Course objectives listed/numbered
+    is_course_objectives = any(keyword in item_lower for keyword in ['objective', 'goals', 'outcomes']) and any(keyword in item_lower for keyword in ['listed', 'numbered', 'course'])
+    
+    # Tools and platforms resources
+    is_tools_platforms = any(keyword in item_lower for keyword in ['tools', 'platforms', 'resources', 'software']) and any(keyword in item_lower for keyword in ['student', 'available', 'use', 'access'])
+    
+    # Course workload section
+    is_workload = 'workload' in item_lower and 'course' in item_lower
+    
+    # Missed assessment policy
+    is_missed_assessment = any(keyword in item_lower for keyword in ['missed', 'missing']) and any(keyword in item_lower for keyword in ['assessment', 'exam', 'test', 'assignment', 'policy'])
+    
+    # Late policy
+    is_late_policy = any(keyword in item_lower for keyword in ['late', 'policy', 'deadline'])
+    
+    # Contacting instructor section
+    is_contacting_instructor = any(keyword in item_lower for keyword in ['contacting', 'contact']) and any(keyword in item_lower for keyword in ['instructor', 'professor', 'faculty', 'teacher'])
+    
+    # Link validation
+    is_link_validation = any(keyword in item_lower for keyword in ['link', 'url', 'website', 'http', 'www'])
+    
+    # 2. SPECIALIZED HANDLING FOR EACH CASE
+    
+    # Course objectives - need to find numbered or bulleted list
+    if is_course_objectives:
+        # Look for section heading related to objectives
+        objective_section_patterns = [
+            r'(?:course|learning)\s+(?:objective|outcome|goal)s?',
+            r'objective|goal|outcome\s*:',
+            r'by\s+the\s+end\s+of\s+this\s+course',
+            r'student\s+will\s+be\s+able\s+to'
+        ]
+        
+        # Find potential objective sections
+        sections = document_text.split('\n\n')
+        objective_section = ""
+        
+        # First identify the objective section
+        for i, section in enumerate(sections):
+            section_lower = section.lower()
+            if any(re.search(pattern, section_lower) for pattern in objective_section_patterns):
+                # Found an objective section, now look for the content (which might be in the next paragraph)
+                objective_section = section
+                # Check the next 2-3 paragraphs for the actual list
+                for j in range(1, 4):
+                    if i + j < len(sections):
+                        objective_section += "\n\n" + sections[i+j]
+        
+        # Now check if the objectives are actually listed/numbered
+        if objective_section:
+            # Check for numbered/bulleted list patterns
+            list_patterns = [
+                r'^\s*\d+\.\s+', # Numbered: "1. Something"
+                r'^\s*[•\-\*\✓\✔\→\⇨\⇒\⇰\◆\◇\○\●\★\☆]\s+', # Bulleted
+                r'(?:\n|\r|^)\s*\d+\.\s+', # Numbered with line break
+                r'(?:\n|\r|^)\s*[•\-\*\✓\✔\→\⇨\⇒\⇰\◆\◇\○\●\★\☆]\s+', # Bulleted with line break
+                r'(?:\n|\r|^)\s*[a-zA-Z]\)\s+', # Format: "a) Something"
+                r'(?:\n|\r|^)\s*[a-zA-Z]\.\s+', # Format: "a. Something"
+                r'(?:\n|\r|^)\s*[ivxIVX]+\.\s+', # Roman numerals: "i. Something"
+            ]
+            
+            # If we find any list pattern in the objective section, consider it a match
+            if any(re.search(pattern, objective_section, re.MULTILINE) for pattern in list_patterns):
+                return True
+                
+            # Also check for phrases that imply a list of objectives
+            list_phrases = [
+                r'students\s+will\s+(?:be\s+able\s+to|learn\s+to|learn\s+how\s+to)',
+                r'(?:learn|achieve|demonstrate|develop|display|acquire|master)\s+the\s+(?:following|ability)',
+                r'course\s+is\s+designed\s+to'
+            ]
+            
+            if any(re.search(pattern, objective_section.lower()) for pattern in list_phrases):
+                # Look for multiple verbs commonly used in learning objectives
+                objective_verbs = [
+                    r'identify', r'explain', r'describe', r'analyze', r'evaluate', 
+                    r'apply', r'demonstrate', r'understand', r'create', r'develop',
+                    r'design', r'implement', r'synthesize', r'compare', r'contrast'
+                ]
+                
+                # If we find at least 3 different objective verbs, it's likely a list of objectives
+                verb_count = sum(1 for verb in objective_verbs if re.search(r'\b' + verb + r'\b', objective_section.lower()))
+                if verb_count >= 3:
+                    return True
+                    
+        # If we reach here, objectives section might exist but not as a proper list
+        return False
+    
+    # Tools and platforms resources
+    if is_tools_platforms:
+        # Look for specific tool mentions
+        tool_patterns = [
+            r'(?:using|use|access|available\s+(?:on|through|at|via))\s+(?:d2l|desire2learn|canvas|blackboard|moodle)',
+            r'(?:software|tool|application|platform|resource)s?\s+(?:include|used|required|needed)',
+            r'(?:computer|software|tool|application|platform)\s+requirement',
+            r'(?:zoom|teams|google\s+meet|webex)',
+            r'(?:matlab|python|r|spss|sas|excel|powerpoint|tableau|github)',
+            r'(?:technology|equipment)\s+required'
+        ]
+        
+        for pattern in tool_patterns:
+            if re.search(pattern, document_lower):
+                return True
+                
+        # Look for a resource section with specific tools
+        resource_section_headers = [
+            r'(?:course|required)\s+(?:materials|resources|tools|technologies|software)',
+            r'technical\s+requirements',
+            r'(?:software|platform|technology)\s+requirements'
+        ]
+        
+        # Common technology terms that would indicate tools
+        tech_terms = [
+            r'browser', r'internet', r'software', r'hardware', r'computer', 
+            r'laptop', r'webcam', r'microphone', r'headphones', r'application',
+            r'platform', r'account', r'download', r'install'
+        ]
+        
+        # Check if any section header about resources exists and contains tech terms
+        sections = document_text.split('\n\n')
+        for i, section in enumerate(sections):
+            section_lower = section.lower()
+            
+            if any(re.search(pattern, section_lower) for pattern in resource_section_headers):
+                # Look at this section and the next 2 paragraphs for tech terms
+                content = section
+                for j in range(1, 3):
+                    if i + j < len(sections):
+                        content += "\n\n" + sections[i+j]
+                
+                content_lower = content.lower()
+                term_count = sum(1 for term in tech_terms if re.search(r'\b' + term + r'\b', content_lower))
+                
+                # If we find at least 2 tech terms, it's likely a tools section
+                if term_count >= 2:
+                    return True
+        
+        return False
+    
+    # Course workload section
+    if is_workload:
+        # Look for explicit workload mentions with time estimates
+        workload_patterns = [
+            r'(?:course|weekly|estimated)\s+(?:workload|time\s+commitment)',
+            r'(?:expect|required|approximately|average)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|hr)s?',
+            r'(?:hour|hr)s?\s+(?:per|each|a)\s+(?:week|day|class|lecture)',
+            r'time\s+(?:commitment|investment|expectation)'
+        ]
+        
+        for pattern in workload_patterns:
+            if re.search(pattern, document_lower):
+                return True
+                
+        # Look for specific time breakdowns
+        time_patterns = [
+            r'\d+\s*(?:hour|hr)',
+            r'(?:lecture|lab|tutorial|class)\s*:\s*\d+\s*(?:hour|hr)',
+            r'(?:in-class|outside\s+of\s+class)\s*:\s*\d+'
+        ]
+        
+        for pattern in time_patterns:
+            if re.search(pattern, document_lower):
+                return True
+                
+        return False
+        
+    # Missed assessment policy header
+    if is_missed_assessment:
+        # Look for explicit policy headers
+        missed_policy_headers = [
+            r'missed\s+(?:assessment|assignment|exam|test|quiz|work)',
+            r'(?:policy|policies|procedure)\s+(?:on|for|regarding)\s+missed',
+            r'(?:missing|absence|absent|unable\s+to\s+(?:complete|attend))',
+            r'(?:deferral|extension|accommodation)\s+(?:policy|request|procedure)'
+        ]
+        
+        # First check for headers/titles
+        for pattern in missed_policy_headers:
+            # Look for patterns that appear as headers (standalone or with : )
+            header_match = re.search(r'(?:^|\n|\r)(?:[A-Z][A-Za-z\s]*)?(?:' + pattern + r')(?:\s*:|$|\n|\r)', document_text, re.MULTILINE)
+            if header_match:
+                return True
+            
+        # Also check for missed policy content even if not a proper header
+        missed_policy_content = [
+            r'if\s+(?:you|a\s+student)\s+(?:miss|are\s+absent|cannot\s+(?:attend|complete|write|submit))',
+            r'(?:student|you)\s+who\s+(?:miss|are\s+absent|cannot\s+(?:attend|complete|write|submit))',
+            r'missed\s+(?:assessments|assignments|exams|tests|quizzes)\s+(?:will|may|must|should|can)'
+        ]
+        
+        for pattern in missed_policy_content:
+            content_match = re.search(pattern, document_lower)
+            if content_match:
+                # Find the paragraph containing this policy
+                paragraphs = document_text.split('\n\n')
+                for paragraph in paragraphs:
+                    if re.search(pattern, paragraph.lower()):
+                        if len(paragraph.strip()) > 50:  # Ensure it's substantial content
+                            return True
+                
+        return False
+        
+    # Late policy header
+    if is_late_policy:
+        # Look for explicit late policy headers
+        late_policy_headers = [
+            r'late\s+(?:policy|policies|submission|penalties|work)',
+            r'(?:policy|policies|procedure)\s+(?:on|for|regarding)\s+late',
+            r'(?:late|overdue)\s+(?:assignment|work|submission)',
+            r'(?:penalty|penalties|deduction|reduction)\s+for\s+late'
+        ]
+        
+        # First check for headers/titles
+        for pattern in late_policy_headers:
+            # Look for patterns that appear as headers (standalone or with : )
+            header_match = re.search(r'(?:^|\n|\r)(?:[A-Z][A-Za-z\s]*)?(?:' + pattern + r')(?:\s*:|$|\n|\r)', document_text, re.MULTILINE)
+            if header_match:
+                return True
+            
+        # Also check for late policy content even if not a proper header
+        late_policy_content = [
+            r'(?:assignment|work|project)s?\s+(?:submitted|turned\s+in|received)\s+late',
+            r'(?:\d+|\w+)\s*%\s+(?:penalty|deduction|reduction|off)\s+(?:per|for\s+each)\s+(?:day|hour|class)',
+            r'late\s+(?:submission|assignment|work|project)s?\s+(?:will|may|must|shall|can|are|is)'
+        ]
+        
+        for pattern in late_policy_content:
+            content_match = re.search(pattern, document_lower)
+            if content_match:
+                # Find the paragraph containing this policy
+                paragraphs = document_text.split('\n\n')
+                for paragraph in paragraphs:
+                    if re.search(pattern, paragraph.lower()):
+                        if len(paragraph.strip()) > 50:  # Ensure it's substantial content
+                            return True
+                
+        return False
+    
+    # Contacting instructor section
+    if is_contacting_instructor:
+        # Look for explicit contacting sections
+        contact_section_headers = [
+            r'(?:contacting|contact|email(?:ing)?)\s+(?:your|the)\s+(?:instructor|professor|faculty|teacher)',
+            r'(?:instructor|professor|faculty|teacher)\s+(?:contact|communication)',
+            r'communication\s+(?:with|policy)',
+            r'(?:office\s+hours|email\s+policy)'
+        ]
+        
+        # First check for headers/titles
+        for pattern in contact_section_headers:
+            # Look for patterns that appear as headers (standalone or with : )
+            header_match = re.search(r'(?:^|\n|\r)(?:[A-Z][A-Za-z\s]*)?(?:' + pattern + r')(?:\s*:|$|\n|\r)', document_text, re.MULTILINE)
+            if header_match:
+                # Verify the section contains substantial contact information
+                start_pos = header_match.start()
+                section_text = document_text[start_pos:start_pos+500]  # Get 500 chars after the header
+                
+                # Check if the section mentions email or office hours
+                if re.search(r'(?:email|@|office\s+hour|contact|available|respond|response)', section_text.lower()):
+                    return True
+            
+        # Also check for contact info even if not a proper section
+        contact_content = [
+            r'(?:instructor|professor|faculty|teacher)\s+is\s+(?:available|reachable|contactable)',
+            r'(?:question|concern|query)s?\s+(?:about|regarding)\s+(?:the\s+course|course\s+material)',
+            r'(?:email|office\s+hour)s?\s+(?:are|is|will\s+be)\s+(?:the|a)\s+(?:preferred|primary|main)'
+        ]
+        
+        for pattern in contact_content:
+            content_match = re.search(pattern, document_lower)
+            if content_match:
+                # Find the paragraph containing this content
+                paragraphs = document_text.split('\n\n')
+                for paragraph in paragraphs:
+                    if re.search(pattern, paragraph.lower()):
+                        if len(paragraph.strip()) > 70:  # Ensure it's substantial content
+                            return True
+                
+        return False
+    
+    # Link validation
+    if is_link_validation:
+        # Look for URLs in the document
+        url_patterns = [
+            r'https?://[a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}(?:/[^\\s]*)?',
+            r'www\.[a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}(?:/[^\\s]*)?',
+            r'(?:visit|go\s+to|available\s+at|access\s+at|access\s+through)\s+[a-zA-Z0-9\-.]+\.[a-zA-Z]{2,}',
+            r'site\.ucalgary\.ca',
+            r'd2l\.ucalgary\.ca'
+        ]
+        
+        for pattern in url_patterns:
+            urls = re.findall(pattern, document_text)
+            if urls:
+                return True
+                
+        return False
+    
+    # GENERAL CASE HANDLING (for items not matching special cases above)
+    
     # Special handling for policy items
     if 'policy' in item_lower:
         # Require explicit policy mentions for policy-related items

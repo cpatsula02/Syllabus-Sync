@@ -27,13 +27,29 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
     4. Reduce false negatives by focusing on semantic meaning, not just keywords
     """
     # Determine if this item needs special handling
-    is_email_requirement = any(keyword in item.lower() for keyword in ['email', 'contact', 'instructor']) and '@' in item
-    is_special_requirement = is_email_requirement
+    item_lower = item.lower()
+    
+    # Define all special requirement types with their keywords
+    special_cases = {
+        'email': any(keyword in item_lower for keyword in ['email', 'contact', 'instructor']) and '@' in item_lower,
+        'course_objectives': any(keyword in item_lower for keyword in ['objective', 'goals', 'outcomes']) and any(keyword in item_lower for keyword in ['listed', 'numbered', 'course']),
+        'tools_platforms': any(keyword in item_lower for keyword in ['tools', 'platforms', 'resources', 'software']) and any(keyword in item_lower for keyword in ['student', 'available', 'use', 'access']),
+        'workload': 'workload' in item_lower and 'course' in item_lower,
+        'missed_assessment': any(keyword in item_lower for keyword in ['missed', 'missing']) and any(keyword in item_lower for keyword in ['assessment', 'exam', 'test', 'assignment', 'policy']),
+        'late_policy': any(keyword in item_lower for keyword in ['late', 'policy', 'deadline']),
+        'contacting_instructor': any(keyword in item_lower for keyword in ['contacting', 'contact']) and any(keyword in item_lower for keyword in ['instructor', 'professor', 'faculty', 'teacher']),
+        'links': any(keyword in item_lower for keyword in ['link', 'url', 'website', 'http', 'www'])
+    }
+    
+    # Determine which special case(s) apply
+    active_special_cases = {k: v for k, v in special_cases.items() if v}
+    is_special_requirement = len(active_special_cases) > 0
     
     # Create a specialized system message based on the item type
     system_message = "You are an expert document analyzer for academic course outlines. Your job is to determine if specific requirements are met in a document."
     
-    if is_email_requirement:
+    # Email requirements
+    if special_cases['email']:
         system_message += """
 For instructor email requirements:
 1. ONLY match if you find an email that ends with @ucalgary.ca
@@ -41,6 +57,76 @@ For instructor email requirements:
 3. The email must appear with contextual information like "Instructor:", "Professor:", "Contact:", etc.
 4. Do NOT match general university emails or emails without instructor context
 5. When explaining your findings, specify exactly what email address you found that meets the criteria"""
+
+    # Course objectives
+    if special_cases['course_objectives']:
+        system_message += """
+For course objectives requirements:
+1. Look for a dedicated section/heading about course objectives/outcomes/goals
+2. The objectives should be clearly enumerated (numbered, bulleted or otherwise distinctly listed)
+3. Look for specific phrases like "By the end of this course, students will..." or "Course objectives are..."
+4. Do NOT match if objectives are merely mentioned but not explicitly listed
+5. When explaining your findings, quote the first few objectives as evidence"""
+
+    # Tools and platforms
+    if special_cases['tools_platforms']:
+        system_message += """
+For tools and platform resources requirements:
+1. Look for specific mentions of software, platforms, websites, or tools students will use
+2. These should be in a context of student usage or requirements
+3. Look for specific tool names like "D2L", "Canvas", "MATLAB", "Zoom", etc.
+4. Do NOT match generic mentions of "resources" without specific tools
+5. When explaining your findings, list the specific tools/platforms mentioned"""
+
+    # Course workload
+    if special_cases['workload']:
+        system_message += """
+For course workload requirements:
+1. Look for a dedicated section about course workload or time commitment
+2. Should include specific estimates of hours or time expectations
+3. Might include breakdown of in-class vs. out-of-class time
+4. Consider related terms like "time commitment", "hours per week", etc.
+5. When explaining your findings, quote the specific workload information"""
+
+    # Missed assessment policy
+    if special_cases['missed_assessment']:
+        system_message += """
+For missed assessment policy requirements:
+1. Look for a specific section or header about missed assessments/exams/assignments
+2. This should detail what happens if a student misses an exam or assignment
+3. May include terms like "make-up", "deferral", "absence", or "missed"
+4. The policy should be clearly stated, not just mentioned
+5. When explaining your findings, quote the specific policy information"""
+
+    # Late policy
+    if special_cases['late_policy']:
+        system_message += """
+For late policy requirements:
+1. Look for a specific section or header about late submissions or deadlines
+2. This should detail penalties or consequences for late work
+3. May include terms like "penalty", "deduction", "grace period" or specific penalties (e.g., "5% per day")
+4. The policy should be clearly stated, not just mentioned
+5. When explaining your findings, quote the specific late policy information"""
+
+    # Contacting instructor
+    if special_cases['contacting_instructor']:
+        system_message += """
+For contacting instructor requirements:
+1. Look for a dedicated section about contacting the instructor
+2. Should include specific methods of contact (email, office hours, etc.)
+3. May include response time expectations or communication policies
+4. Must be more than just listing contact information
+5. When explaining your findings, quote the specific contacting instructions"""
+
+    # Links validation
+    if special_cases['links']:
+        system_message += """
+For link validation requirements:
+1. Identify any URLs or hyperlinks mentioned in the document
+2. These might be formatted as http://example.com or www.example.com or just mentioned as "website"
+3. Look for the context of these links to understand their purpose
+4. Note that you cannot determine if the links are working, only if they exist
+5. When explaining your findings, list any links you've found"""
     
     # Prepare the document by cleaning and splitting it
     # Instead of truncating, we'll use a semantic chunking approach
