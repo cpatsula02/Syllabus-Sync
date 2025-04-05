@@ -196,7 +196,7 @@ Response format:
                 response_format={"type": "json_object"},
                 temperature=0.1,  # Lower temperature for more consistent results
                 max_tokens=200,   # Allow more tokens for detailed explanation and evidence
-                timeout=25        # 25 second timeout
+                timeout=10        # Reduce timeout for faster retries
             )
             
             # Extract and parse the response
@@ -313,8 +313,8 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
         item_id = f"Item #{i+1}"
         logger.info(f"Processing {item_id}: {item[:50]}{'...' if len(item) > 50 else ''}")
         
-        # If we've already hit API quota issues, don't make further API calls
-        if api_quota_exceeded:
+        # Try API calls for every item (we no longer immediately skip due to quota issues)
+        if False:  # This condition will never evaluate to true, effectively removing the skip
             logger.info(f"Skipping OpenAI API call for {item_id} due to quota issues")
             
             # Use traditional method as fallback with enhanced pattern matching
@@ -421,8 +421,10 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             # Check if this is a quota exceeded error
             error_msg = str(e).lower()
             if "quota" in error_msg or "rate limit" in error_msg or "exceeded" in error_msg:
-                logger.warning(f"OpenAI API quota exceeded at item {i+1}. Switching to traditional analysis for remaining items.")
-                api_quota_exceeded = True
+                logger.warning(f"OpenAI API quota exceeded at item {i+1}. Will retry for each item with reduced rate.")
+                # We'll still try to use OpenAI for future items, just with a longer delay
+                time.sleep(2)  # Add extra delay before next item
+                # Don't set api_quota_exceeded = True so we keep trying future items
                 
                 # Use traditional method for this item too with enhanced pattern matching
                 from document_processor import check_item_in_document

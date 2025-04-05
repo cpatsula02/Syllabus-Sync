@@ -120,6 +120,10 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     - Late policy header
     - Contacting instructor section
     - Link validation
+    - Grading distribution details
+    - Final exam information
+    - Academic misconduct statements
+    - Contact information requirements
     """
     # Clean and normalize text for comparison
     item_lower = item.lower()
@@ -148,6 +152,18 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     
     # Link validation
     is_link_validation = any(keyword in item_lower for keyword in ['link', 'url', 'website', 'http', 'www'])
+    
+    # Instructor email requirement
+    is_instructor_email = any(keyword in item_lower for keyword in ['email', 'contact', 'instructor']) and '@' in item_lower
+    
+    # Grade distribution requirement
+    is_grade_distribution = any(keyword in item_lower for keyword in ['grade', 'grading', 'weight', 'distribution']) and not 'regrade' in item_lower
+    
+    # Final exam information
+    is_final_exam = 'final' in item_lower and any(keyword in item_lower for keyword in ['exam', 'examination', 'assessment'])
+    
+    # Academic misconduct or integrity statement
+    is_academic_integrity = any(keyword in item_lower for keyword in ['academic', 'integrity', 'misconduct', 'plagiarism', 'cheating'])
     
     # 2. SPECIALIZED HANDLING FOR EACH CASE
     
@@ -426,6 +442,153 @@ def check_item_in_document(item: str, document_text: str) -> bool:
                 
         return False
     
+    # Instructor email - checking specifically for @ucalgary.ca
+    if is_instructor_email:
+        # Check for @ucalgary.ca email addresses
+        ucalgary_email_regex = r'[A-Za-z0-9._%+-]+@ucalgary\.ca'
+        emails = re.findall(ucalgary_email_regex, document_text)
+        
+        if not emails:
+            # No @ucalgary.ca emails found
+            return False
+            
+        # Now verify the email is in an instructor context
+        instructor_context = False
+        
+        # Define instructor-related terms to look for near emails
+        instructor_terms = ['instructor', 'professor', 'faculty', 'teacher', 'lecturer']
+        
+        # Find potential instructor sections
+        paragraphs = document_text.split('\n\n')
+        for paragraph in paragraphs:
+            paragraph_lower = paragraph.lower()
+            
+            # Check if this paragraph contains both a ucalgary.ca email and instructor terms
+            if '@ucalgary.ca' in paragraph_lower and any(term in paragraph_lower for term in instructor_terms):
+                # Found a paragraph with both email and instructor context
+                instructor_context = True
+                break
+                
+        # If we didn't find a paragraph with both, look for proximity in the document
+        if not instructor_context:
+            for email in emails:
+                # Find the position of this email in the document
+                email_pos = document_text.find(email)
+                if email_pos >= 0:
+                    # Look 200 characters before and after for instructor context
+                    context_start = max(0, email_pos - 200)
+                    context_end = min(len(document_text), email_pos + len(email) + 200)
+                    context = document_text[context_start:context_end].lower()
+                    
+                    if any(term in context for term in instructor_terms):
+                        instructor_context = True
+                        break
+                        
+        # Only return true if we found both an email AND proper instructor context
+        return instructor_context
+    
+    # Grade distribution requirement
+    if is_grade_distribution:
+        # Look for grade/grading distribution table or section
+        grade_section_patterns = [
+            r'(?:grade|grading|assessment|evaluation)\s+(?:distribution|breakdown|weights?|scheme|structure)',
+            r'(?:grade|grading|assessment|evaluation)\s+(?:information|details)',
+            r'(?:course|assignment|assessment)\s+(?:weights?|percentages?|marks?|grade)',
+            r'(?:distribution\s+of\s+(?:grades?|marks?|points))'
+        ]
+        
+        # First check for section headers
+        for pattern in grade_section_patterns:
+            if re.search(pattern, document_lower):
+                # Now check if there's a proper distribution (percentages or points)
+                # Look for percentage signs
+                percentages = re.findall(r'\d+\s*%', document_text)
+                if percentages and len(percentages) >= 2:  # At least 2 percentage items
+                    return True
+                    
+                # Look for point values
+                points = re.findall(r'\d+\s+(?:points?|marks?)', document_lower)
+                if points and len(points) >= 2:  # At least 2 point items
+                    return True
+                    
+                # Look for a distribution table with columns and rows
+                # Tables often have multiple lines with similar patterns
+                table_patterns = [
+                    r'(?:\w+\s+)+\d+\s*%',  # Words followed by percentage
+                    r'\d+\s*%(?:\s+\w+)+',  # Percentage followed by words
+                    r'(?:\w+\s+)+\d+(?:\s+points?)?',  # Words followed by points
+                ]
+                
+                # Count how many table-like patterns we find
+                table_line_count = sum(1 for pattern in table_patterns 
+                                     if len(re.findall(pattern, document_lower)) >= 2)
+                if table_line_count >= 1:
+                    return True
+        
+        return False
+    
+    # Final exam information
+    if is_final_exam:
+        # Look for final exam details
+        final_exam_patterns = [
+            r'(?:final\s+exam|final\s+examination)\s+(?:will|is|shall)(?:\s+be)?',
+            r'(?:final\s+exam|final\s+examination)\s+(?:date|time|schedule|worth|weight)',
+            r'(?:final\s+exam|final\s+examination)\s+(?:information|details|requirements)',
+            r'(?:scheduled|registrar.scheduled)\s+(?:final\s+exam|final\s+examination)',
+            r'(?:final\s+exam|final\s+examination)\s+(?:\d+\s*%|worth\s+\d+\s*%)',
+            r'(?:take.home|deferred)\s+(?:final\s+exam|final\s+examination)'
+        ]
+        
+        for pattern in final_exam_patterns:
+            if re.search(pattern, document_lower):
+                return True
+                
+        # Check for final exam in grade distribution
+        if re.search(r'(?:grades?|grading|assessment|evaluation|weight).{0,50}(?:final\s+exam|final\s+examination)', document_lower):
+            return True
+            
+        # Check for a specific percentage allocated to the final exam
+        if re.search(r'(?:final\s+exam|final\s+examination).{0,50}(?:\d+\s*%)', document_lower):
+            return True
+            
+        return False
+    
+    # Academic misconduct or integrity statement
+    if is_academic_integrity:
+        # Look for academic integrity section
+        integrity_section_patterns = [
+            r'academic\s+(?:integrity|honesty|misconduct)',
+            r'(?:plagiarism|cheating)',
+            r'academic\s+(?:regulations|rules|policy)',
+            r'(?:code\s+of\s+conduct|student\s+conduct|academic\s+conduct)'
+        ]
+        
+        # First check for section headers
+        for pattern in integrity_section_patterns:
+            header_match = re.search(r'(?:^|\n|\r)(?:[A-Z][A-Za-z\s]*)?(?:' + pattern + r')(?:\s*:|$|\n|\r)', document_text, re.MULTILINE)
+            if header_match:
+                # Verify the section contains substantial content
+                start_pos = header_match.start()
+                section_text = document_text[start_pos:start_pos+500]  # Get 500 chars after the header
+                
+                # Check if the section has enough content
+                if len(section_text.strip()) > 100:
+                    return True
+                    
+        # Also check for explicit integrity statements
+        integrity_statements = [
+            r'(?:plagiarism|cheating)\s+(?:is|will\s+be|constitutes)\s+(?:not|an|a)',
+            r'(?:academic\s+(?:dishonest|misconduct|offence))\s+(?:include|is|are)',
+            r'(?:submit|present)\s+(?:only|your|original)\s+(?:work|own\s+work)',
+            r'(?:university|faculty)\s+(?:policy|regulation)\s+(?:on|regarding)\s+(?:academic|student)\s+(?:integrity|conduct|dishonesty)'
+        ]
+        
+        for pattern in integrity_statements:
+            if re.search(pattern, document_lower):
+                return True
+                
+        return False
+    
     # GENERAL CASE HANDLING (for items not matching special cases above)
     
     # Special handling for policy items
@@ -464,6 +627,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
 
     # 4. Fallback: Check for keyword density
     try:
+        from nltk.corpus import stopwords
         stop_words = set(stopwords.words('english'))
         item_words = [word for word in re.findall(r'\b\w+\b', item_lower) 
                      if word not in stop_words and len(word) > 2]
