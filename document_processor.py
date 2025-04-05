@@ -127,7 +127,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
 
     if 'late policy' in item_lower or 'late submission' in item_lower:
         late_patterns = [
-            r'late\s+(?:submission|assignment|work)s?\s+(?:policy|policies|rule|guideline)',
+            r'late\s+(?:submission|assignment)s?\s+(?:policy|policies|rule|guideline)',
             r'(?:policy|policies|penalty|penalties)\s+(?:for|on|regarding)\s+late\s+(?:submission|work|assignment)',
             r'late\s+(?:work|submission|assignment)s?\s+(?:will|shall|must|may|are|is)\s+(?:not\s+)?(?:be\s+)?(?:accepted|penalized|subject)'
         ]
@@ -191,7 +191,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     # Enhanced semantic matching for remaining items
     key_terms = extract_core_concepts(item_lower)
     section_matches = extract_document_sections(document_lower)
-    
+
     # Check if any section contains the key terms with high confidence
     for section_title, content in section_matches.items():
         if sections_are_related(section_title, key_terms):
@@ -215,12 +215,12 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     sections = []
     current_header = ""
     current_content = []
-    
+
     for line in document_text.split('\n'):
         line = line.strip()
         if not line:
             continue
-            
+
         # Header detection patterns
         header_patterns = [
             r'^[A-Z][^a-z]{0,3}[A-Z].*:?$',  # All caps headers
@@ -228,9 +228,9 @@ def check_item_in_document(item: str, document_text: str) -> bool:
             r'^\d+\.\s+[A-Z].*:?$',           # Numbered headers
             r'^[A-Z][a-zA-Z\s&]+\(?s?\)?:?$'  # Common section headers
         ]
-        
+
         is_header = any(re.match(pattern, line) for pattern in header_patterns)
-        
+
         if is_header:
             if current_header and current_content:
                 sections.append((current_header, ' '.join(current_content)))
@@ -238,7 +238,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
             current_content = []
         else:
             current_content.append(line)
-    
+
     # Add last section
     if current_header and current_content:
         sections.append((current_header, ' '.join(current_content)))
@@ -247,7 +247,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
     for header, content in sections:
         header_lower = header.lower()
         content_lower = content.lower()
-        
+
         # Direct matches in header
         if any(phrase in header_lower for phrase in re.findall(r'\b\w+\b', item_lower)):
             # Verify content relevance
@@ -275,7 +275,7 @@ def check_item_in_document(item: str, document_text: str) -> bool:
         # Check for semantic equivalence in content
         key_phrases = re.findall(r'\b\w+\b', item_lower)
         content_phrases = re.findall(r'\b\w+\b', content_lower)
-        
+
         # Calculate semantic similarity
         shared_terms = set(key_phrases) & set(content_phrases)
         if len(shared_terms) >= len(key_phrases) * 0.6:  # 60% match threshold
@@ -939,11 +939,22 @@ def find_matching_excerpt(item, document_text):
         best_score = best_paragraph_score
         best_content = best_paragraph
 
-    # Only consider it a match if we have enough matching terms or a high score
-    # Higher threshold for longer items to avoid false positives
-    min_score_threshold = 2 + (len(item) / 100)
+    # Balanced threshold calculation considering both strict and lenient criteria
+    min_score_threshold = 1.5 + (len(item) / 150)  # Reduced base threshold
+    min_matches = 2  # Reduced required matches
 
-    if best_score >= min_score_threshold or len(best_matches) >= 3:
+    # Consider semantic variations and context
+    has_semantic_match = any(
+        term in best_content.lower() 
+        for term in best_matches 
+        if len(term) > 4  # Only consider meaningful terms
+    )
+
+    # More lenient scoring for certain types of items
+    if any(keyword in item.lower() for keyword in ['policy', 'procedure', 'guideline', 'requirement']):
+        min_score_threshold *= 0.8  # 20% more lenient for policy-related items
+
+    if best_score >= min_score_threshold or len(best_matches) >= min_matches or has_semantic_match:
         # If the content is too long, extract a focused excerpt
         if len(best_content) > 400:
             # Find the highest concentration of matching terms
@@ -1329,11 +1340,22 @@ def find_matching_excerpt(item, document_text):
         best_score = best_paragraph_score
         best_content = best_paragraph
 
-    # Only consider it a match if we have enough matching terms or a high score
-    # Higher threshold for longer items to avoid false positives
-    min_score_threshold = 2 + (len(item) / 100)
+    # Balanced threshold calculation considering both strict and lenient criteria
+    min_score_threshold = 1.5 + (len(item) / 150)  # Reduced base threshold
+    min_matches = 2  # Reduced required matches
 
-    if best_score >= min_score_threshold or len(best_matches) >= 3:
+    # Consider semantic variations and context
+    has_semantic_match = any(
+        term in best_content.lower() 
+        for term in best_matches 
+        if len(term) > 4  # Only consider meaningful terms
+    )
+
+    # More lenient scoring for certain types of items
+    if any(keyword in item.lower() for keyword in ['policy', 'procedure', 'guideline', 'requirement']):
+        min_score_threshold *= 0.8  # 20% more lenient for policy-related items
+
+    if best_score >= min_score_threshold or len(best_matches) >= min_matches or has_semantic_match:
         # If the content is too long, extract a focused excerpt
         if len(best_content) > 400:
             # Find the highest concentration of matching terms
@@ -1395,3 +1417,132 @@ def find_matching_excerpt(item, document_text):
 
     # If we reach here, no good match was found
     return False, None
+
+def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+    try:
+        # Validate file paths
+        if not os.path.exists(checklist_path):
+            raise FileNotFoundError(f"Checklist file not found: {checklist_path}")
+        if not os.path.exists(outline_path):
+            raise FileNotFoundError(f"Course outline file not found: {outline_path}")
+
+        # Extract and validate text from both documents
+        checklist_text = extract_text(checklist_path)
+        if not checklist_text.strip():
+            raise ValueError("Checklist file is empty")
+
+        outline_text = extract_text(outline_path)
+        if not outline_text.strip():
+            raise ValueError("Course outline file is empty")
+
+        # If additional context is provided, prepend it to the outline text
+        if additional_context and additional_context.strip():
+            logging.info("Using additional context for analysis")
+            outline_text = f"{additional_context}\n\n{outline_text}"
+
+        # Log document sizes for debugging
+        logging.info(f"Checklist text length: {len(checklist_text)}")
+        logging.info(f"Outline text length: {len(outline_text)}")
+
+        # Extract checklist items from the checklist document
+        checklist_items = extract_checklist_items(checklist_text)
+        logging.info(f"Extracted {len(checklist_items)} checklist items")
+
+        # If we couldn't extract any items, return error
+        if not checklist_items:
+            return [], {"error": "No checklist items could be extracted. Please check the format of your checklist."}
+
+        # Determine analysis method based on API attempts parameter
+        if api_attempts > 0:
+            try:
+                # Import here to avoid circular imports
+                from openai_helper import analyze_checklist_items_batch
+                logging.info(f"Using AI-powered analysis with up to {api_attempts} API requests")
+                matching_results = analyze_checklist_items_batch(checklist_items, outline_text, api_attempts)
+
+                # Add more detailed evidence for each item that's present
+                for item, result in matching_results.items():
+                    if result["present"] and not result.get("evidence"):
+                        found, excerpt = find_matching_excerpt(item, outline_text)
+                        if found and excerpt:
+                            result["evidence"] = excerpt
+
+                return checklist_items, matching_results
+
+            except Exception as e:
+                logging.error(f"Error using AI-powered analysis: {str(e)}")
+                logging.info("Falling back to traditional pattern matching")
+                # Continue with traditional method if AI analysis fails
+        else:
+            logging.info("Using traditional pattern matching for all items (API attempts set to 0)")
+
+        # Traditional analysis as fallback
+        matching_results = {}
+        for item in checklist_items:
+            is_present = check_item_in_document(item, outline_text)
+
+            # Get evidence if present
+            evidence = ""
+            if is_present:
+                found, excerpt = find_matching_excerpt(item, outline_text)
+                if found and excerpt:
+                    evidence = excerpt
+
+            # Create a more detailed explanation based on item content
+            item_lower = item.lower()
+
+            # Generate useful explanations based on content type
+            if is_present:
+                if 'policy' in item_lower or 'policies' in item_lower:
+                    explanation = "Policy content detected in document sections"
+                elif 'missed' in item_lower and ('assignment' in item_lower or 'assessment' in item_lower):
+                    explanation = "Found missed assignment/assessment policy content"
+                elif 'assignment' in item_lower or 'assessment' in item_lower:
+                    explanation = "Assignment/assessment details detected in document"
+                elif 'grade' in item_lower or 'grading' in item_lower or 'distribution' in item_lower:
+                    explanation = "Grade information found in document sections"
+                elif 'participation' in item_lower:
+                    explanation = "Class participation information detected"
+                elif 'textbook' in item_lower or 'reading' in item_lower or 'material' in item_lower:
+                    explanation = "Course materials/textbook information found"
+                elif 'objective' in item_lower or 'outcome' in item_lower:
+                    explanation = "Course objectives/outcomes detected"
+                elif 'schedule' in item_lower or 'calendar' in item_lower:
+                    explanation = "Course schedule/calendar information found"
+                elif 'contact' in item_lower or 'instructor' in item_lower:
+                    explanation = "Instructor contact information detected"
+                elif 'exam' in item_lower or 'test' in item_lower or 'quiz' in item_lower:
+                    explanation = "Exam/assessment information found"
+                elif 'late' in item_lower and ('submission' in item_lower or 'assignment' in item_lower):
+                    explanation = "Late submission policy information found"
+                elif 'academic' in item_lower and ('integrity' in item_lower or 'misconduct' in item_lower):
+                    explanation = "Academic integrity policy information found"
+                elif 'disability' in item_lower or 'accommodation' in item_lower:
+                    explanation = "Accommodation information detected"
+                elif 'prerequisite' in item_lower:
+                    explanation = "Course prerequisite information found"
+                else:
+                    explanation = "Content matched through document analysis"
+            else:
+                explanation = "Not found in document"
+
+            matching_results[item] = {
+                "present": is_present,
+                "confidence": 0.85 if is_present else 0.2,
+                "explanation": explanation,
+                "evidence": evidence,
+                "method": "traditional"
+            }
+
+        return checklist_items, matching_results
+
+    except FileNotFoundError as e:
+        logging.error(f"File not found: {str(e)}")
+        return [], {"error": str(e)}
+    except ValueError as e:
+        logging.error(f"Invalid input: {str(e)}")
+        return [], {"error": str(e)}
+    except Exception as e:
+        # Handle any errors during processing
+        logging.exception(f"An unexpected error occurred: {str(e)}")
+        return [], {"error": f"An unexpected error occurred: {str(e)}"}
