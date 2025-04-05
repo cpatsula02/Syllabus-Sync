@@ -414,55 +414,96 @@ def check_special_entity_patterns(item, document):
     
     # 5. Handle instructor email patterns specifically for @ucalgary.ca domain
     if any(word in item_lower for word in ['instructor', 'email', 'contact', 'professor']):
-        # Look for a paragraph or section with instructor-related terms first
+        # STRICT REQUIREMENT: Only consider valid if we find:
+        # 1. Email ending with @ucalgary.ca
+        # 2. In an instructor context
+        
+        # First, find instructor-related sections in the document
         instructor_sections = []
         
-        # Define instructor-related section patterns
+        # Define stronger instructor-related section patterns with clearer boundaries
         instructor_section_patterns = [
+            # Patterns with clear section headers or formatting
             r'(instructor|professor|faculty|teacher|contact|course coordinator)\s*information',
             r'contacting\s+(your|the)\s+(instructor|professor|faculty|teacher)',
-            r'(instructor|professor|faculty|teacher|contact)\s*:'
+            r'(instructor|professor|faculty|teacher|contact)\s*:',
+            # Common formats for contact information sections
+            r'^\s*(instructor|professor|faculty|teacher|contact)\s*:.*?$',
+            r'^\s*(name|instructor name)\s*:.*?$'
         ]
         
-        # Find potential instructor sections
+        # Find potential instructor sections with stricter context
         paragraphs = document.split('\n\n')
         for paragraph in paragraphs:
             paragraph_lower = paragraph.lower()
-            if any(re.search(pattern, paragraph_lower) for pattern in instructor_section_patterns):
-                instructor_sections.append(paragraph)
+            # Only consider paragraphs with instructor-related terms
+            if any(instructor_term in paragraph_lower for instructor_term in 
+                   ['instructor', 'professor', 'faculty', 'teacher', 'contact']):
+                if any(re.search(pattern, paragraph_lower) for pattern in instructor_section_patterns):
+                    instructor_sections.append(paragraph)
         
-        # If we found instructor sections, look for valid ucalgary email in them first
-        if instructor_sections:
-            for section in instructor_sections:
-                # Look for emails ending with @ucalgary.ca
-                ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', section)
-                if ucalgary_emails:
-                    return True
+        # If no sections were found, try another approach with smaller chunks
+        if not instructor_sections:
+            lines = document.split('\n')
+            current_section = []
+            for line in lines:
+                line_lower = line.lower()
+                if any(instructor_term in line_lower for instructor_term in 
+                       ['instructor', 'professor', 'faculty', 'contact']):
+                    current_section.append(line)
+                    # Add the next few lines for context
+                    idx = lines.index(line)
+                    if idx + 3 < len(lines):
+                        current_section.extend(lines[idx+1:idx+4])
+                    instructor_sections.append('\n'.join(current_section))
+                    current_section = []
         
-        # If no instructor sections with ucalgary emails were found, apply more strict rules for general document search
+        # Now strictly validate for ucalgary.ca domain in these contexts
+        ucalgary_email_found = False
+        found_email = None
+        valid_context = False
         
-        # Look for context around email patterns
-        email_contexts = []
+        # Check instructor sections first (most reliable)
+        for section in instructor_sections:
+            # Find all emails ending with @ucalgary.ca
+            ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', section)
+            if ucalgary_emails:
+                ucalgary_email_found = True
+                found_email = ucalgary_emails[0]
+                
+                # Check if this section has instructor context within a close range
+                section_lower = section.lower()
+                if any(term in section_lower for term in 
+                       ['instructor:', 'professor:', 'faculty:', 'contact:', 'instructor email',
+                        'professor email', 'email:', 'instructor name']):
+                    valid_context = True
+                    break
+                    
+                # Also check for instructor-email proximity pattern
+                if re.search(r'(instructor|professor|faculty).{0,30}(email|contact)', section_lower):
+                    valid_context = True
+                    break
         
-        # Search for potential instructor email context
-        instructor_email_patterns = [
-            r'(instructor|professor|faculty|teacher|contact)\s*:?\s*[^@\n]{0,40}?[A-Za-z0-9._%+-]+@ucalgary\.ca',
-            r'(instructor|professor|faculty|teacher|contact)[\s\S]{0,100}?[A-Za-z0-9._%+-]+@ucalgary\.ca',
-            r'email\s*:?\s*[A-Za-z0-9._%+-]+@ucalgary\.ca',
-            r'[A-Za-z0-9._%+-]+@ucalgary\.ca\s*\(\s*(instructor|professor|faculty|teacher|contact)\s*\)'
-        ]
+        # If we have a ucalgary email but no valid context, look more carefully for context
+        if ucalgary_email_found and not valid_context:
+            for email in re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', document):
+                # Look for instructor context within 100 characters before/after the email
+                email_idx = document.find(email)
+                if email_idx > 0:
+                    surrounding_text = document[max(0, email_idx-100):min(len(document), email_idx+100)]
+                    surrounding_lower = surrounding_text.lower()
+                    if any(term in surrounding_lower for term in 
+                          ['instructor', 'professor', 'faculty', 'contact', 'teacher']):
+                        valid_context = True
+                        break
         
-        for pattern in instructor_email_patterns:
-            if re.search(pattern, document_lower):
-                return True
+        # Only return true if we found both a valid ucalgary.ca email AND proper instructor context
+        return ucalgary_email_found and valid_context
         
-        # If we specifically need an instructor's email ending with @ucalgary.ca
-        # Do not match if only a general email is found without instructor context
-        general_ucalgary_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b', document)
-        
-        # Only return true if both an email with @ucalgary.ca AND instructor context exists
-        # This prevents matching random emails or example emails
-        return False
+        # IMPORTANT: With this implementation, the function will return False if:
+        # 1. No @ucalgary.ca email is found at all
+        # 2. An @ucalgary.ca email is found, but not in proper instructor context
+        # This should significantly reduce false positives
     
     return False
 
@@ -577,35 +618,57 @@ def find_matching_excerpt(item, document_text):
     item_lower = item.lower()
     key_terms = []
     
-    # Extract nouns and key phrases from the item
+    # Handle email requirements specially 
+    is_email_requirement = any(keyword in item_lower for keyword in ['email', 'contact', 'instructor']) and '@' in item_lower
+    
+    # Extract more meaningful key terms from the item
+    # Use word boundaries to find complete words
     words = re.findall(r'\b\w+\b', item_lower)
     for word in words:
-        if len(word) > 3 and word not in ['and', 'the', 'that', 'this', 'with', 'from', 'have', 'for', 'are', 'should', 'would', 'could']:
+        # More aggressive filtering of common words
+        if len(word) > 3 and word not in ['and', 'the', 'that', 'this', 'with', 'from', 'have', 
+                                          'for', 'are', 'should', 'would', 'could', 'will', 
+                                          'been', 'must', 'they', 'their', 'there', 'than', 
+                                          'when', 'what', 'where', 'which', 'who', 'whom', 'whose']:
             key_terms.append(word)
     
-    # Add key phrases based on the checklist item content
-    if 'grade' in item_lower:
-        key_terms.extend(['grade', 'grading', 'marks', 'evaluation'])
-    if 'exam' in item_lower:
-        key_terms.extend(['exam', 'examination', 'test', 'final'])
+    # Add context-specific key terms based on the checklist item type
+    if 'grade' in item_lower or 'grading' in item_lower:
+        key_terms.extend(['grade', 'grading', 'marks', 'evaluation', 'assessment', 'percentage', 'score', 'distribution'])
+    if 'exam' in item_lower or 'test' in item_lower:
+        key_terms.extend(['exam', 'examination', 'test', 'final', 'midterm', 'quiz'])
     if 'syllabus' in item_lower or 'course outline' in item_lower:
-        key_terms.extend(['syllabus', 'outline', 'course'])
-    if 'textbook' in item_lower:
-        key_terms.extend(['textbook', 'book', 'reading', 'material'])
-    if 'assignment' in item_lower:
-        key_terms.extend(['assignment', 'project', 'homework', 'submission'])
-    if 'instructor' in item_lower:
-        key_terms.extend(['instructor', 'professor', 'faculty', 'teacher', 'contact'])
+        key_terms.extend(['syllabus', 'outline', 'course', 'description', 'information'])
+    if 'textbook' in item_lower or 'reading' in item_lower:
+        key_terms.extend(['textbook', 'book', 'reading', 'material', 'literature', 'resource', 'required'])
+    if 'assignment' in item_lower or 'homework' in item_lower:
+        key_terms.extend(['assignment', 'project', 'homework', 'submission', 'due', 'deadline', 'deliverable'])
+    if 'instructor' in item_lower or 'professor' in item_lower:
+        key_terms.extend(['instructor', 'professor', 'faculty', 'teacher', 'contact', 'office', 'hours', 'email'])
+    if 'policy' in item_lower:
+        key_terms.extend(['policy', 'policies', 'rule', 'regulation', 'guideline', 'requirement'])
+    if 'academic' in item_lower and 'integrity' in item_lower:
+        key_terms.extend(['academic', 'integrity', 'honesty', 'plagiarism', 'misconduct', 'cheating'])
+    if 'missed' in item_lower and ('assignment' in item_lower or 'exam' in item_lower):
+        key_terms.extend(['missed', 'missing', 'absence', 'absent', 'late', 'extension', 'deferral'])
+    if 'accommodation' in item_lower:
+        key_terms.extend(['accommodation', 'disability', 'access', 'accessib', 'student', 'service'])
+    
+    # For email requirements, add specific email-related terms
+    if is_email_requirement:
+        key_terms.extend(['email', '@ucalgary.ca', 'contact', 'instructor', 'professor'])
     
     # Remove duplicates and sort by length (longer terms first)
     key_terms = list(set(key_terms))
     key_terms.sort(key=len, reverse=True)
     
-    # Split document into paragraphs and find the best match
+    # Use two approaches: paragraph-based and section-based
+    
+    # 1. Paragraph-based approach (for shorter documents)
     paragraphs = document_text.split('\n\n')
-    best_score = 0
+    best_paragraph_score = 0
     best_paragraph = ""
-    best_matches = []
+    best_paragraph_matches = []
     
     for paragraph in paragraphs:
         if len(paragraph.strip()) < 10:  # Skip very short paragraphs
@@ -617,36 +680,174 @@ def find_matching_excerpt(item, document_text):
         
         for term in key_terms:
             if term in paragraph_lower:
-                score += 1
+                # Weight longer terms more heavily
+                term_weight = 1 + (len(term) / 20)  # e.g., a 10-letter term gets score 1.5
+                score += term_weight
                 matches.append(term)
                 
-        if score > best_score:
-            best_score = score
+        if score > best_paragraph_score:
+            best_paragraph_score = score
             best_paragraph = paragraph
-            best_matches = matches
+            best_paragraph_matches = matches
     
-    # If we found a good match
-    if best_score >= 2:  # Require at least 2 keyword matches for relevance
-        # Prepare the excerpt, highlighting the matching terms
-        excerpt = best_paragraph
+    # 2. Section-based approach (for structured documents)
+    # Look for multiple paragraphs under the same heading
+    section_matches = []
+    current_section = ""
+    current_section_title = ""
+    current_section_score = 0
+    current_section_matches = []
+    
+    for i, paragraph in enumerate(paragraphs):
+        # Detect if this paragraph looks like a section title
+        is_title = (len(paragraph.strip()) < 100 and 
+                   (paragraph.strip().endswith(':') or 
+                    paragraph.strip().isupper() or 
+                    any(term in paragraph.lower() for term in ['course', 'instructor', 'grade', 'assignment', 
+                                                              'policy', 'outline', 'textbook', 'exam'])))
         
-        # If the paragraph is too long, get a relevant section around the matched terms
-        if len(excerpt) > 300:
-            # Find the position of the first matched term
-            first_match_pos = min([excerpt.lower().find(term) for term in best_matches if excerpt.lower().find(term) != -1], default=0)
+        # If it's a title, start a new section
+        if is_title:
+            # Score and save the previous section if it exists
+            if current_section and current_section_score > 0:
+                section_matches.append((current_section, current_section_score, current_section_matches, current_section_title))
             
-            # Extract a portion around the first match
-            start_pos = max(0, first_match_pos - 100)
-            end_pos = min(len(excerpt), first_match_pos + 200)
+            # Start a new section
+            current_section_title = paragraph
+            current_section = paragraph + "\n\n"
+            current_section_score = 0
+            current_section_matches = []
+        else:
+            # Add to the current section
+            current_section += paragraph + "\n\n"
+            
+            # Score this paragraph and add to section score
+            paragraph_lower = paragraph.lower()
+            for term in key_terms:
+                if term in paragraph_lower:
+                    term_weight = 1 + (len(term) / 20)
+                    current_section_score += term_weight
+                    if term not in current_section_matches:
+                        current_section_matches.append(term)
+    
+    # Add the last section if it exists
+    if current_section and current_section_score > 0:
+        section_matches.append((current_section, current_section_score, current_section_matches, current_section_title))
+    
+    # Find the best-matching section
+    best_section = ""
+    best_section_score = 0
+    best_section_matches = []
+    
+    for section, score, matches, title in section_matches:
+        if score > best_section_score:
+            best_section = section
+            best_section_score = score
+            best_section_matches = matches
+    
+    # Determine which approach gave better results
+    use_section = (best_section_score > best_paragraph_score * 1.2)  # Prefer section if significantly better
+    
+    # Special handling for email requirements - need to find specifically @ucalgary.ca
+    if is_email_requirement:
+        # First look for ucalgary.ca emails in best matches
+        ucalgary_email_regex = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        best_content = best_section if use_section else best_paragraph
+        
+        # Extract all ucalgary.ca emails
+        ucalgary_emails = re.findall(ucalgary_email_regex, best_content)
+        
+        # If found, create excerpt focused on the email
+        if ucalgary_emails:
+            email = ucalgary_emails[0]
+            email_idx = best_content.find(email)
+            
+            # Extract content around the email
+            start_pos = max(0, email_idx - 150)
+            end_pos = min(len(best_content), email_idx + len(email) + 150)
             
             # Adjust to not cut off in the middle of words
-            while start_pos > 0 and excerpt[start_pos].isalnum():
+            while start_pos > 0 and best_content[start_pos].isalnum():
                 start_pos -= 1
-            while end_pos < len(excerpt) and excerpt[end_pos].isalnum():
+            while end_pos < len(best_content) and best_content[end_pos].isalnum():
                 end_pos += 1
                 
-            excerpt = ("..." if start_pos > 0 else "") + excerpt[start_pos:end_pos] + ("..." if end_pos < len(excerpt) else "")
-        
-        return True, excerpt
+            excerpt = ("..." if start_pos > 0 else "") + best_content[start_pos:end_pos] + ("..." if end_pos < len(best_content) else "")
+            return True, excerpt
     
+    # Regular handling for non-email requirements or if email not found
+    if use_section:
+        best_matches = best_section_matches
+        best_score = best_section_score
+        best_content = best_section
+    else:
+        best_matches = best_paragraph_matches
+        best_score = best_paragraph_score
+        best_content = best_paragraph
+    
+    # Only consider it a match if we have enough matching terms or a high score
+    # Higher threshold for longer items to avoid false positives
+    min_score_threshold = 2 + (len(item) / 100)
+    
+    if best_score >= min_score_threshold or len(best_matches) >= 3:
+        # If the content is too long, extract a focused excerpt
+        if len(best_content) > 400:
+            # Find the highest concentration of matching terms
+            match_positions = []
+            for term in best_matches:
+                # Find all occurrences of this term
+                term_lower = term.lower()
+                content_lower = best_content.lower()
+                start_idx = 0
+                while start_idx < len(content_lower):
+                    pos = content_lower.find(term_lower, start_idx)
+                    if pos == -1:
+                        break
+                    match_positions.append((pos, term))
+                    start_idx = pos + 1
+            
+            # Find the area with the highest density of matches
+            if match_positions:
+                # Sort by position
+                match_positions.sort(key=lambda x: x[0])
+                
+                # Use sliding window to find region with most matches
+                best_region_start = 0
+                best_region_end = 0
+                best_region_matches = 0
+                window_size = 300
+                
+                for i in range(len(match_positions)):
+                    window_end = match_positions[i][0]
+                    window_start = window_end - window_size
+                    
+                    # Count matches in this window
+                    matches_in_window = sum(1 for pos, _ in match_positions if window_start <= pos <= window_end)
+                    
+                    if matches_in_window > best_region_matches:
+                        best_region_matches = matches_in_window
+                        best_region_start = window_start
+                        best_region_end = window_end
+                
+                # Adjust the window to include some context
+                start_pos = max(0, best_region_start - 50)
+                end_pos = min(len(best_content), best_region_end + 150)
+                
+                # Adjust to not cut off in the middle of words
+                while start_pos > 0 and best_content[start_pos].isalnum():
+                    start_pos -= 1
+                while end_pos < len(best_content) and best_content[end_pos].isalnum():
+                    end_pos += 1
+                    
+                excerpt = ("..." if start_pos > 0 else "") + best_content[start_pos:end_pos] + ("..." if end_pos < len(best_content) else "")
+                return True, excerpt
+            else:
+                # If no match positions (shouldn't happen), use the first part of the content
+                excerpt = best_content[:400] + "..."
+                return True, excerpt
+        else:
+            # Content is short enough to use as is
+            return True, best_content
+    
+    # If we reach here, no good match was found
     return False, None

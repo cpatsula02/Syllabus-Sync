@@ -19,45 +19,131 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
     """
     Use OpenAI's API to analyze if a checklist item is present in the document.
     Returns a dictionary with match result and confidence score.
+    
+    This enhanced version is designed to:
+    1. Better handle semantic matching (recognizing requirements even when worded differently)
+    2. Be more strict with specific requirements like @ucalgary.ca emails
+    3. Reduce false positives by requiring contextual evidence
+    4. Reduce false negatives by focusing on semantic meaning, not just keywords
     """
-    # Trim document text to avoid excessive token usage
-    # This helps prevent timeouts and reduces API costs
-    max_text_length = 1000  # Reduced from 2000 to further prevent timeout and reduce tokens
-    trimmed_document = document_text[:max_text_length] + ("..." if len(document_text) > max_text_length else "")
+    # Determine if this item needs special handling
+    is_email_requirement = any(keyword in item.lower() for keyword in ['email', 'contact', 'instructor']) and '@' in item
+    is_special_requirement = is_email_requirement
+    
+    # Create a specialized system message based on the item type
+    system_message = "You are an expert document analyzer for academic course outlines. Your job is to determine if specific requirements are met in a document."
+    
+    if is_email_requirement:
+        system_message += """
+For instructor email requirements:
+1. ONLY match if you find an email that ends with @ucalgary.ca
+2. The email MUST be in the context of an instructor, professor, or faculty member
+3. The email must appear with contextual information like "Instructor:", "Professor:", "Contact:", etc.
+4. Do NOT match general university emails or emails without instructor context
+5. When explaining your findings, specify exactly what email address you found that meets the criteria"""
+    
+    # Prepare the document by cleaning and splitting it
+    # Instead of truncating, we'll use a semantic chunking approach
+    chunks = []
+    # Split the document into sections of approximately 1000 characters
+    paragraphs = document_text.split('\n\n')
+    current_chunk = ""
+    
+    for para in paragraphs:
+        if len(current_chunk) + len(para) < 1500:
+            current_chunk += para + "\n\n"
+        else:
+            chunks.append(current_chunk)
+            current_chunk = para + "\n\n"
+    
+    # Add the last chunk if it's not empty
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    # If we have no chunks (very short document), use the whole document
+    if not chunks:
+        chunks = [document_text]
+    
+    # Limit to maximum 3 chunks for efficiency
+    if len(chunks) > 3:
+        # Prioritize the beginning and end of the document, plus a middle section
+        chunks = [chunks[0], chunks[len(chunks)//2], chunks[-1]]
     
     try:
-        # Prepare the prompt for OpenAI - simplified to reduce token usage
-        prompt = f"""Determine if this checklist item appears in the document text.
+        all_results = []
         
-Checklist item: "{item}"
+        # Analyze each chunk separately
+        for i, chunk in enumerate(chunks):
+            # Prepare a detailed prompt that focuses on semantic meaning
+            prompt = f"""I need to verify if a specific requirement from a course outline checklist is fulfilled in this document.
 
-Document text (excerpt): "{trimmed_document}"
+CHECKLIST REQUIREMENT: "{item}"
 
-Response format: {{"present": true/false, "confidence": 0.0-1.0, "explanation": "brief reason"}}"""
+DOCUMENT SECTION {i+1} of {len(chunks)}:
+```
+{chunk[:1500]}
+```
+
+TASK:
+1. Determine if this requirement is TRULY satisfied in the document section
+2. Focus on the MEANING and INTENT of the requirement, not just matching keywords
+3. Be strict about specific details like email domains (@ucalgary.ca)
+4. Look for the requirement in context, not just isolated keywords
+5. Respond with your findings in the JSON format below
+
+Response format:
+{{
+  "present": true/false,
+  "confidence": 0.0-1.0,
+  "evidence": "Quote the specific text from the document that satisfies the requirement if present",
+  "explanation": "Explain your reasoning in 1-2 sentences"
+}}"""
+            
+            # Call the OpenAI API
+            response = client.chat.completions.create(
+                model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
+                                 # do not change this unless explicitly requested by the user
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,  # Lower temperature for more consistent results
+                max_tokens=200,   # Allow more tokens for detailed explanation and evidence
+                timeout=25        # 25 second timeout
+            )
+            
+            # Extract and parse the response
+            result = json.loads(response.choices[0].message.content)
+            
+            # Add chunk info to the result
+            result["chunk_id"] = i+1
+            all_results.append(result)
         
-        # Call the OpenAI API with shorter timeout
-        response = client.chat.completions.create(
-            model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
-                             # do not change this unless explicitly requested by the user
-            messages=[
-                {"role": "system", "content": "Analyze if a checklist item appears in a document."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,  # Lower temperature for more consistent results
-            max_tokens=100,   # Further reduced token limit to prevent long processing times
-            timeout=20        # 20 second timeout to prevent hanging
-        )
+        # Determine the final result from all chunk analyses
+        # If ANY chunk has the item present with confidence > 0.7, consider it present
+        present_results = [r for r in all_results if r.get("present", False) and r.get("confidence", 0) > 0.7]
         
-        # Extract and parse the response
-        result = json.loads(response.choices[0].message.content)
+        if present_results:
+            # Use the highest confidence result from the present results
+            best_result = max(present_results, key=lambda x: x.get("confidence", 0))
+            final_result = {
+                "present": True,
+                "confidence": best_result.get("confidence", 0.8),
+                "explanation": best_result.get("explanation", "Found in document"),
+                "evidence": best_result.get("evidence", "")
+            }
+        else:
+            # If no high-confidence matches were found, consider it missing
+            final_result = {
+                "present": False,
+                "confidence": max([1.0 - r.get("confidence", 0) for r in all_results if not r.get("present", False)] or [0.7]),
+                "explanation": all_results[0].get("explanation", "Not found in document"),
+                "evidence": ""
+            }
+        
         logger.info(f"OpenAI analysis complete for item: {item[:30]}...")
-        
-        return {
-            "present": result.get("present", False),
-            "confidence": result.get("confidence", 0.0),
-            "explanation": result.get("explanation", "No explanation provided")
-        }
+        return final_result
         
     except (APITimeoutError, RateLimitError, APIConnectionError) as e:
         logger.error(f"OpenAI API error: {str(e)}")
