@@ -30,6 +30,12 @@ body {
     color: var(--uofc-black);
 }
 
+.university-name {
+    color: var(--uofc-black);
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
 /* Cards */
 .card {
     border: none;
@@ -220,4 +226,11 @@ footer {
 
 .badge.bg-danger {
     background-color: #dc3545 !important;
+}
+
+/* University of Calgary name in navbar */
+.university-name {
+    color: var(--uofc-black);
+    font-weight: 600;
+    font-size: 1.1rem;
 }

@@ -244,10 +244,11 @@ def generate_pdf_report(checklist_items, matching_results):
         pdf.set_font("Arial", "", 10)
         pdf.multi_cell(0, 8, "The course outline meets all checklist requirements. No further action is needed.")
     
-    # Return the PDF as bytes
-    pdf_output = io.BytesIO()
-    pdf.output(pdf_output)
-    pdf_output.seek(0)
+    # Return the PDF as bytes in memory
+    # Use 'S' (string) as the dest parameter to get the PDF content as a string
+    # then encode it to bytes and write to BytesIO buffer
+    pdf_content = pdf.output(dest='S')
+    pdf_output = io.BytesIO(pdf_content.encode('latin-1'))
     return pdf_output
 
 @app.route('/results', methods=['GET'])
