@@ -1,417 +1,104 @@
-import os
-import logging
-import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file, jsonify
+from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
-import document_processor
-from fpdf import FPDF
-import io
-import re
+import os
+import openai
+from PyPDF2 import PdfReader
+from docx import Document
+import logging
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Create Flask app
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_secret_key")
+openai.api_key = os.getenv("OPENAI_API_KEY")  # Set in Replit secrets
 
-# Configure upload folder
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-ALLOWED_EXTENSIONS = {'pdf', 'docx'}
+def extract_text(file_path):
+    if file_path.endswith(".pdf"):
+        reader = PdfReader(file_path)
+        return "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
+    elif file_path.endswith(".docx"):
+        doc = Document(file_path)
+        return "\n".join(p.text for p in doc.paragraphs)
+    elif file_path.endswith(".txt"):
+        with open(file_path, 'r') as f:
+            return f.read()
+    else:
+        return ""
 
-# Create uploads directory if it doesn't exist
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+def extract_checklist_items(checklist_text):
+    return [line.strip() for line in checklist_text.split('\n') if line.strip()]
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max file size
+def analyze_item_with_gpt(checklist_item, course_outline):
+    prompt = f"""
+You are reviewing a university course outline to determine whether a specific requirement is met.
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+Requirement:
+{checklist_item}
 
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html', year=datetime.datetime.now().year)
+Course Outline:
+{course_outline}
 
-@app.route('/upload', methods=['GET', 'POST'])
-def upload_files():
+Respond with one of the following:
+✅ Present – [brief reason and matched text]
+❌ Missing – [brief reason]
+"""
     try:
-        # Check if both files were submitted
-        if 'checklist' not in request.files or 'outline' not in request.files:
-            flash('Both checklist and course outline files are required.')
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"OpenAI API error: {str(e)}")
+        return f"❌ Error – {str(e)}"
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        checklist_file = request.files.get('checklist')
+        outline_file = request.files.get('outline')
+
+        if not checklist_file or not outline_file:
+            flash('Both files are required.')
             return redirect(request.url)
-        
-        checklist_file = request.files['checklist']
-        outline_file = request.files['outline']
-        
-        # Check if filenames are empty
-        if checklist_file.filename == '' or outline_file.filename == '':
-            flash('Please select both files')
-            return redirect(request.url)
-        
-        # Check if files are allowed
-        if (not allowed_file(checklist_file.filename) or 
-            not allowed_file(outline_file.filename)):
-            flash('Only PDF and DOCX files are allowed.')
-            return redirect(request.url)
-        
-        # Get additional parameters
-        api_attempts = request.form.get('api_attempts', '3')
-        additional_context = request.form.get('additional_context', '')
-        
-        # Validate api_attempts
+
+
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+        checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(checklist_file.filename))
+        outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline_file.filename))
+
         try:
-            api_attempts = int(api_attempts)
-            if api_attempts < 1:
-                api_attempts = 1
-            elif api_attempts > 10:
-                api_attempts = 10
-        except ValueError:
-            api_attempts = 3  # Default to 3 attempts if invalid
-        
-        # Log the parameters
-        logging.info(f"Analysis with {api_attempts} API attempts")
-        if additional_context:
-            logging.info(f"Additional context provided: {len(additional_context)} characters")
-        
-        # Save files
-        checklist_path = None
-        outline_path = None
-        
-        try:
-            checklist_filename = secure_filename(checklist_file.filename)
-            outline_filename = secure_filename(outline_file.filename)
-            
-            checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], checklist_filename)
-            outline_path = os.path.join(app.config['UPLOAD_FOLDER'], outline_filename)
-            
             checklist_file.save(checklist_path)
             outline_file.save(outline_path)
-            
-            # Read the outline text for later use in finding matching excerpts
-            outline_text = document_processor.extract_text(outline_path)
-        except Exception as file_error:
-            logging.error(f"Error saving or reading files: {str(file_error)}")
-            flash('There was a problem processing your files. Please try again.')
+
+            checklist_text = extract_text(checklist_path)
+            outline_text = extract_text(outline_path)
+
+            checklist_items = extract_checklist_items(checklist_text)
+            results = []
+
+            for item in checklist_items:
+                analysis = analyze_item_with_gpt(item, outline_text)
+                results.append({"item": item, "analysis": analysis})
+
+            return render_template('results.html', results=results)
+
+        except Exception as e:
+            logging.error(f"Error processing files: {str(e)}", exc_info=True)
+            flash('An error occurred during processing. Please try again.')
             return redirect(request.url)
-        
-        # Store the outline text in the session for later use in match highlighting
-        session['outline_text'] = outline_text
-        
-        try:
-            # Process the files and get results
-            checklist_items, matching_results = document_processor.process_documents(
-                checklist_path, outline_path, api_attempts=api_attempts, additional_context=additional_context)
-        except Exception as process_error:
-            # Check if this is an OpenAI API quota exceeded error
-            error_msg = str(process_error).lower()
-            if "quota" in error_msg or "rate limit" in error_msg or "openai" in error_msg:
-                # Use fallback processing with traditional methods only
-                logging.warning("OpenAI API quota exceeded. Using fallback traditional processing.")
-                flash("OpenAI API quota has been exceeded. Analysis will use traditional pattern matching only, which may be less accurate but still functional.")
-                
-                # Extract the checklist items and analyze with traditional methods only
-                checklist_text = document_processor.extract_text(checklist_path)
-                checklist_items = document_processor.extract_checklist_items(checklist_text)
-                
-                # Process each item with traditional methods
-                matching_results = {}
-                for item in checklist_items:
-                    is_present = document_processor.check_item_in_document(item, outline_text)
-                    matching_results[item] = {
-                        "present": is_present,
-                        "confidence": 0.85 if is_present else 0.2,
-                        "explanation": "Found using pattern matching" if is_present else "Not found in document",
-                        "method": "traditional (API quota exceeded)"
-                    }
-            else:
-                # For other errors, re-raise
-                raise
-        
-        # Check if we have any results
-        if not checklist_items:
-            flash('No valid checklist items found. Please ensure your checklist document contains numbered or bulleted items.')
-            return redirect(url_for('index'))
-        
-        # Store results in session for the results page
-        session['checklist_items'] = checklist_items
-        session['matching_results'] = matching_results
-        
-        # Outline text is already stored in the session above
-        # No need to extract it again
-        
-        return redirect(url_for('results'))
-        
-    except Exception as e:
-        logging.error(f"Error processing files: {str(e)}", exc_info=True)
-        error_msg = str(e).lower()
-        
-        # Check for specific error messages and provide friendly responses
-        if "quota" in error_msg or "rate limit" in error_msg or "exceeded" in error_msg:
-            flash('Our AI service is currently experiencing high demand. The analysis will be performed using traditional methods only.')
-        elif "timeout" in error_msg:
-            flash('Processing took too long. Try with smaller documents or wait a moment and try again.')
-        elif "permission" in error_msg:
-            flash('There was an issue accessing the files. Please try again.')
-        elif "format" in error_msg:
-            flash('There was an issue with the file format. Please ensure you are uploading PDF or DOCX files.')
-        else:
-            flash('An error occurred during processing. Please ensure your files are properly formatted.')
-            logging.error(f"Processing error details: {str(e)}", exc_info=True)
-        
-        return redirect(request.url)
-    finally:
-        # Clean up files after processing, even if there was an error
-        try:
-            if checklist_path and os.path.exists(checklist_path):
+        finally:
+            # Cleanup files
+            if os.path.exists(checklist_path):
                 os.remove(checklist_path)
-            if outline_path and os.path.exists(outline_path):
+            if os.path.exists(outline_path):
                 os.remove(outline_path)
-        except Exception as cleanup_error:
-            logging.error(f"Error cleaning up files: {str(cleanup_error)}")
 
-def generate_pdf_report(checklist_items, matching_results):
-    """Generate a PDF report with the analysis results"""
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # Add University of Calgary logo
-    # pdf.image("static/images/uofc_logo.png", x=10, y=8, w=30)
-    
-    # Set up fonts
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Syllabus Sync", ln=True, align="C")
-    pdf.cell(0, 10, "University of Calgary", ln=True, align="C")
-    pdf.cell(0, 10, "Course Outline Analysis Report", ln=True, align="C")
-    
-    # Add date
-    pdf.set_font("Arial", "", 10)
-    today = datetime.datetime.now().strftime("%B %d, %Y")
-    pdf.cell(0, 10, f"Generated on: {today}", ln=True, align="R")
-    
-    # Calculate completion rate
-    total_items = len(checklist_items)
-    present_items = sum(1 for item in checklist_items 
-                      if isinstance(matching_results.get(item), dict) and matching_results[item].get('present') 
-                      or isinstance(matching_results.get(item), bool) and matching_results[item])
-    missing_items = total_items - present_items
-    completion_rate = int((present_items / total_items * 100) if total_items > 0 else 0)
-    
-    # Add summary info
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Analysis Summary", ln=True)
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 8, f"Total Checklist Items: {total_items}", ln=True)
-    pdf.cell(0, 8, f"Items Present: {present_items}", ln=True)
-    pdf.cell(0, 8, f"Items Missing: {missing_items}", ln=True)
-    pdf.cell(0, 8, f"Completion Rate: {completion_rate}%", ln=True)
-    
-    # Detailed checklist
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Detailed Analysis", ln=True)
-    
-    # Iterate through checklist items
-    for i, item in enumerate(checklist_items, 1):
-        # Determine if item is present
-        is_present = False
-        explanation = ""
-        method = "traditional"
-        
-        if isinstance(matching_results.get(item), dict):
-            is_present = matching_results[item].get('present', False)
-            explanation = matching_results[item].get('explanation', '')
-            method = matching_results[item].get('method', 'traditional')
-        elif isinstance(matching_results.get(item), bool):
-            is_present = matching_results[item]
-            explanation = "Found in document" if is_present else "Not found in document"
-        
-        # Add item with status - use ASCII characters to avoid UTF-8 encoding issues
-        status = "Present" if is_present else "Missing"
-        status_marker = "+" if is_present else "X"
-        
-        pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 8, f"Item {i}: [{status_marker}] {status}", ln=True)
-        
-        # Word wrap for longer items
-        pdf.set_font("Arial", "", 10)
-        
-        # Handle line wrapping for long text
-        item_text = item
-        lines = []
-        
-        while len(item_text) > 80:
-            # Find a good breaking point
-            break_point = item_text[:80].rfind(' ')
-            if break_point == -1:
-                break_point = 80
-            
-            lines.append(item_text[:break_point])
-            item_text = item_text[break_point+1:]
-        
-        if item_text:
-            lines.append(item_text)
-        
-        # Print the wrapped text
-        for line in lines:
-            # Ensure text is ASCII-compatible for FPDF
-            safe_line = line.encode('ascii', 'replace').decode('ascii')
-            pdf.cell(0, 6, f"    {safe_line}", ln=True)
-        
-        # Add explanation if available
-        if explanation:
-            # Ensure explanation is ASCII-compatible for FPDF
-            safe_explanation = explanation.encode('ascii', 'replace').decode('ascii')
-            pdf.set_font("Arial", "I", 9)
-            pdf.cell(0, 6, f"    Note: {safe_explanation}", ln=True)
-        
-        # Add matching excerpt if available and item is present
-        if is_present:
-            pdf.ln(1)
-            pdf.set_font("Arial", "B", 9)
-            pdf.cell(0, 6, "    Matching Excerpt:", ln=True)
-            pdf.set_font("Arial", "", 9)
-            
-            # Get the outline text from the session
-            outline_text = session.get('outline_text', '')
-            
-            if outline_text:
-                try:
-                    from document_processor import find_matching_excerpt
-                    found, excerpt = find_matching_excerpt(item, outline_text)
-                    
-                    if found and excerpt:
-                        # Format the excerpt to fit PDF and make it ASCII-compatible
-                        if len(excerpt) > 250:
-                            excerpt = excerpt[:247] + "..."
-                            
-                        safe_excerpt = excerpt.encode('ascii', 'replace').decode('ascii')
-                        
-                        # Draw a highlighted box for the excerpt
-                        pdf.set_fill_color(232, 255, 232)  # Light green background
-                        # Multi-line cell with wrapping
-                        excerpt_lines = []
-                        excerpt_text = safe_excerpt
-                        
-                        while len(excerpt_text) > 75:
-                            # Find a good breaking point
-                            break_point = excerpt_text[:75].rfind(' ')
-                            if break_point == -1:
-                                break_point = 75
-                                
-                            excerpt_lines.append(excerpt_text[:break_point])
-                            excerpt_text = excerpt_text[break_point+1:]
-                        
-                        if excerpt_text:
-                            excerpt_lines.append(excerpt_text)
-                            
-                        # Print the wrapped excerpt text with highlighting
-                        for line in excerpt_lines:
-                            pdf.cell(0, 6, f"        {line}", ln=True, fill=True)
-                except Exception as e:
-                    # If there's an error, just skip the excerpt
-                    pass
-        
-        pdf.ln(2)
-    
-    # Add recommendations
-    if missing_items > 0:
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, "Recommendations", ln=True)
-        pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(0, 8, "The course outline is missing some required items. Please review the items marked as missing above and include them in your revised outline to ensure compliance with university requirements.")
-    else:
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, "Recommendations", ln=True)
-        pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(0, 8, "The course outline meets all checklist requirements. No further action is needed.")
-    
-    # Return the PDF as bytes in memory
-    # Use 'S' (string) as the dest parameter to get the PDF content as a string
-    # then encode it to bytes and write to BytesIO buffer
-    pdf_content = pdf.output(dest='S')
-    pdf_output = io.BytesIO(pdf_content.encode('latin-1'))
-    return pdf_output
-
-@app.route('/results', methods=['GET'])
-def results():
-    # Get results from session
-    checklist_items = session.get('checklist_items', [])
-    matching_results = session.get('matching_results', {})
-    
-    if not checklist_items or not matching_results:
-        flash('No results found. Please upload files again.')
-        return redirect(url_for('index'))
-    
-    return render_template('results.html', 
-                          checklist_items=checklist_items,
-                          matching_results=matching_results,
-                          year=datetime.datetime.now().year)
-                          
-# PDF download route
-@app.route('/download-pdf')
-def download_pdf():
-    # Get results from session
-    checklist_items = session.get('checklist_items', [])
-    matching_results = session.get('matching_results', {})
-    
-    if not checklist_items or not matching_results:
-        flash('No results found. Please upload files again.')
-        return redirect(url_for('index'))
-    
-    # Generate the PDF
-    pdf_output = generate_pdf_report(checklist_items, matching_results)
-    
-    # Return the PDF to view in the browser (not as a download)
-    return send_file(
-        pdf_output, 
-        as_attachment=False,  # Changed to False to display in browser
-        download_name='syllabus_sync_analysis.pdf',
-        mimetype='application/pdf'
-    )
-
-# Error handlers
-@app.errorhandler(413)
-def too_large(e):
-    flash('File too large. Maximum size is 16 MB.')
-    return redirect(url_for('index'))
-
-@app.route('/get-match-details')
-def get_match_details():
-    """Get match details for a checklist item in the document"""
-    item = request.args.get('item', '')
-    
-    if not item:
-        return jsonify({"found": False, "error": "No checklist item provided"})
-    
-    # Get the document text and matching results from the session
-    outline_text = session.get('outline_text', '')
-    matching_results = session.get('matching_results', {})
-    
-    if not outline_text:
-        return jsonify({"found": False, "error": "No document text available"})
-    
-    # Check if we have evidence in the matching_results
-    if item in matching_results and isinstance(matching_results[item], dict) and 'evidence' in matching_results[item]:
-        evidence = matching_results[item]['evidence']
-        if evidence:
-            return jsonify({"found": True, "excerpt": evidence})
-    
-    # If no evidence in matching_results or evidence is empty, use the find_matching_excerpt function
-    try:
-        from document_processor import find_matching_excerpt
-        found, excerpt = find_matching_excerpt(item, outline_text)
-        return jsonify({"found": found, "excerpt": excerpt})
-    except Exception as e:
-        return jsonify({"found": False, "error": str(e)})
-
-@app.errorhandler(500)
-def server_error(e):
-    flash('An unexpected error occurred. Please try again.')
-    return redirect(url_for('index'))
+    return render_template('index.html')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
