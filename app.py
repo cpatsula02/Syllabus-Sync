@@ -28,11 +28,11 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max file size
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
     return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['GET', 'POST'])
 def upload_files():
     # Check if both files were submitted
     if 'checklist' not in request.files or 'outline' not in request.files:
@@ -272,7 +272,7 @@ def generate_pdf_report(checklist_items, matching_results):
     pdf_output.seek(0)
     return pdf_output
 
-@app.route('/results')
+@app.route('/results', methods=['GET'])
 def results():
     # Get results from session
     checklist_items = session.get('checklist_items', [])
