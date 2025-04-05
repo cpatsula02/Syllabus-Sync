@@ -35,10 +35,11 @@ def index():
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_files():
-    # Check if both files were submitted
-    if 'checklist' not in request.files or 'outline' not in request.files:
-        flash('Both checklist and course outline files are required.')
-        return redirect(request.url)
+    try:
+        # Check if both files were submitted
+        if 'checklist' not in request.files or 'outline' not in request.files:
+            flash('Both checklist and course outline files are required.')
+            return redirect(request.url)
     
     checklist_file = request.files['checklist']
     outline_file = request.files['outline']
@@ -138,7 +139,7 @@ def upload_files():
         return redirect(url_for('results'))
         
     except Exception as e:
-        logging.error(f"Error processing files: {str(e)}")
+        logging.error(f"Error processing files: {str(e)}", exc_info=True)
         error_msg = str(e).lower()
         
         # Check for specific error messages and provide friendly responses
@@ -146,8 +147,13 @@ def upload_files():
             flash('Our AI service is currently experiencing high demand. The analysis will be performed using traditional methods only.')
         elif "timeout" in error_msg:
             flash('Processing took too long. Try with smaller documents or wait a moment and try again.')
+        elif "permission" in error_msg:
+            flash('There was an issue accessing the files. Please try again.')
+        elif "format" in error_msg:
+            flash('There was an issue with the file format. Please ensure you are uploading PDF or DOCX files.')
         else:
-            flash(f'Error processing files: {str(e)}')
+            flash('An error occurred while processing your files. Please try again.')
+            logging.error(f"Unexpected error: {str(e)}")
         
         return redirect(request.url)
     finally:
