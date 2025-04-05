@@ -20,6 +20,25 @@
 
     <h1 class="mb-4">Analysis Results</h1>
 
+    {% if missing_count > 0 %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title text-danger">
+                <i class="fas fa-exclamation-circle me-2"></i>Missing Items ({{ missing_count }})
+            </h5>
+            <ul class="list-group list-group-flush">
+                {% for result in results %}
+                    {% if not result.present %}
+                        <li class="list-group-item list-group-item-danger">
+                            {{ result.item }}
+                        </li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Summary</h5>
