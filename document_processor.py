@@ -1387,6 +1387,11 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if not outline_text.strip():
             raise ValueError("Course outline file is empty")
 
+        # If additional context is provided, prepend it to the outline text
+        if additional_context and additional_context.strip():
+            logging.info("Using additional context for analysis")
+            outline_text = f"{additional_context}\n\n{outline_text}"
+
         # Log document sizes for debugging
         logging.info(f"Checklist text length: {len(checklist_text)}")
         logging.info(f"Outline text length: {len(outline_text)}")
@@ -1399,13 +1404,41 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if not checklist_items:
             return [], {"error": "No checklist items could be extracted. Please check the format of your checklist."}
 
-        # Skip OpenAI API completely - use only traditional methods
-        logging.info("Using traditional pattern matching for all items")
-        matching_results = {}
+        # Determine analysis method based on API attempts parameter
+        if api_attempts > 0:
+            try:
+                # Import here to avoid circular imports
+                from openai_helper import analyze_checklist_items_batch
+                logging.info(f"Using AI-powered analysis with up to {api_attempts} API requests")
+                matching_results = analyze_checklist_items_batch(checklist_items, outline_text, api_attempts)
+                
+                # Add more detailed evidence for each item that's present
+                for item, result in matching_results.items():
+                    if result["present"] and not result.get("evidence"):
+                        found, excerpt = find_matching_excerpt(item, outline_text)
+                        if found and excerpt:
+                            result["evidence"] = excerpt
+                
+                return checklist_items, matching_results
+                
+            except Exception as e:
+                logging.error(f"Error using AI-powered analysis: {str(e)}")
+                logging.info("Falling back to traditional pattern matching")
+                # Continue with traditional method if AI analysis fails
+        else:
+            logging.info("Using traditional pattern matching for all items (API attempts set to 0)")
 
-        # Process each checklist item using traditional methods with enhanced explanations
+        # Traditional analysis as fallback
+        matching_results = {}
         for item in checklist_items:
             is_present = check_item_in_document(item, outline_text)
+            
+            # Get evidence if present
+            evidence = ""
+            if is_present:
+                found, excerpt = find_matching_excerpt(item, outline_text)
+                if found and excerpt:
+                    evidence = excerpt
 
             # Create a more detailed explanation based on item content
             item_lower = item.lower()
@@ -1449,6 +1482,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 "present": is_present,
                 "confidence": 0.85 if is_present else 0.2,
                 "explanation": explanation,
+                "evidence": evidence,
                 "method": "traditional"
             }
 

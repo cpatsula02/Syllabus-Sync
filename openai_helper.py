@@ -2,10 +2,15 @@ import logging
 import os
 from typing import List, Dict, Any
 import re
-import openai
+from openai import OpenAI
 
 # Configure OpenAI with API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+openai = OpenAI(api_key=OPENAI_API_KEY)
+
+# the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
+# do not change this unless explicitly requested by the user
+MODEL = "gpt-4o"
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -92,9 +97,71 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
         'method': 'academic_review'
     }
 
+def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
+    """
+    Use OpenAI to analyze if a checklist item is present in the document.
+    
+    This function provides advanced semantic understanding of whether
+    the requirement in the checklist item is fulfilled in the course outline.
+    """
+    try:
+        prompt = f"""
+        As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
+        is addressed in the course outline. The same concept may be expressed with different phrasing or formatting.
+        
+        CHECKLIST ITEM: {item}
+        
+        COURSE OUTLINE TEXT: {document_text[:4000]}...
+        
+        Provide a JSON response with the following fields:
+        - "present": boolean indicating if the item is addressed in the outline
+        - "confidence": number between 0 and 1 indicating confidence in the decision
+        - "explanation": detailed explanation of why the item is or is not present
+        - "evidence": if present, provide the exact text from the outline that addresses this item
+        - "method": should be "ai_analysis"
+        """
+        
+        response = openai.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": "You are an expert academic document reviewer for the University of Calgary."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3
+        )
+        
+        # Parse the JSON response
+        result = eval(response.choices[0].message.content)
+        
+        # Ensure all required fields are present
+        if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
+            raise ValueError("API response missing required fields")
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error using AI analysis: {str(e)}")
+        # Fall back to traditional analysis
+        from document_processor import check_item_in_document, find_matching_excerpt
+        is_present = check_item_in_document(item, document_text)
+        evidence = ""
+        if is_present:
+            found, excerpt = find_matching_excerpt(item, document_text)
+            if found and excerpt:
+                evidence = excerpt
+                
+        return {
+            'present': is_present,
+            'confidence': 0.85 if is_present else 0.15,
+            'explanation': f"Fallback analysis after AI error: {'Item is present in document' if is_present else 'Item not found in document'}",
+            'evidence': evidence,
+            'method': 'fallback_academic_review'
+        }
+
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3) -> Dict[str, Dict[str, Any]]:
     """
-    Process each checklist item using our semantic understanding approach.
+    Process each checklist item using our semantic understanding approach,
+    with optional AI-powered analysis for better results.
     
     This function acts as a university academic reviewer, focusing on whether each requirement 
     described in the checklist items is meaningfully fulfilled in the course outline.
@@ -106,21 +173,45 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     Args:
         items: List of checklist items to analyze
         document_text: The full text of the document to check against
-        max_attempts: Maximum number of API analysis attempts (ignored in this version)
+        max_attempts: Maximum number of API analysis attempts
     
     Returns:
         A dictionary mapping each item to its analysis result
     """
     results = {}
     
-    # Process each item with our academic reviewer approach
-    logger.info(f'Analyzing {len(items)} checklist items with semantic understanding')
+    # Decide whether to use AI analysis based on max_attempts
+    use_ai = max_attempts > 0 and OPENAI_API_KEY is not None
+    
+    if use_ai:
+        logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
+    else:
+        logger.info(f'Analyzing {len(items)} checklist items with traditional semantic understanding')
+    
+    # Set a limit on number of AI calls to make (for cost/time efficiency)
+    ai_call_limit = min(max_attempts, 15)  # Max 15 items get AI analysis
+    ai_calls_made = 0
     
     for i, item in enumerate(items):
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
-        # Use the individual item analyzer which includes the semantic understanding
+        # Decide whether to use AI or traditional analysis for this item
+        if use_ai and ai_calls_made < ai_call_limit:
+            # For important items, use AI analysis
+            if any(keyword in item.lower() for keyword in 
+                   ['exam', 'grade', 'policy', 'academic integrity', 'misconduct', 
+                    'objectives', 'instructor', 'missed', 'late', 'contact']):
+                try:
+                    result = ai_analyze_item(item, document_text)
+                    ai_calls_made += 1
+                    results[item] = result
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in AI analysis for {item_id}: {str(e)}")
+                    # Fall back to traditional analysis if AI fails
+        
+        # Use the traditional analyzer for remaining items
         result = analyze_checklist_item(item, document_text)
         results[item] = result
     
