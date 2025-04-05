@@ -40,56 +40,60 @@ def upload_files():
         if 'checklist' not in request.files or 'outline' not in request.files:
             flash('Both checklist and course outline files are required.')
             return redirect(request.url)
-    
-    checklist_file = request.files['checklist']
-    outline_file = request.files['outline']
-    
-    # Check if filenames are empty
-    if checklist_file.filename == '' or outline_file.filename == '':
-        flash('Please select both files')
-        return redirect(request.url)
-    
-    # Check if files are allowed
-    if (not allowed_file(checklist_file.filename) or 
-        not allowed_file(outline_file.filename)):
-        flash('Only PDF and DOCX files are allowed.')
-        return redirect(request.url)
-    
-    # Get additional parameters
-    api_attempts = request.form.get('api_attempts', '3')
-    additional_context = request.form.get('additional_context', '')
-    
-    # Validate api_attempts
-    try:
-        api_attempts = int(api_attempts)
-        if api_attempts < 1:
-            api_attempts = 1
-        elif api_attempts > 10:
-            api_attempts = 10
-    except ValueError:
-        api_attempts = 3  # Default to 3 attempts if invalid
-    
-    # Log the parameters
-    logging.info(f"Analysis with {api_attempts} API attempts")
-    if additional_context:
-        logging.info(f"Additional context provided: {len(additional_context)} characters")
-    
-    # Save files
-    checklist_path = None
-    outline_path = None
-    
-    try:
-        checklist_filename = secure_filename(checklist_file.filename)
-        outline_filename = secure_filename(outline_file.filename)
         
-        checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], checklist_filename)
-        outline_path = os.path.join(app.config['UPLOAD_FOLDER'], outline_filename)
+        checklist_file = request.files['checklist']
+        outline_file = request.files['outline']
         
-        checklist_file.save(checklist_path)
-        outline_file.save(outline_path)
+        # Check if filenames are empty
+        if checklist_file.filename == '' or outline_file.filename == '':
+            flash('Please select both files')
+            return redirect(request.url)
         
-        # Read the outline text for later use in finding matching excerpts
-        outline_text = document_processor.extract_text(outline_path)
+        # Check if files are allowed
+        if (not allowed_file(checklist_file.filename) or 
+            not allowed_file(outline_file.filename)):
+            flash('Only PDF and DOCX files are allowed.')
+            return redirect(request.url)
+        
+        # Get additional parameters
+        api_attempts = request.form.get('api_attempts', '3')
+        additional_context = request.form.get('additional_context', '')
+        
+        # Validate api_attempts
+        try:
+            api_attempts = int(api_attempts)
+            if api_attempts < 1:
+                api_attempts = 1
+            elif api_attempts > 10:
+                api_attempts = 10
+        except ValueError:
+            api_attempts = 3  # Default to 3 attempts if invalid
+        
+        # Log the parameters
+        logging.info(f"Analysis with {api_attempts} API attempts")
+        if additional_context:
+            logging.info(f"Additional context provided: {len(additional_context)} characters")
+        
+        # Save files
+        checklist_path = None
+        outline_path = None
+        
+        try:
+            checklist_filename = secure_filename(checklist_file.filename)
+            outline_filename = secure_filename(outline_file.filename)
+            
+            checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], checklist_filename)
+            outline_path = os.path.join(app.config['UPLOAD_FOLDER'], outline_filename)
+            
+            checklist_file.save(checklist_path)
+            outline_file.save(outline_path)
+            
+            # Read the outline text for later use in finding matching excerpts
+            outline_text = document_processor.extract_text(outline_path)
+        except Exception as file_error:
+            logging.error(f"Error saving or reading files: {str(file_error)}")
+            flash('There was a problem processing your files. Please try again.')
+            return redirect(request.url)
         
         # Store the outline text in the session for later use in match highlighting
         session['outline_text'] = outline_text
