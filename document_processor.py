@@ -10,6 +10,7 @@ from nltk.corpus import stopwords
 # Initialize NLTK
 try:
     nltk.data.find('corpora/stopwords')
+    nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('stopwords')
     nltk.download('punkt')
@@ -579,9 +580,10 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if not checklist_items:
             raise ValueError("No checklist items found in the document")
 
-        # Preprocess document for better pattern matching
-        outline_tokens = nltk.word_tokenize(outline_text.lower())
-        outline_stopwords = [word for word in outline_tokens if word.lower() not in stopwords.words('english')]
+        # We'll skip tokenization here to make the code more robust
+        # Just do basic processing for keywords
+        outline_lower = outline_text.lower()
+        logging.info("Document text loaded and preprocessed successfully.")
         
         # Pre-identify grade distribution table for enhanced matching
         has_grade_table, grade_table_text = identify_grade_distribution_table(outline_text)
