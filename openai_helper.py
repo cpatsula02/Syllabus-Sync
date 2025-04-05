@@ -19,30 +19,30 @@ logger = logging.getLogger(__name__)
 def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
     """
     Analyze if a checklist item is present in the document using semantic understanding.
-    
+
     This function acts as a university academic reviewer, focusing on whether the 
     requirement described in the checklist item is meaningfully fulfilled in the 
     course outline.
-    
+
     The analysis considers that the same concept may be expressed with different phrasing, 
     formatting, or section titles, and uses deep understanding of intent and meaning to
     determine whether the course outline addresses the requirement.
-    
+
     Returns a dictionary with match result and confidence score.
     """
     # Use document_processor's specialized functions to get a more accurate result
     from document_processor import check_item_in_document, find_matching_excerpt
-    
+
     # First check using the advanced semantic matching in check_item_in_document
     is_present = check_item_in_document(item, document_text)
-    
+
     # If the item is present, try to find the specific section that matches it
     evidence = ""
     if is_present:
         found, excerpt = find_matching_excerpt(item, document_text)
         if found and excerpt:
             evidence = excerpt
-    
+
     # Generate a meaningful explanation
     item_lower = item.lower()
     if is_present:
@@ -88,7 +88,7 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
             explanation = 'Information about accommodations for students with disabilities appears to be missing from the course outline.'
         else:
             explanation = 'This requirement does not appear to be addressed in the course outline.'
-    
+
     return {
         'present': is_present,
         'confidence': 0.85 if is_present else 0.15,
@@ -100,7 +100,7 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
 def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
     """
     Use OpenAI to analyze if a checklist item is present in the document.
-    
+
     This function provides advanced semantic understanding of whether
     the requirement in the checklist item is fulfilled in the course outline.
     """
@@ -108,11 +108,11 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
         prompt = f"""
         As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
         is addressed in the course outline. The same concept may be expressed with different phrasing or formatting.
-        
+
         CHECKLIST ITEM: {item}
-        
+
         COURSE OUTLINE TEXT: {document_text[:4000]}...
-        
+
         Provide a JSON response with the following fields:
         - "present": boolean indicating if the item is addressed in the outline
         - "confidence": number between 0 and 1 indicating confidence in the decision
@@ -120,7 +120,7 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
         - "evidence": if present, provide the exact text from the outline that addresses this item
         - "method": should be "ai_analysis"
         """
-        
+
         response = openai.chat.completions.create(
             model=MODEL,
             messages=[
@@ -130,14 +130,14 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
             response_format={"type": "json_object"},
             temperature=0.3
         )
-        
+
         # Parse the JSON response
         result = eval(response.choices[0].message.content)
-        
+
         # Ensure all required fields are present
         if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
             raise ValueError("API response missing required fields")
-            
+
         return result
     except Exception as e:
         logger.error(f"Error using AI analysis: {str(e)}")
@@ -149,7 +149,7 @@ def ai_analyze_item(item: str, document_text: str) -> Dict[str, Any]:
             found, excerpt = find_matching_excerpt(item, document_text)
             if found and excerpt:
                 evidence = excerpt
-                
+
         return {
             'present': is_present,
             'confidence': 0.85 if is_present else 0.15,
@@ -162,50 +162,51 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     """
     Process each checklist item using our semantic understanding approach,
     with optional AI-powered analysis for better results.
-    
+
     This function acts as a university academic reviewer, focusing on whether each requirement 
     described in the checklist items is meaningfully fulfilled in the course outline.
-    
+
     The analysis considers that the same concept may be expressed with different phrasing, 
     formatting, or section titles, and uses deep understanding of intent and meaning to
     determine whether the course outline addresses each requirement.
-    
+
     Args:
         items: List of checklist items to analyze
         document_text: The full text of the document to check against
         max_attempts: Maximum number of API analysis attempts
-    
+
     Returns:
         A dictionary mapping each item to its analysis result
     """
     results = {}
-    
+    ai_calls_made = 0
+
     # Decide whether to use AI analysis based on max_attempts
     use_ai = max_attempts > 0 and OPENAI_API_KEY is not None
-    
+
     if use_ai:
         logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
     else:
         logger.info(f'Analyzing {len(items)} checklist items with traditional semantic understanding')
-    
+
     # Process all items with AI when available
     for i, item in enumerate(items):
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
-        
-        # Always attempt AI analysis first when available
-        if use_ai:
-                try:
-                    result = ai_analyze_item(item, document_text)
-                    ai_calls_made += 1
-                    results[item] = result
-                    continue
-                except Exception as e:
-                    logger.error(f"Error in AI analysis for {item_id}: {str(e)}")
-                    # Fall back to traditional analysis if AI fails
-        
+
+        # Attempt AI analysis if within max attempts
+        if use_ai and ai_calls_made < max_attempts:
+            try:
+                result = ai_analyze_item(item, document_text)
+                ai_calls_made += 1
+                results[item] = result
+                continue
+            except Exception as e:
+                logger.error(f"Error in AI analysis for {item_id}: {str(e)}")
+                # Fall back to traditional analysis if AI fails
+
         # Use the traditional analyzer for remaining items
         result = analyze_checklist_item(item, document_text)
         results[item] = result
-    
+
     return results

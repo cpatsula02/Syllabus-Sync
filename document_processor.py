@@ -476,10 +476,42 @@ def find_best_keyword_section(document_text, keywords):
 
     return None
 
-def check_special_entity_patterns(item, document):
-    """Check for special entity patterns that might be missed by other methods."""
+def check_special_entity_patterns(item, document, additional_context=""):
+    """
+    Enhanced pattern matching with context awareness and table recognition.
+    Supports various document formats and considers additional context.
+    """
     document_lower = document.lower()
     item_lower = item.lower()
+    context_lower = additional_context.lower() if additional_context else ""
+
+    # Check additional context first for exclusions
+    if context_lower:
+        exclusion_patterns = [
+            (r'no\s+take\s*home', 'take home'),
+            (r'(?:not|no)\s+group\s+(?:work|project)', 'group project'),
+            (r'(?:not|no)\s+final\s+exam', 'final exam'),
+            (r'(?:not|no)\s+participation', 'participation')
+        ]
+        
+        for pattern, item_type in exclusion_patterns:
+            if re.search(pattern, context_lower) and item_type in item_lower:
+                return True  # Item is explicitly excluded, so consider it "present"
+
+    # Enhanced table detection for grade distribution
+    if 'grade' in item_lower or 'weight' in item_lower or 'distribution' in item_lower:
+        # Look for table-like structures
+        table_patterns = [
+            r'\b\d+%\s*[-–]\s*[A-Za-z\s]+',  # 30% - Assignments
+            r'[A-Za-z\s]+\s*[-–]\s*\d+%',    # Assignments - 30%
+            r'\|\s*[A-Za-z\s]+\s*\|\s*\d+%\s*\|',  # |Assignments|30%|
+            r'[A-Za-z\s]+:\s*\d+%',          # Assignments: 30%
+            r'\d+\s*points?\s+[A-Za-z\s]+',  # 30 points Assignment
+            r'worth\s+\d+%'                   # worth 30%
+        ]
+        
+        if any(re.search(pattern, document_lower) for pattern in table_patterns):
+            return True
 
     # Check for course objectives with numbering
     if 'objective' in item_lower or 'listed' in item_lower or 'numbered' in item_lower:
@@ -1022,6 +1054,10 @@ def find_matching_excerpt(item, document_text):
     return False, None
 
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+    """
+    Enhanced document processing with context awareness and improved pattern recognition.
+    Handles various document formats and considers user-provided context for analysis.
+    """
     try:
         # Validate file paths
         if not os.path.exists(checklist_path):
