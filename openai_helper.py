@@ -188,20 +188,13 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     else:
         logger.info(f'Analyzing {len(items)} checklist items with traditional semantic understanding')
     
-    # Set a limit on number of AI calls to make (for cost/time efficiency)
-    ai_call_limit = min(max_attempts, 15)  # Max 15 items get AI analysis
-    ai_calls_made = 0
-    
+    # Process all items with AI when available
     for i, item in enumerate(items):
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
-        # Decide whether to use AI or traditional analysis for this item
-        if use_ai and ai_calls_made < ai_call_limit:
-            # For important items, use AI analysis
-            if any(keyword in item.lower() for keyword in 
-                   ['exam', 'grade', 'policy', 'academic integrity', 'misconduct', 
-                    'objectives', 'instructor', 'missed', 'late', 'contact']):
+        # Always attempt AI analysis first when available
+        if use_ai:
                 try:
                     result = ai_analyze_item(item, document_text)
                     ai_calls_made += 1

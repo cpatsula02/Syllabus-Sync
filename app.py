@@ -32,8 +32,8 @@ def index():
             # Get additional context if provided
             additional_context = request.form.get('additional_context', '').strip()
 
-            # Process files using document_processor
-            checklist_items, analysis_results = process_documents(checklist_path, outline_path, additional_context=additional_context)
+            # Process files with increased API attempts for better accuracy
+            checklist_items, analysis_results = process_documents(checklist_path, outline_path, api_attempts=10, additional_context=additional_context)
             
             if "error" in analysis_results:
                 flash(analysis_results["error"])
