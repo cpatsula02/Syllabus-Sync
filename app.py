@@ -11,6 +11,13 @@ from document_processor import process_documents
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Check if OpenAI API key is available
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    logger.info("OpenAI API key is configured. Advanced AI analysis is available.")
+else:
+    logger.warning("OpenAI API key is not configured. Fallback to traditional analysis only.")
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -153,6 +160,24 @@ def index():
             analysis_data['analysis_results'] = analysis_results
             analysis_data['missing_items'] = missing_items
             analysis_data['grade_table_items'] = grade_table_items
+            
+            # Calculate analysis method statistics
+            analysis_methods = {}
+            api_calls_made = 0
+            
+            for item in checklist_items:
+                result = analysis_results.get(item, {})
+                method = result.get("method", "pattern_matching")
+                
+                # Count occurrences of each method
+                if method in analysis_methods:
+                    analysis_methods[method] += 1
+                else:
+                    analysis_methods[method] = 1
+                    
+                # Count API calls based on AI methods
+                if method.startswith("ai_") or "academic_review" in method:
+                    api_calls_made += 1
 
             return render_template('results.html', 
                                 results=results,
@@ -160,7 +185,10 @@ def index():
                                 missing_count=missing_count,
                                 total_count=len(checklist_items),
                                 missing_items=missing_items,
-                                grade_table_items=grade_table_items)
+                                grade_table_items=grade_table_items,
+                                analysis_methods=analysis_methods,
+                                api_calls_made=api_calls_made,
+                                max_attempts=api_attempts)
 
         except Exception as e:
             logger.exception(f"Error processing documents: {str(e)}")
@@ -264,10 +292,41 @@ def download_pdf():
         missing_items = len(analysis_data['missing_items'])
         present_items = total_items - missing_items
         
+        # Calculate API usage statistics for the PDF report
+        analysis_methods = {}
+        api_calls_made = 0
+        
+        for item in analysis_data['checklist_items']:
+            result = analysis_data['analysis_results'].get(item, {})
+            method = result.get("method", "pattern_matching")
+            
+            # Count occurrences of each method
+            if method in analysis_methods:
+                analysis_methods[method] += 1
+            else:
+                analysis_methods[method] = 1
+                
+            # Count API calls based on AI methods
+            if method.startswith("ai_") or "academic_review" in method:
+                api_calls_made += 1
+        
         pdf.cell(95, 8, f'Total checklist items: {total_items}', 1, 0, 'L')
         pdf.cell(95, 8, f'Items present: {present_items}', 1, 1, 'L')
-        pdf.cell(95, 8, f'Items missing: {missing_items}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Items missing: {missing_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'AI Analysis Used: {api_calls_made} items', 1, 1, 'L')
         pdf.ln(5)
+        
+        # Add analysis method statistics
+        if len(analysis_methods) > 1:  # Only add if we have different methods
+            pdf.set_font('Arial', 'I', 9)
+            pdf.cell(190, 8, 'Analysis Methods Used:', 0, 1, 'L')
+            
+            for method, count in analysis_methods.items():
+                method_name = method.replace('_', ' ').title()
+                pdf.cell(190, 6, f'• {method_name}: {count} items', 0, 1, 'L')
+                
+            pdf.ln(3)
+            pdf.set_font('Arial', '', 10)  # Reset font
         
         # Missing items section
         if missing_items > 0:

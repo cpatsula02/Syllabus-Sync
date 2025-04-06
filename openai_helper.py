@@ -1,8 +1,13 @@
 import logging
 import os
-from typing import List, Dict, Any
+import time
+import json
 import re
-from openai import OpenAI
+import tiktoken
+import random
+from typing import List, Dict, Any, Tuple, Optional
+from openai import OpenAI, RateLimitError, APIError, APITimeoutError
+from datetime import datetime, timedelta
 
 # Configure OpenAI with API key
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -15,6 +20,171 @@ MODEL = "gpt-4o"
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# API Usage Management
+MAX_RETRIES = 3
+RETRY_DELAY_BASE = 2  # Base delay in seconds for exponential backoff
+API_CALL_HISTORY = []  # Tracks API call timestamps
+MAX_TOKENS_PER_REQUEST = 6000  # Safety limit for token usage per request
+MAX_TOKENS_PER_SESSION = 80000  # Estimated threshold for one session
+CURRENT_SESSION_TOKENS = 0  # Track tokens used in current session
+CACHE = {}  # Simple in-memory cache for API responses
+
+# Get tokenizer for the model
+try:
+    encoder = tiktoken.encoding_for_model(MODEL)
+except Exception:
+    # Fallback for handling newer models not yet in tiktoken
+    logger.warning(f"Specific encoding for {MODEL} not found, using cl100k_base instead")
+    encoder = tiktoken.get_encoding("cl100k_base")
+
+def count_tokens(text: str) -> int:
+    """Count the number of tokens in a text string."""
+    try:
+        return len(encoder.encode(text))
+    except Exception as e:
+        logger.warning(f"Error counting tokens: {e}. Using character-based estimate.")
+        # Fallback estimation: ~4 characters per token as rough estimate
+        return len(text) // 4
+
+def get_cache_key(prompt: str) -> str:
+    """Generate a cache key for a prompt (simplified hash)."""
+    # Generate a simple hash of the prompt for caching
+    return str(hash(prompt) % 10000000)
+
+def should_use_api(item: str, document_text: str, remaining_quota: int) -> bool:
+    """
+    Determine if API should be used based on item complexity and remaining quota.
+    
+    Args:
+        item: The checklist item to analyze
+        document_text: The document being analyzed
+        remaining_quota: Estimated remaining token quota
+        
+    Returns:
+        Boolean indicating if API should be used
+    """
+    item_lower = item.lower()
+    
+    # High-priority items that benefit most from AI analysis
+    priority_keywords = [
+        'grade distribution', 'assessment', 'weight', 'policy',
+        'academic integrity', 'accommodations', 'instructor', 
+        'contact', 'office hours', 'missed', 'late'
+    ]
+    
+    # If we're running low on quota, only use API for complex/high-priority items
+    if remaining_quota < MAX_TOKENS_PER_SESSION * 0.3:
+        is_priority = any(keyword in item_lower for keyword in priority_keywords)
+        is_complex = len(item.split()) > 10  # Longer items are often more complex
+        return is_priority and is_complex
+    
+    # If we have more quota, use API for all but the simplest items
+    if remaining_quota < MAX_TOKENS_PER_SESSION * 0.7:
+        is_simple = len(item.split()) < 8 and not any(keyword in item_lower for keyword in priority_keywords)
+        return not is_simple
+    
+    # If we have plenty of quota, use API for almost everything
+    return True
+
+def api_call_with_backoff(prompt: str) -> Dict:
+    """
+    Make an API call with exponential backoff for rate limiting.
+    
+    Args:
+        prompt: The prompt to send to the API
+        
+    Returns:
+        API response or error information
+    """
+    global CURRENT_SESSION_TOKENS
+    
+    # Check cache first
+    cache_key = get_cache_key(prompt)
+    if cache_key in CACHE:
+        logger.info("Using cached response")
+        return CACHE[cache_key]
+    
+    # Count input tokens
+    input_tokens = count_tokens(prompt)
+    
+    # Check if this would exceed session limit
+    if CURRENT_SESSION_TOKENS + input_tokens > MAX_TOKENS_PER_SESSION:
+        logger.warning(f"Session token limit approaching: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+        return {"error": "Session token limit reached", "fallback_required": True}
+    
+    # Update history to track API call frequency
+    current_time = datetime.now()
+    API_CALL_HISTORY.append(current_time)
+    
+    # Clean up old history (older than 1 minute)
+    one_minute_ago = current_time - timedelta(minutes=1)
+    API_CALL_HISTORY[:] = [t for t in API_CALL_HISTORY if t > one_minute_ago]
+    
+    # If we've made more than 10 calls in the last minute, add a small delay
+    if len(API_CALL_HISTORY) > 10:
+        delay = random.uniform(0.5, 2.0)
+        logger.info(f"Rate limiting - adding {delay:.2f}s delay")
+        time.sleep(delay)
+    
+    # Try the API call with exponential backoff
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = openai.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,  # Lower temperature for more consistent analysis
+            )
+            
+            # Estimate response tokens
+            response_text = response.choices[0].message.content
+            response_tokens = count_tokens(response_text)
+            
+            # Update token count
+            CURRENT_SESSION_TOKENS += input_tokens + response_tokens
+            logger.info(f"API call successful: {input_tokens}+{response_tokens}={input_tokens+response_tokens} tokens used. " +
+                      f"Session total: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+            
+            # Parse and cache the response
+            try:
+                result = json.loads(response_text)
+                CACHE[cache_key] = result
+                return result
+            except json.JSONDecodeError:
+                logger.warning("API returned non-JSON response")
+                return {"error": "Invalid API response format", "fallback_required": True}
+                
+        except RateLimitError as e:
+            logger.warning(f"Rate limit error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
+            if attempt < MAX_RETRIES - 1:
+                sleep_time = RETRY_DELAY_BASE ** attempt * (1 + random.random())
+                logger.info(f"Waiting {sleep_time:.2f}s before retry")
+                time.sleep(sleep_time)
+            else:
+                logger.error("Rate limit error after all retries")
+                return {"error": "Rate limit exceeded", "fallback_required": True}
+                
+        except (APIError, APITimeoutError) as e:
+            logger.warning(f"API error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
+            if attempt < MAX_RETRIES - 1:
+                sleep_time = RETRY_DELAY_BASE ** attempt * (1 + random.random())
+                logger.info(f"Waiting {sleep_time:.2f}s before retry")
+                time.sleep(sleep_time)
+            else:
+                logger.error("API error after all retries")
+                return {"error": "API error", "fallback_required": True}
+                
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            if "insufficient_quota" in str(e):
+                return {"error": "Insufficient quota", "fallback_required": True}
+            return {"error": f"Unknown error: {str(e)}", "fallback_required": True}
+    
+    # If we've reached here, all retries failed
+    return {"error": "All API call attempts failed", "fallback_required": True}
 
 def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
     """
@@ -116,7 +286,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
     """
     try:
         # Limit document text length to avoid exceeding token limits
-        max_doc_length = 6000
+        max_doc_length = min(6000, MAX_TOKENS_PER_REQUEST - 1500)  # Reserve tokens for prompt and overhead
         document_excerpt = document_text[:max_doc_length]
         if len(document_text) > max_doc_length:
             document_excerpt += "..."
@@ -325,20 +495,17 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
         # Use more tokens for complex items
         max_tokens = 1000 if is_grade_item or is_policy_item else 800
         
-        # Make the API call
-        response = openai.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-
-        # Parse the JSON response
-        result = eval(response.choices[0].message.content)
+        # Make the API call using our improved rate-limited function
+        prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance.\n\n{prompt}"
+        api_response = api_call_with_backoff(prompt_with_sys_msg)
+        
+        # Check if we need to fall back to traditional analysis
+        if "fallback_required" in api_response and api_response["fallback_required"]:
+            logger.warning(f"API call failed: {api_response.get('error', 'Unknown error')} - using fallback analysis")
+            return fallback_analyze_item(item, document_text, additional_context)
+        
+        # Process the API response
+        result = api_response  # The api_call_with_backoff already handles JSON parsing
 
         # Ensure all required fields are present
         if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
@@ -438,6 +605,77 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
             'method': 'fallback_academic_review'
         }
 
+def fallback_analyze_item(item: str, document_text: str, additional_context: str = "") -> Dict[str, Any]:
+    """
+    Fallback analysis when API calls fail or quota is exceeded.
+    Uses multiple traditional analysis techniques for better results.
+    """
+    import re
+    # Import document processing functions here to avoid circular imports
+    from document_processor import check_item_in_document, find_matching_excerpt, check_special_entity_patterns, identify_grade_distribution_table
+    
+    # Get the item_lower value for the fallback process
+    item_lower = item.lower()
+    
+    # Multiple validation approaches
+    is_present_basic = check_item_in_document(item, document_text, additional_context)
+    is_present_special = check_special_entity_patterns(item, document_text, additional_context)
+    
+    # Special handling for grade table items
+    is_grade_item = ('grade' in item_lower and 'distribution' in item_lower) or 'weight' in item_lower
+    if is_grade_item:
+        has_grade_table, table_text = identify_grade_distribution_table(document_text)
+        if has_grade_table:
+            is_present_special = True
+    
+    # Find matching excerpt
+    found_excerpt, excerpt = find_matching_excerpt(item, document_text)
+    
+    # Require at least 2 out of 3 checks to pass for higher confidence
+    checks_passed = sum([is_present_basic, is_present_special, found_excerpt])
+    is_present = checks_passed >= 2
+    confidence = min(0.85, 0.3 + (checks_passed * 0.2))
+    
+    # Generate an appropriate explanation
+    if is_present:
+        if is_grade_item:
+            explanation = f"Fallback analysis: Grade distribution or assessment information found. ({checks_passed}/3 checks passed)"
+        elif 'policy' in item_lower:
+            explanation = f"Fallback analysis: Relevant policy information identified. ({checks_passed}/3 checks passed)"
+        elif 'instructor' in item_lower or 'contact' in item_lower:
+            explanation = f"Fallback analysis: Instructor contact information found. ({checks_passed}/3 checks passed)"
+        else:
+            explanation = f"Fallback analysis: Item is present in document. ({checks_passed}/3 checks passed)"
+    else:
+        if is_grade_item:
+            explanation = f"Fallback analysis: Grade distribution or assessment information not clearly found. ({checks_passed}/3 checks passed)"
+        elif 'policy' in item_lower:
+            explanation = f"Fallback analysis: Required policy information not clearly identified. ({checks_passed}/3 checks passed)"
+        elif 'instructor' in item_lower or 'contact' in item_lower:
+            explanation = f"Fallback analysis: Complete instructor contact information not found. ({checks_passed}/3 checks passed)"
+        else:
+            explanation = f"Fallback analysis: Item not found in document. ({checks_passed}/3 checks passed)"
+    
+    # Add highlighting to the evidence
+    highlighted_evidence = ""
+    if found_excerpt and excerpt:
+        highlighted_evidence = excerpt
+        # Extract key terms from the checklist item
+        key_terms = [word.lower() for word in re.findall(r'\b\w{4,}\b', item_lower)]
+        # Add highlighting
+        for term in key_terms:
+            if len(term) > 3:  # Only highlight meaningful words
+                pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
+                highlighted_evidence = pattern.sub(f"<span style='background-color: #c2f0c2;'>{term}</span>", highlighted_evidence)
+    
+    return {
+        'present': is_present,
+        'confidence': confidence if is_present else 0.2,
+        'explanation': explanation,
+        'evidence': highlighted_evidence,
+        'method': 'fallback_analysis'
+    }
+
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
     Process each checklist item using our semantic understanding approach,
@@ -461,33 +699,93 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     """
     results = {}
     ai_calls_made = 0
+    api_errors = 0
+    
+    # Reset token tracking at the start of a new session
+    global CURRENT_SESSION_TOKENS
+    CURRENT_SESSION_TOKENS = 0
 
-    # Decide whether to use AI analysis based on max_attempts
+    # Decide whether to use AI analysis based on max_attempts and API key
     use_ai = max_attempts > 0 and OPENAI_API_KEY is not None
 
     if use_ai:
         logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
+        logger.info(f'Maximum API attempts set to: {max_attempts}')
     else:
         logger.info(f'Analyzing {len(items)} checklist items with traditional semantic understanding')
+        if not OPENAI_API_KEY:
+            logger.warning("OpenAI API key is not set. Using traditional analysis only.")
 
-    # Process all items with AI when available
+    # First pass: Classify and prioritize items
+    prioritized_items = []
     for i, item in enumerate(items):
+        item_priority = 1  # Default priority (lower is higher priority)
+        
+        # Identify high-priority items
+        item_lower = item.lower()
+        if any(term in item_lower for term in [
+            'grade distribution', 'assessment', 'policy', 'weight',
+            'academic integrity', 'late', 'missed', 'instructor', 
+            'contact', 'email', 'schedule', 'final exam'
+        ]):
+            item_priority = 0  # High priority
+        
+        prioritized_items.append((item_priority, i, item))
+    
+    # Sort by priority (high priority items first)
+    prioritized_items.sort()
+    
+    # Initialize stats for token usage monitoring
+    remaining_quota = MAX_TOKENS_PER_SESSION
+    
+    # Process items in priority order
+    for _, i, item in prioritized_items:
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
-
-        # Attempt AI analysis if within max attempts
-        if use_ai and ai_calls_made < max_attempts:
+        
+        # Check if we should use API for this item
+        should_use_api_for_item = use_ai and ai_calls_made < max_attempts and api_errors < 3
+        
+        # For remaining quota-based decisions
+        if should_use_api_for_item:
+            use_api_decision = should_use_api(item, document_text, remaining_quota)
+            if not use_api_decision:
+                logger.info(f"Skipping API for {item_id} based on priority/quota management")
+                should_use_api_for_item = False
+        
+        # Attempt AI analysis if conditions are met
+        if should_use_api_for_item:
             try:
+                logger.info(f"Using AI analysis for {item_id} (call {ai_calls_made+1}/{max_attempts})")
                 result = ai_analyze_item(item, document_text, additional_context)
                 ai_calls_made += 1
+                
+                # Update token usage stats
+                remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
+                logger.info(f"Remaining token quota: ~{remaining_quota}")
+                
                 results[item] = result
                 continue
             except Exception as e:
+                api_errors += 1
                 logger.error(f"Error in AI analysis for {item_id}: {str(e)}")
-                # Fall back to traditional analysis if AI fails
-
-        # Use the traditional analyzer for remaining items
+                if "insufficient_quota" in str(e):
+                    logger.warning("API quota exceeded - using enhanced traditional analysis for remaining items")
+                    use_ai = False  # Disable API usage for all remaining items
+        
+        # Log fallback reason if applicable
+        if use_ai and ai_calls_made >= max_attempts:
+            logger.info(f"Using fallback analysis for {item_id} (reached maximum API attempts: {max_attempts})")
+        elif api_errors >= 3:
+            logger.warning(f"Using fallback analysis for {item_id} (too many API errors: {api_errors})")
+        
+        # Use the traditional analyzer as fallback
         result = analyze_checklist_item(item, document_text)
         results[item] = result
-
+    
+    # Log final usage stats
+    if use_ai:
+        logger.info(f"Analysis complete. AI calls made: {ai_calls_made}/{max_attempts}")
+        logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+    
     return results
