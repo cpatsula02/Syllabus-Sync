@@ -43,7 +43,7 @@
         </div>
     </div>
 
-    <!-- Missing items section with flag boxes -->
+    <!-- Missing items section - consolidated into a single box -->
     {% if missing_items and missing_items|length > 0 %}
     <div class="card mb-4">
         <div class="card-header bg-danger text-white">
@@ -52,49 +52,18 @@
             </h5>
         </div>
         <div class="card-body">
-            <div class="alert alert-warning">
-                <p><strong>The following components are missing from your course outline:</strong></p>
+            <div class="missing-items-box p-3 border border-danger rounded">
+                <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
+                
+                <ul class="list-unstyled">
+                    {% for item in missing_items %}
+                        <li class="missing-item-entry {% if item in grade_table_items %}grade-item{% endif %} mb-2">
+                            <i class="fas {% if item in grade_table_items %}fa-table text-danger{% else %}fa-times-circle text-warning{% endif %} me-2"></i>
+                            {{ item }}
+                        </li>
+                    {% endfor %}
+                </ul>
             </div>
-            
-            <!-- Display missing grade table items first with special formatting -->
-            {% set has_grade_items = false %}
-            {% for item in missing_items %}
-                {% if item in grade_table_items %}
-                    {% if not has_grade_items %}
-                        <h6 class="text-danger mb-3"><i class="fas fa-table me-2"></i>Missing Grade/Assessment Components:</h6>
-                        {% set has_grade_items = true %}
-                    {% endif %}
-                    <div class="flag-box grade-flag mb-3">
-                        <div class="flag-header">
-                            <span class="flag-icon"><i class="fas fa-exclamation-circle"></i></span>
-                            <span class="flag-text">Grade Component Missing</span>
-                        </div>
-                        <div class="flag-content">
-                            {{ item }}
-                        </div>
-                    </div>
-                {% endif %}
-            {% endfor %}
-            
-            <!-- Display other missing items -->
-            {% set has_other_items = false %}
-            {% for item in missing_items %}
-                {% if item not in grade_table_items %}
-                    {% if not has_other_items %}
-                        <h6 class="text-danger mb-3"><i class="fas fa-list-alt me-2"></i>Other Missing Components:</h6>
-                        {% set has_other_items = true %}
-                    {% endif %}
-                    <div class="flag-box regular-flag mb-3">
-                        <div class="flag-header">
-                            <span class="flag-icon"><i class="fas fa-exclamation-circle"></i></span>
-                            <span class="flag-text">Component Missing</span>
-                        </div>
-                        <div class="flag-content">
-                            {{ item }}
-                        </div>
-                    </div>
-                {% endif %}
-            {% endfor %}
         </div>
     </div>
     {% endif %}
@@ -126,17 +95,26 @@
                     
                     <p class="mb-2"><strong>Analysis:</strong> {{ result.explanation }}</p>
                     
+                    <!-- Detection Method Information -->
+                    <p class="mb-2 detection-method">
+                        <strong>Detection Method:</strong> 
+                        <span class="badge bg-info">{{ result.method|replace('_', ' ')|title }}</span>
+                        {% if result.confidence %}
+                        <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
+                        {% endif %}
+                    </p>
+                    
                     {% if result.present and result.evidence %}
                     <div class="mt-2">
                         <div class="d-flex align-items-center mb-1">
                             <strong class="me-2">Evidence:</strong>
-                            <button class="btn btn-sm btn-outline-secondary view-evidence-btn" 
+                            <button class="btn btn-sm btn-outline-success view-evidence-btn" 
                                     data-item="{{ result.item }}"
                                     onclick="loadMatchDetails(this)">
                                 <i class="fas fa-eye me-1"></i>View Match
                             </button>
                         </div>
-                        <div class="evidence-box p-3 mt-1 bg-light rounded" style="display: none;" 
+                        <div class="evidence-box p-3 mt-1 bg-light rounded border-success" style="display: none;" 
                              id="evidence-{{ loop.index }}">
                             <div class="spinner-border spinner-border-sm text-secondary" role="status">
                                 <span class="visually-hidden">Loading...</span>

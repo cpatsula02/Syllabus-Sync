@@ -143,7 +143,9 @@ def index():
                     "present": is_present,
                     "explanation": result.get("explanation", ""),
                     "evidence": result.get("evidence", ""),
-                    "is_grade_item": is_grade_item
+                    "is_grade_item": is_grade_item,
+                    "method": result.get("method", "pattern_matching"),
+                    "confidence": result.get("confidence", None)
                 })
             
             # Store data for other routes
@@ -228,6 +230,8 @@ def get_match_details():
             'found': True,
             'excerpt': excerpt,
             'is_grade_item': is_grade_item,
+            'method': result.get('method', 'pattern_matching'),
+            'confidence': result.get('confidence', None)
         })
     
     return jsonify({'found': False})
@@ -333,7 +337,13 @@ def download_pdf():
                     
                     pdf.set_font('Arial', 'I', 8)
                     pdf.set_text_color(100, 100, 100)  # Gray
-                    pdf.multi_cell(190, 5, f"Match: {evidence}", 0, 'L')
+                    
+                    # Add method information
+                    method = result.get('method', 'pattern_matching').replace('_', ' ').title()
+                    confidence = result.get('confidence', None)
+                    confidence_str = f" (Confidence: {int(confidence * 100)}%)" if confidence else ""
+                    
+                    pdf.multi_cell(190, 5, f"Match via {method}{confidence_str}: {evidence}", 0, 'L')
                     pdf.set_text_color(0, 0, 0)  # Reset to black
             
             # Add space between items
