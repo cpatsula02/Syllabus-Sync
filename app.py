@@ -97,12 +97,23 @@ def index():
 
             try:
                 # Process files with specified API attempts and context
+                logger.info(f"Starting document processing with {api_attempts} API attempts")
+                logger.info(f"Checklist path: {checklist_path}")
+                logger.info(f"Outline path: {outline_path}")
+                
                 checklist_items, analysis_results = process_documents(
                     checklist_path, 
                     outline_path, 
                     api_attempts=api_attempts, 
                     additional_context=additional_context
                 )
+                
+                logger.info(f"Document processing complete. Found {len(checklist_items)} checklist items.")
+                if not checklist_items or len(checklist_items) == 0:
+                    logger.error("No checklist items were extracted! This will cause issues.")
+                    flash("Error: No checklist items could be extracted from the document. Please check the file format.")
+                    return redirect(request.url)
+                    
             except Exception as api_error:
                 logger.exception(f"API error during document processing: {str(api_error)}")
                 error_message = str(api_error)
@@ -407,16 +418,21 @@ def download_pdf():
                     explanation_text = f"   Rationale: {explanation}"
                     explanation_length = len(explanation_text)
                     
-                    # Use very conservative estimate for chars per line
-                    explanation_chars_per_line = 50  # Conservative estimate for font size 9
+                    # More conservative estimate for font size 9 - use fewer chars per line to ensure enough space
+                    explanation_chars_per_line = 40  # Very conservative estimate for font size 9
                     explanation_lines = max(1, explanation_length / explanation_chars_per_line)
                     
-                    # Use generous line height
-                    explanation_height = max(6, explanation_lines * 5)  # At least 6mm, 5mm per line
+                    # Use even more generous line height for rationales
+                    explanation_height = max(7, explanation_lines * 6)  # At least 7mm, 6mm per line
                     
                     # Add extra padding for longer explanations
-                    if explanation_lines > 3:
-                        explanation_height += 3  # Add 3mm extra padding
+                    if explanation_lines > 2:
+                        explanation_height += 4  # Add 4mm extra padding for longer explanations
+                    if explanation_lines > 4:
+                        explanation_height += 4  # Additional padding for very long explanations
+                    
+                    # Add a small space before the explanation
+                    pdf.ln(1)
                     
                     # Write the explanation with calculated height
                     pdf.multi_cell(180, explanation_height, explanation_text, 0, 'L')

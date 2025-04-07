@@ -56,6 +56,13 @@ def extract_checklist_items(text: str) -> List[str]:
     Only extract numbered or bulleted items, excluding any other text.
     Enhanced to be more flexible with various document formats.
     """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Extracting checklist items from text of length: {len(text)}")
+    
+    # Fallback if nothing else works - pure paragraphs with reasonable length
+    if len(text) < 50:
+        logger.warning(f"Text is very short ({len(text)} chars), might not be valid")
+        
     # Define patterns for numbered or bulleted items
     patterns = [
         # Numbered items with various formats
@@ -73,15 +80,27 @@ def extract_checklist_items(text: str) -> List[str]:
         r'^\s{2,}([^\n]+?)(?=\n(?:\s{2,}[^\n]+|\s*$)|$)'  # General indented items
     ]
     
+    # Add additional pattern for header-like items without bullets or numbers
+    special_headers = [
+        r'^([A-Z][^.\n]{10,})$',  # All caps header-like text (at least 10 chars)
+        r'^([A-Z][a-z]+ [A-Z][a-z]+.{5,})$',  # Title case phrases of decent length
+    ]
+    
     items = []
     lines = text.split('\n')
+    logger.info(f"Document contains {len(lines)} lines")
     
     # First pass: extract items based on patterns
+    pattern_matches = 0
     for pattern in patterns:
         for i in range(len(lines)):
             line = lines[i].strip()
             matches = re.findall(pattern, line, re.MULTILINE)
-            items.extend([match.strip() for match in matches if match.strip()])
+            new_matches = [match.strip() for match in matches if match.strip()]
+            items.extend(new_matches)
+            pattern_matches += len(new_matches)
+    
+    logger.info(f"Pattern matching found {pattern_matches} potential checklist items")
     
     # Second pass: look for multi-line items and sequential numbers
     current_item = ""
@@ -122,6 +141,15 @@ def extract_checklist_items(text: str) -> List[str]:
     if current_item:
         items.append(current_item)
     
+    # Third pass: add special headers if we don't have many items yet
+    if len(items) < 10:
+        logger.warning(f"Few items found ({len(items)}). Looking for header-like text...")
+        for pattern in special_headers:
+            for line in lines:
+                if len(line) > 10:  # Minimum length requirement
+                    matches = re.findall(pattern, line)
+                    items.extend([match.strip() for match in matches if match.strip()])
+    
     # Process and clean up items
     processed_items = []
     for item in items:
@@ -138,8 +166,12 @@ def extract_checklist_items(text: str) -> List[str]:
     
     # Remove duplicate items and very short entries
     unique_items = []
+    excluded_count = 0
+    
     for item in processed_items:
         item = item.strip()
+        included = False
+        
         if (
             item and len(item) > 5  # More permissive minimum length
             and item not in unique_items
@@ -149,9 +181,30 @@ def extract_checklist_items(text: str) -> List[str]:
             and len(item.split()) >= 2  # Must have at least 2 words
         ):
             unique_items.append(item)
+            included = True
+        
+        if not included:
+            excluded_count += 1
     
-    logger = logging.getLogger(__name__)
-    logger.info(f"Extracted {len(unique_items)} checklist items")
+    logger.info(f"Extracted {len(unique_items)} checklist items (excluded {excluded_count} irrelevant items)")
+    
+    # Fallback: If no items found, use whole paragraphs as a last resort
+    if not unique_items and text.strip():
+        logger.warning("No checklist items found using standard patterns. Using paragraph fallback.")
+        paragraphs = re.split(r'\n\s*\n', text)
+        for para in paragraphs:
+            para = para.strip()
+            if len(para) > 20 and len(para.split()) > 5:
+                # It's a reasonable paragraph
+                if not para.endswith('.'):
+                    para += '.'
+                unique_items.append(para)
+                if len(unique_items) >= 30:  # Cap the number of fallback items
+                    break
+    
+    # Final warning if we still don't have items
+    if not unique_items:
+        logger.error("CRITICAL: Failed to extract any checklist items, even with fallback!")
     
     return unique_items
 

@@ -727,12 +727,43 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
 
     # Decide whether AI analysis is available based on API key
     use_ai = OPENAI_API_KEY is not None and OPENAI_API_KEY.strip() != ""
-
+    
+    # Track API status for proper error handling
+    ai_analysis_available = False
+    
+    # Log current system state
+    logger.info(f'Processing {len(items)} checklist items')
+    
     if use_ai:
-        logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
+        logger.info(f'OpenAI API key is configured. Advanced AI analysis is available.')
         logger.info(f'Using {max_attempts} verification attempts per item')
+        ai_analysis_available = True
+        
+        # Validate API connection with test call
+        if max_attempts > 0:  # Only if API analysis is requested by user setting
+            try:
+                # Simple test call with minimal tokens
+                test_prompt = "Return valid JSON with key 'status' and value 'ok'"
+                test_response = api_call_with_backoff(test_prompt)
+                
+                if 'error' in test_response:
+                    logger.warning(f"API test call failed: {test_response.get('error')}")
+                    logger.warning("Will use fallback analysis methods for all items")
+                    ai_analysis_available = False
+                else:
+                    logger.info("API connection verified successfully")
+            except Exception as e:
+                logger.exception(f"Error verifying API connection: {str(e)}")
+                logger.warning("Will use fallback analysis methods for all items")
+                ai_analysis_available = False
     else:
         logger.warning(f'OpenAI API key is not set or is invalid. Using fallback analysis methods.')
+        ai_analysis_available = False
+    
+    # If API is not available, use fallback for all items
+    if not ai_analysis_available or max_attempts == 0:
+        logger.info("Using pattern matching fallback for all items")
+        
         # Use fallback analysis for all items
         for item in items:
             if item in processed_items:
