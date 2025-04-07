@@ -9,21 +9,29 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (uploadForm) {
         uploadForm.addEventListener('submit', function(e) {
-            // Check if files are selected
-            const checklistFile = document.getElementById('checklist').files[0];
+            // Check if checklist text and outline file are provided
+            const checklistText = document.getElementById('checklist').value.trim();
             const outlineFile = document.getElementById('outline').files[0];
             
-            if (!checklistFile || !outlineFile) {
+            if (!checklistText || !outlineFile) {
                 e.preventDefault();
-                alert('Please select both checklist and course outline files.');
+                alert('Please provide both checklist items and course outline file.');
                 return;
             }
             
-            // Check file types
+            // Check outline file type
             const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-            if (!allowedTypes.includes(checklistFile.type) || !allowedTypes.includes(outlineFile.type)) {
+            if (!allowedTypes.includes(outlineFile.type)) {
                 e.preventDefault();
-                alert('Only PDF and DOCX files are allowed.');
+                alert('Only PDF and DOCX files are allowed for course outline.');
+                return;
+            }
+            
+            // Validate checklist format
+            const lines = checklistText.split('\n').filter(line => line.trim());
+            if (!lines.some(line => line.match(/^(\d+[\.\)]|\-|\*|\+|•)\s/))) {
+                e.preventDefault();
+                alert('Please ensure each checklist item starts with a number (1.) or bullet point (-)');
                 return;
             }
             

@@ -68,22 +68,24 @@ def identify_grade_table_items(checklist_items):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'checklist' not in request.files or 'outline' not in request.files:
-            return jsonify({'error': 'Both files are required'}), 400
+        if 'checklist' not in request.form or 'outline' not in request.files:
+            return jsonify({'error': 'Both checklist and outline are required'}), 400
 
-        checklist = request.files['checklist']
+        checklist_text = request.form['checklist']
         outline = request.files['outline']
 
-        if checklist.filename == '' or outline.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+        if not checklist_text.strip() or outline.filename == '':
+            return jsonify({'error': 'Both checklist and outline file are required'}), 400
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-        checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(checklist.filename))
         outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
 
+        # Save checklist text to a temporary file
+        checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
         try:
-            checklist.save(checklist_path)
+            with open(checklist_path, 'w', encoding='utf-8') as f:
+                f.write(checklist_text)
+            
             outline.save(outline_path)
 
             # Get additional context if provided
