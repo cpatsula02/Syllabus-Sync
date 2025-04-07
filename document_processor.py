@@ -377,7 +377,20 @@ def check_special_entity_patterns(item, document, additional_context=""):
     """
     Enhanced pattern matching with context awareness and table recognition.
     Supports various document formats and considers additional context.
+    Ensures each item is thoroughly scanned and reported only once.
     """
+    # Track if this item has been processed to avoid duplicates
+    item_hash = hash(item.lower().strip())
+    if hasattr(check_special_entity_patterns, '_processed_items') and \
+       item_hash in check_special_entity_patterns._processed_items:
+        return False
+    
+    # Initialize processed items set if not exists
+    if not hasattr(check_special_entity_patterns, '_processed_items'):
+        check_special_entity_patterns._processed_items = set()
+    
+    # Add this item to processed set
+    check_special_entity_patterns._processed_items.add(item_hash)
     # Check for instructor email requirement
     if 'instructor' in item and 'email' in item:
         # Look for email patterns in the document

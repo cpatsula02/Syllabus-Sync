@@ -110,13 +110,19 @@ def index():
             grade_table_items = identify_grade_table_items(checklist_items)
             logger.info(f"Identified {len(grade_table_items)} grade table related items")
             
-            # Format results for template with enhanced data
+            # Format results for template with enhanced data and duplicate prevention
             results = []
             present_count = 0
             missing_count = 0
             missing_items = []
+            processed_items = set()  # Track processed items to prevent duplicates
 
             for item in checklist_items:
+                # Skip if this item has already been processed
+                if item in processed_items:
+                    continue
+                    
+                processed_items.add(item)  # Mark as processed
                 result = analysis_results.get(item, {})
                 is_present = result.get("present", False)
                 is_grade_item = item in grade_table_items
