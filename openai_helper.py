@@ -22,8 +22,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # API Usage Management
-MAX_RETRIES = 3
-RETRY_DELAY_BASE = 2  # Base delay in seconds for exponential backoff
+MAX_RETRIES = 2  # Reduced retries to avoid timeouts
+RETRY_DELAY_BASE = 1.5  # Shorter base for exponential backoff (in seconds)
 API_CALL_HISTORY = []  # Tracks API call timestamps
 MAX_TOKENS_PER_REQUEST = 6000  # Safety limit for token usage per request
 MAX_TOKENS_PER_SESSION = 80000  # Estimated threshold for one session
@@ -121,22 +121,29 @@ def api_call_with_backoff(prompt: str) -> Dict:
     one_minute_ago = current_time - timedelta(minutes=1)
     API_CALL_HISTORY[:] = [t for t in API_CALL_HISTORY if t > one_minute_ago]
     
-    # If we've made more than 10 calls in the last minute, add a small delay
-    if len(API_CALL_HISTORY) > 10:
-        delay = random.uniform(0.5, 2.0)
+    # If we've made more than 5 calls in the last minute, add a small delay but keep it minimal
+    if len(API_CALL_HISTORY) > 5:
+        delay = 0.5  # Fixed shorter delay to prevent timeouts
         logger.info(f"Rate limiting - adding {delay:.2f}s delay")
         time.sleep(delay)
     
-    # Try the API call with exponential backoff
+    # Try the API call with short timeout to prevent worker hanging
     for attempt in range(MAX_RETRIES):
         try:
-            response = openai.chat.completions.create(
+            # Create a custom client with a short timeout
+            client = openai.OpenAI(
+                api_key=OPENAI_API_KEY,
+                timeout=10.0  # Set a reasonable timeout
+            )
+            
+            response = client.chat.completions.create(
                 model=MODEL,
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,  # Lower temperature for more consistent analysis
+                max_tokens=400,   # Limit token output to speed up response
             )
             
             # Estimate response tokens

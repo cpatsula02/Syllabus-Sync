@@ -395,8 +395,16 @@ def download_pdf():
                 if explanation:
                     pdf.set_text_color(100, 100, 100)  # Gray
                     pdf.set_font('DejaVu', 'I', 9)  # Italic, smaller font
-                    pdf.multi_cell(180, 5, f"   Rationale: {explanation}", 0, 'L')
+                    
+                    # Calculate height needed for explanation text
+                    explanation_text = f"   Rationale: {explanation}"
+                    explanation_length = len(explanation_text)
+                    explanation_lines = max(1, explanation_length / 75)  # Estimate 75 chars per line at font size 9
+                    explanation_height = max(5, explanation_lines * 4)  # At least 5mm height, 4mm per line
+                    
+                    pdf.multi_cell(180, explanation_height, explanation_text, 0, 'L')
                     pdf.set_font('DejaVu', '', 10)  # Reset font
+                    pdf.ln(1)  # Add a small space after the rationale
                 
                 if is_grade_item:
                     pdf.set_text_color(0, 0, 0)  # Reset to black
@@ -422,15 +430,35 @@ def download_pdf():
             is_present = result.get('present', False)
             is_grade_item = item in analysis_data['grade_table_items']
             
-            # Format cell with adequate height based on text length
+            # Improved cell height calculation for checklist items with better text wrapping
             y_position = pdf.get_y()
             
-            # Calculate required height for the item text (estimate 55 chars per line at font size 10)
-            # This ensures multi-cell has enough height to display all text without overlap
+            # Calculate required height for the item text with more accurate estimation
+            # At font size 10, with proper character width estimation
             font_size = 10
-            chars_per_line = 55
-            num_lines = max(1, len(item) / chars_per_line)
-            row_height = max(8, num_lines * (font_size * 0.35))  # Minimum 8mm height, otherwise calculate based on content
+            char_width_mm = 1.8  # Estimated average character width in mm
+            line_width_mm = 140  # Width of the cell in mm
+            chars_per_line = int(line_width_mm / char_width_mm)
+            
+            # Calculate number of lines needed based on word boundaries rather than just character count
+            words = item.split()
+            lines = 1
+            current_line_length = 0
+            
+            for word in words:
+                if current_line_length + len(word) + 1 <= chars_per_line:  # +1 for space
+                    current_line_length += len(word) + 1
+                else:
+                    lines += 1
+                    current_line_length = len(word)
+            
+            # Add extra padding for longer items to prevent overlap
+            line_height_mm = font_size * 0.5  # Line height in mm (increased from 0.35)
+            row_height = max(8, lines * line_height_mm)  # Minimum 8mm height
+            
+            # If this is a very long item, add some extra padding
+            if lines > 3:
+                row_height += 2  # Add 2mm extra padding for long items
             
             # Highlight grade table items with slightly different formatting
             if is_grade_item:
@@ -438,8 +466,31 @@ def download_pdf():
             else:
                 pdf.set_font('DejaVu', '', font_size)
             
-            # Draw the checklist item cell with calculated height    
-            pdf.multi_cell(140, row_height, item, 1, 'L')
+            # Create a temporary PDF object to measure the actual height of the text
+            pdf_temp = FPDF(orientation='P', unit='mm', format='A4')
+            pdf_temp.add_page()
+            pdf_temp.add_font('DejaVu', '', './static/fonts/DejaVuSansCondensed.ttf', uni=True)
+            pdf_temp.add_font('DejaVu', 'B', './static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+            
+            if is_grade_item:
+                pdf_temp.set_font('DejaVu', 'B', font_size)
+            else:
+                pdf_temp.set_font('DejaVu', '', font_size)
+            
+            # Store initial Y position
+            start_y = pdf_temp.get_y()
+            
+            # Draw the text in the temporary PDF to measure actual height
+            pdf_temp.multi_cell(140, row_height/lines, item, 0, 'L')
+            
+            # Get the actual height used
+            actual_height = pdf_temp.get_y() - start_y
+            
+            # Use the actual height from temp PDF, with a small buffer
+            final_row_height = actual_height + 2  # 2mm buffer
+            
+            # Draw the checklist item cell with calculated height
+            pdf.multi_cell(140, final_row_height, item, 1, 'L')
             
             # Position cursor for the status cell
             pdf.set_xy(pdf.get_x() + 140, y_position)
@@ -472,7 +523,12 @@ def download_pdf():
                     confidence = result.get('confidence', None)
                     confidence_str = f" (Confidence: {int(confidence * 100)}%)" if confidence else ""
                     
-                    pdf.multi_cell(190, 5, f"Match via {method}{confidence_str}: {evidence}", 0, 'L')
+                    # Calculate height needed for evidence text to prevent overlap
+                    evidence_length = len(f"Match via {method}{confidence_str}: {evidence}")
+                    evidence_lines = max(1, evidence_length / 80)  # Estimate 80 chars per line at font size 8
+                    evidence_height = max(5, evidence_lines * 4)  # At least 5mm height, 4mm per line
+                    
+                    pdf.multi_cell(190, evidence_height, f"Match via {method}{confidence_str}: {evidence}", 0, 'L')
                     pdf.set_text_color(0, 0, 0)  # Reset to black
             
             # Add space between items

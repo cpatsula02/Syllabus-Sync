@@ -9,6 +9,9 @@ from typing import List, Dict, Tuple, Any, Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize global variables
+_processed_pattern_items = set()
+
 def extract_text_from_pdf(file_path: str) -> str:
     """Extract text content from a PDF file."""
     text = ""
@@ -429,7 +432,9 @@ def check_special_entity_patterns(item, document, additional_context=""):
     """
     # Initialize global set to track processed items if it doesn't exist yet
     global _processed_pattern_items
-    if not globals().get('_processed_pattern_items'):
+    
+    # Ensure the global variable exists before using it
+    if '_processed_pattern_items' not in globals():
         _processed_pattern_items = set()
     
     # Track if this item has been processed to avoid duplicates
