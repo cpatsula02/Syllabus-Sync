@@ -469,21 +469,88 @@ def find_best_keyword_section(document_text, keywords):
 
 def check_special_entity_patterns(item, document, additional_context=""):
     """
-    Enhanced pattern matching with context awareness and table recognition.
-    Supports various document formats and considers additional context.
-    Ensures each item is thoroughly scanned and reported only once.
+    Enhanced pattern matching with improved semantic understanding and context awareness.
+    Uses multiple strategies to detect requirements that may be expressed in different ways.
     """
-    # Initialize global set to track processed items if it doesn't exist yet
-    global _processed_pattern_items
+    document_lower = document.lower()
+    item_lower = item.lower()
 
-    # Ensure the global variable exists before using it
-    if '_processed_pattern_items' not in globals():
-        _processed_pattern_items = set()
+    # Look for semantic equivalents and related concepts
+    if 'textbook' in item_lower:
+        # Check for various ways textbooks might be referenced
+        patterns = [
+            r'(?:required|recommended|course|optional)\s+(?:text|textbook|reading|material)',
+            r'(?:text|book|reading)\s+(?:list|requirement|material)',
+            r'course\s+material',
+            r'reference\s+(?:text|material|book)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document_lower):
+                return True
 
-    # Track if this item has been processed to avoid duplicates
-    item_hash = hash(item.lower().strip())
-    if item_hash in _processed_pattern_items:
-        return False
+    if 'academic integrity' in item_lower:
+        # Check for various integrity-related terms
+        patterns = [
+            r'(?:academic|student)\s+(?:integrity|conduct|honesty|misconduct)',
+            r'(?:plagiarism|cheating|academic\s+offense)',
+            r'intellectual\s+honesty',
+            r'student\s+code\s+of\s+conduct'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document_lower):
+                return True
+
+    if 'learning outcome' in item_lower or 'objective' in item_lower:
+        # Check for various ways learning outcomes might be expressed
+        patterns = [
+            r'(?:course|learning)\s+(?:outcome|objective|goal)',
+            r'student\s+will\s+(?:learn|understand|demonstrate|be\s+able\s+to)',
+            r'by\s+the\s+end\s+of\s+this\s+course',
+            r'upon\s+completion'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document_lower):
+                return True
+
+    if 'instructor' in item_lower and ('contact' in item_lower or 'email' in item_lower):
+        # Look for various contact information patterns
+        patterns = [
+            r'\b[\w\.-]+@(?:ucalgary\.ca|gmail\.com)\b',
+            r'(?:instructor|professor|faculty)\s+(?:contact|email|office)',
+            r'office\s+(?:hour|location)',
+            r'(?:contact|reach)\s+(?:instructor|professor|teacher)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document_lower):
+                return True
+
+    if 'grade' in item_lower or 'assessment' in item_lower:
+        # Check for various grade-related patterns
+        patterns = [
+            r'(?:grade|mark|assessment)\s+(?:distribution|breakdown|weight)',
+            r'(?:evaluation|grading)\s+(?:criteria|scheme|system)',
+            r'\d{1,3}\s*%',
+            r'(?:assignment|quiz|exam|project)\s+(?:worth|weight)'
+        ]
+        for pattern in patterns:
+            if re.search(pattern, document_lower):
+                return True
+
+    # Keep the original email validation logic
+    if 'instructor' in item_lower and 'email' in item_lower:
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        instructor_pattern = r'(instructor|professor|teacher|faculty)(.{0,30})(email|contact|reach)'
+        
+        instructor_matches = re.finditer(instructor_pattern, document_lower, re.IGNORECASE)
+        for match in instructor_matches:
+            context_start = max(0, match.start() - 100)
+            context_end = min(len(document_lower), match.end() + 100)
+            context = document_lower[context_start:context_end]
+            
+            if re.search(email_pattern, context):
+                return True
+
+    return False
 
     # Add this item to processed set
     _processed_pattern_items.add(item_hash)
