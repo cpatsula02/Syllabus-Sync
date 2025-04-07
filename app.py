@@ -564,15 +564,89 @@ def download_pdf():
             # Add space between items
             pdf.ln(2)
         
-        # Create a temporary file to save the PDF
-        import tempfile
-        import os
+        # Create one-page summary
+        pdf = FPDF(orientation='P', unit='mm', format='A4')
+        pdf.add_page()
         
+        # Add fonts
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        font_path = os.path.join(base_path, 'static', 'fonts')
+        pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
+        pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
+        
+        # Title
+        pdf.set_font('DejaVu', 'B', 16)
+        pdf.cell(190, 10, 'Syllabus Sync Analysis Summary', 0, 1, 'C')
+        
+        # Overall Stats
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.ln(5)
+        pdf.cell(190, 8, 'Overall Compliance', 0, 1, 'L')
+        pdf.set_font('DejaVu', '', 10)
+        
+        total_items = len(analysis_data['checklist_items'])
+        missing_items = len(analysis_data['missing_items'])
+        present_items = total_items - missing_items
+        compliance_rate = (present_items / total_items) * 100
+        
+        pdf.cell(95, 8, f'Total Items: {total_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Compliance Rate: {compliance_rate:.1f}%', 1, 1, 'L')
+        pdf.cell(95, 8, f'Items Present: {present_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Items Missing: {missing_items}', 1, 1, 'L')
+        
+        # Critical Missing Items
+        if missing_items > 0:
+            pdf.ln(5)
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(190, 8, 'Critical Missing Items', 0, 1, 'L')
+            pdf.set_font('DejaVu', '', 10)
+            
+            # Focus on grade-related and policy-related missing items
+            critical_items = [item for item in analysis_data['missing_items'] 
+                            if any(term in item.lower() for term in ['grade', 'policy', 'exam', 'assessment'])]
+            
+            for item in critical_items[:5]:  # Show top 5 critical items
+                pdf.multi_cell(190, 6, f"• {item}", 0, 'L')
+        
+        # Major Sections Analysis
+        pdf.ln(5)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 8, 'Major Sections Analysis', 0, 1, 'L')
+        pdf.set_font('DejaVu', '', 10)
+        
+        sections = {
+            'Grade Distribution': any('grade' in item.lower() for item in analysis_data['checklist_items']),
+            'Course Policies': any('policy' in item.lower() for item in analysis_data['checklist_items']),
+            'Learning Outcomes': any('outcome' in item.lower() for item in analysis_data['checklist_items']),
+            'Contact Information': any('contact' in item.lower() for item in analysis_data['checklist_items'])
+        }
+        
+        for section, present in sections.items():
+            status = 'Complete' if present else 'Missing'
+            color = 0 if present else 255
+            pdf.set_text_color(color, 0 if present else 0, 0)
+            pdf.cell(190, 8, f"{section}: {status}", 1, 1, 'L')
+        
+        pdf.set_text_color(0, 0, 0)
+        
+        # Recommendations
+        if missing_items > 0:
+            pdf.ln(5)
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(190, 8, 'Key Recommendations', 0, 1, 'L')
+            pdf.set_font('DejaVu', '', 10)
+            pdf.multi_cell(190, 6, "1. Review and add all missing grade distribution components\n" +
+                         "2. Ensure all course policies are clearly stated\n" +
+                         "3. Add specific due dates and assessment details\n" +
+                         "4. Include complete instructor contact information", 0, 'L')
+        
+        # Create temporary file and save
+        import tempfile
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         temp_filename = temp_file.name
         temp_file.close()
         
-        # Save PDF to the temporary file
+        # Save PDF to temporary file
         pdf.output(temp_filename)
         
         # Read the PDF file into a BytesIO object
