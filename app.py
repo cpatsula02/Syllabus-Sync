@@ -148,21 +148,17 @@ def index():
             grade_table_items = identify_grade_table_items(checklist_items)
             logger.info(f"Identified {len(grade_table_items)} grade table related items")
 
-            # Format results for template with enhanced data and strict duplicate prevention
+            # Format results for template with enhanced data and duplicate prevention
             results = []
             present_count = 0
             missing_count = 0
             missing_items = []
             processed_items = set()  # Track processed items to prevent duplicates
-            seen_normalized_items = set()  # Track normalized item text to catch near-duplicates
 
             for item in checklist_items:
                 # Skip if this item has already been processed
-                # Normalize item text for comparison (remove extra spaces, lowercase)
-                normalized_item = ' '.join(item.lower().split())
-                if normalized_item in seen_normalized_items:
+                if item in processed_items:
                     continue
-                seen_normalized_items.add(normalized_item)
 
                 processed_items.add(item)  # Mark as processed
                 result = analysis_results.get(item, {})

@@ -143,26 +143,30 @@ def extract_checklist_items(text: str) -> List[str]:
                     matches = re.findall(pattern, line)
                     items.extend([match.strip() for match in matches if match.strip()])
 
-    # Process items and ensure uniqueness while preserving order
-    seen_items = set()
+    # Process items and ensure uniqueness
     unique_items = []
     excluded_count = 0
-
-    # First identify if item is numbered or bulleted
+    seen_items = set()
     for item in items:
+        # Clean up the item
         item = item.strip()
+        if not item:
+            continue
 
-        # Check if it starts with a number or bullet
-        is_numbered = bool(re.match(r'^\d+[\.\)]', item))
-        is_bulleted = bool(re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s', item))
+        # Add a period if needed
+        if not any(item.endswith(p) for p in ['.', '?', '!']):
+            item = item + '.'
 
-        # Only process if it's numbered or bulleted
-        if (is_numbered or is_bulleted) and item.lower() not in seen_items:
-            seen_items.add(item.lower())
-            unique_items.append(item)
-        else:
+        # Convert to lowercase for comparison
+        item_lower = item.lower().strip()
+
+        # Skip if we've seen this item before (case-insensitive comparison)
+        if item_lower in seen_items:
             excluded_count += 1
+            continue
 
+        seen_items.add(item_lower)
+        unique_items.append(item)
 
     logger.info(f"Extracted {len(unique_items)} checklist items (excluded {excluded_count} irrelevant items)")
 
