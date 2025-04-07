@@ -54,12 +54,19 @@ def extract_checklist_items(text: str) -> List[str]:
     """
     # Define patterns for numbered or bulleted items
     patterns = [
-        r'^\s*\d+\.\s*(.*?)(?=\n\s*\d+\.|\n\s*$|$)',  # Numbered items (1. Item)
-        r'^\s*[a-zA-Z]\.\s*(.*?)(?=\n\s*[a-zA-Z]\.|\n\s*$|$)',  # Letter items (a. Item)
-        r'^\s*•\s*(.*?)(?=\n\s*•|\n\s*$|$)',  # Bullet items (• Item)
-        r'^\s*\*\s*(.*?)(?=\n\s*\*|\n\s*$|$)',  # Asterisk items (* Item)
-        r'^\s*-\s*(.*?)(?=\n\s*-|\n\s*$|$)',  # Dash items (- Item)
-        r'^\s*o\s*(.*?)(?=\n\s*o|\n\s*$|$)',  # Circle items (o Item)
+        # Numbered items with various formats
+        r'^\s*\d+[\.\)]\s*(.*?)(?=\n\s*\d+[\.\)]|\n\s*$|$)',  # 1. or 1) Item
+        r'^\s*[a-zA-Z][\.\)]\s*(.*?)(?=\n\s*[a-zA-Z][\.\)]|\n\s*$|$)',  # a. or a) Item
+        r'^\s*[IVXLCDM]+[\.\)]\s*(.*?)(?=\n\s*[IVXLCDM]+[\.\)]|\n\s*$|$)',  # Roman numerals
+        
+        # Bullet items with various symbols
+        r'^\s*[•⚫⚪○●◆◇■□▪▫]\s*(.*?)(?=\n\s*[•⚫⚪○●◆◇■□▪▫]|\n\s*$|$)',  # Various bullet symbols
+        r'^\s*[\*\-\+]\s*(.*?)(?=\n\s*[\*\-\+]|\n\s*$|$)',  # *, -, + items
+        r'^\s*(?:o|⚬)\s*(.*?)(?=\n\s*(?:o|⚬)|\n\s*$|$)',  # Circle bullets
+        
+        # Indented items that might be part of a list
+        r'^\s{2,}([A-Z][^.\n]+\.)(?=\n|$)',  # Indented capitalized sentences
+        r'^\s{2,}([^\n]+?)(?=\n(?:\s{2,}[^\n]+|\s*$)|$)'  # General indented items
     ]
     
     items = []
