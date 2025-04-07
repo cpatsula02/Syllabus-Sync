@@ -143,9 +143,10 @@ def extract_checklist_items(text: str) -> List[str]:
                     matches = re.findall(pattern, line)
                     items.extend([match.strip() for match in matches if match.strip()])
 
-    # Process and clean up items, tracking used items to prevent duplicates
+    # Process items and ensure uniqueness
+    unique_items = []
     excluded_count = 0
-
+    seen_items = set()
     for item in items:
         # Clean up the item
         item = item.strip()
@@ -156,22 +157,16 @@ def extract_checklist_items(text: str) -> List[str]:
         if not any(item.endswith(p) for p in ['.', '?', '!']):
             item = item + '.'
 
-        # Convert to lowercase for comparison to prevent case-based duplicates
-        item_lower = item.lower()
+        # Convert to lowercase for comparison
+        item_lower = item.lower().strip()
 
-        # Only include items that meet our criteria and haven't been seen before
-        if (
-            len(item) > 5  # Minimum length
-            and item_lower not in seen_items
-            and not item.startswith('Page')  # Skip page numbers
-            and not re.match(r'^[\d\s]+$', item)  # Skip items with only numbers
-            and not all(c.isdigit() or c.isspace() or c in ',.()' for c in item)  # Skip date/numbers
-            and len(item.split()) >= 2  # Must have at least 2 words
-        ):
-            seen_items.add(item_lower)
-            unique_items.append(item)
-        else:
+        # Skip if we've seen this item before (case-insensitive comparison)
+        if item_lower in seen_items:
             excluded_count += 1
+            continue
+
+        seen_items.add(item_lower)
+        unique_items.append(item)
 
     logger.info(f"Extracted {len(unique_items)} checklist items (excluded {excluded_count} irrelevant items)")
 
