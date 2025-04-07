@@ -512,7 +512,8 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
             raise ValueError("API response missing required fields")
             
         # Post-processing validation
-        evidence = result.get("evidence", "").lower()
+        evidence_text = result.get("evidence", "")
+        evidence = evidence_text.lower() if evidence_text is not None else ""
         
         # Additional validation for grade items
         if is_grade_item and result.get("present", False):
@@ -520,6 +521,10 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
             has_percentages = '%' in evidence
             has_weights = 'weight' in evidence or any(re.search(r'\b\d+\s*%', evidence) for _ in range(1))
             
+            # Ensure item_lower is defined
+            if 'item_lower' not in locals():
+                item_lower = item.lower() if item is not None else ""
+                
             if not (has_percentages or has_weights) and ('grade' in item_lower or 'distribution' in item_lower or 'weight' in item_lower):
                 # Lower confidence if percentages/weights are missing
                 result["confidence"] = max(0.2, result["confidence"] - 0.4)
@@ -542,6 +547,10 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
                 
         # Additional validation for instructor items
         elif is_instructor_item and result.get("present", False):
+            # Ensure item_lower is defined
+            if 'item_lower' not in locals():
+                item_lower = item.lower() if item is not None else ""
+                
             if 'email' in item_lower and '@ucalgary.ca' not in evidence:
                 # Lower confidence if ucalgary.ca email is missing
                 result["confidence"] = max(0.2, result["confidence"] - 0.5)
@@ -554,6 +563,10 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
 
         # Highlight matching terms in the evidence
         if result.get("present", False) and result.get("evidence", ""):
+            # Make sure item_lower exists before extracting key terms
+            if 'item_lower' not in locals():
+                item_lower = item.lower() if item is not None else ""
+                
             # Extract key terms from the checklist item
             key_terms = [word.lower() for word in re.findall(r'\b\w{4,}\b', item_lower)]
             
