@@ -143,30 +143,38 @@ def extract_checklist_items(text: str) -> List[str]:
                     matches = re.findall(pattern, line)
                     items.extend([match.strip() for match in matches if match.strip()])
 
-    # Process items and ensure uniqueness
+    # Process items and ensure uniqueness while preserving order
+    seen_items = set()
     unique_items = []
     excluded_count = 0
-    seen_items = set()
+
+    # First identify if item is numbered or bulleted
     for item in items:
-        # Clean up the item
         item = item.strip()
         if not item:
             continue
 
-        # Add a period if needed
-        if not any(item.endswith(p) for p in ['.', '?', '!']):
-            item = item + '.'
-
-        # Convert to lowercase for comparison
-        item_lower = item.lower().strip()
-
-        # Skip if we've seen this item before (case-insensitive comparison)
-        if item_lower in seen_items:
+        # Check if it starts with a number or bullet
+        is_numbered = bool(re.match(r'^\d+[\.\)]', item))
+        is_bulleted = bool(re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s', item))
+        
+        # Only process if it's numbered or bulleted
+        if (is_numbered or is_bulleted):
+            # Clean up and normalize item text
+            clean_item = item.strip()
+            if not any(clean_item.endswith(p) for p in ['.', '?', '!']):
+                clean_item = clean_item + '.'
+                
+            # Use normalized version for duplicate check
+            item_normalized = ' '.join(clean_item.lower().split())
+            
+            if item_normalized not in seen_items:
+                seen_items.add(item_normalized)
+                unique_items.append(clean_item)
+            else:
+                excluded_count += 1
+        else:
             excluded_count += 1
-            continue
-
-        seen_items.add(item_lower)
-        unique_items.append(item)
 
     logger.info(f"Extracted {len(unique_items)} checklist items (excluded {excluded_count} irrelevant items)")
 
