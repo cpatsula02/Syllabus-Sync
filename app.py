@@ -572,6 +572,7 @@ def download_pdf():
 
         # Create PDF with just checklist items status
         pdf = FPDF(orientation='P', unit='mm', format='A4')
+        pdf.set_auto_page_break(auto=True, margin=15)
         pdf.add_page()
 
         # Add fonts
@@ -580,14 +581,19 @@ def download_pdf():
         pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
         pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
 
+        # Set margins
+        pdf.set_left_margin(15)
+        pdf.set_right_margin(15)
+        pdf.set_top_margin(15)
+
         # Title
         pdf.set_font('DejaVu', 'B', 16)
-        pdf.cell(190, 10, 'Syllabus Sync Analysis Summary', 0, 1, 'C')
+        pdf.cell(180, 10, 'Syllabus Sync Analysis Summary', 0, 1, 'C')
         pdf.ln(5)
 
         # Header for items table
         pdf.set_font('DejaVu', 'B', 10)
-        pdf.cell(160, 8, 'Checklist Item', 1, 0, 'L')
+        pdf.cell(150, 8, 'Checklist Item', 1, 0, 'L')
         pdf.cell(30, 8, 'Status', 1, 1, 'C')
 
         # Remove duplicates while preserving order
@@ -603,24 +609,31 @@ def download_pdf():
         for item in unique_checklist_items:
             is_present = item not in analysis_data['missing_items']
 
-            # Calculate height needed for item text
+            # Calculate height needed for item text with more spacing
             item_length = len(item)
-            chars_per_line = 85
+            chars_per_line = 70  # Reduced chars per line for better readability
             lines_needed = max(1, item_length / chars_per_line)
-            row_height = max(7, lines_needed * 4.5)
+            row_height = max(8, lines_needed * 5)  # Increased minimum height and line spacing
+
+            # Add extra padding for multi-line items
+            if lines_needed > 1:
+                row_height += 2
 
             # Save position for status cell
             x_pos = pdf.get_x()
             y_pos = pdf.get_y()
 
-            # Print item
-            pdf.multi_cell(160, row_height, item, 1, 'L')
+            # Print item with padding
+            pdf.multi_cell(150, row_height, item.strip(), 1, 'L')
 
             # Print status
-            pdf.set_xy(x_pos + 160, y_pos)
+            pdf.set_xy(x_pos + 150, y_pos)
             pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
             pdf.cell(30, row_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)
+
+            # Add small spacing between rows
+            pdf.ln(1)
 
             # Check for new page
             if pdf.get_y() > 250:
