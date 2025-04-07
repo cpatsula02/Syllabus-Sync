@@ -75,7 +75,7 @@
         <div class="card-body">
             <div class="missing-items-box p-3 border border-danger rounded">
                 <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
-                
+
                 <ul class="list-unstyled">
                     {% for item in missing_items %}
                         <li class="missing-item-entry {% if item in grade_table_items %}grade-item{% endif %} mb-2">
@@ -97,7 +97,6 @@
         <div class="card-body p-0">
             <div class="list-group list-group-flush" id="results-content">
             {% for result in results %}
-                {% if not loop.changed(result.item) %}  {# Only show each item once #}
                 <div class="list-group-item {% if result.present %}list-group-item-success{% else %}list-group-item-danger{% endif %} {% if result.is_grade_item %}border-warning border-2{% endif %}">
                     <div class="d-flex justify-content-between align-items-start">
                         <h5 class="mb-2">
@@ -114,9 +113,9 @@
                             {% endif %}
                         </span>
                     </div>
-                    
+
                     <p class="mb-2"><strong>Analysis:</strong> {{ result.explanation }}</p>
-                    
+
                     <!-- Detection Method Information -->
                     <p class="mb-2 detection-method">
                         <strong>Detection Method:</strong> 
@@ -125,7 +124,7 @@
                         <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
                         {% endif %}
                     </p>
-                    
+
                     {% if result.present and result.evidence %}
                     <div class="mt-2">
                         <div class="d-flex align-items-center mb-1">
@@ -209,18 +208,18 @@ function loadMatchDetails(button) {
     const item = button.getAttribute('data-item');
     const evidenceBoxId = button.closest('.list-group-item').querySelector('.evidence-box').id;
     const evidenceBox = document.getElementById(evidenceBoxId);
-    
+
     // Toggle visibility
     if (evidenceBox.style.display === 'none' || evidenceBox.style.display === '') {
         evidenceBox.style.display = 'block';
-        
+
         // Fetch the matching details
         fetch(`/get-match-details?item=${encodeURIComponent(item)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.found) {
                     evidenceBox.innerHTML = data.excerpt;
-                    
+
                     // Add special styling for grade items
                     if (data.is_grade_item) {
                         evidenceBox.style.borderLeft = '4px solid #fd7e14'; // Orange for grade items
