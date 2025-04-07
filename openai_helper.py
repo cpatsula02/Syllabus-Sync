@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 # Configure OpenAI with API key
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-openai = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
 # do not change this unless explicitly requested by the user
@@ -130,12 +130,7 @@ def api_call_with_backoff(prompt: str) -> Dict:
     # Try the API call with short timeout to prevent worker hanging
     for attempt in range(MAX_RETRIES):
         try:
-            # Create a custom client with a short timeout
-            client = openai.OpenAI(
-                api_key=OPENAI_API_KEY,
-                timeout=10.0  # Set a reasonable timeout
-            )
-            
+            # Use global client with timeout
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=[
