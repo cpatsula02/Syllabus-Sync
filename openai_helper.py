@@ -692,7 +692,7 @@ def fallback_analyze_item(item: str, document_text: str, additional_context: str
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
     Process each checklist item using AI-powered semantic understanding.
-    If AI analysis fails, notify the user instead of using a fallback method.
+    If AI analysis fails, try a fallback method to ensure all items are analyzed.
 
     This function acts as a university academic reviewer, focusing on whether each requirement 
     described in the checklist items is meaningfully fulfilled in the course outline.
@@ -713,34 +713,42 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     results = {}
     total_api_calls = 0
     api_errors = 0
+    fallback_count = 0
+    
+    # Keep track of processed items to avoid duplicates
+    processed_items = set()
     
     # Reset token tracking at the start of a new session
     global CURRENT_SESSION_TOKENS
     CURRENT_SESSION_TOKENS = 0
 
     # Decide whether AI analysis is available based on API key
-    use_ai = OPENAI_API_KEY is not None
+    use_ai = OPENAI_API_KEY is not None and OPENAI_API_KEY.strip() != ""
 
     if use_ai:
         logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
         logger.info(f'Using {max_attempts} verification attempts per item')
     else:
-        logger.info(f'Cannot analyze items: OpenAI API key is not set')
-        # Return error for all items if API key is missing
+        logger.warning(f'OpenAI API key is not set or is invalid. Using fallback analysis methods.')
+        # Use fallback analysis for all items
         for item in items:
-            results[item] = {
-                'present': False,
-                'confidence': 0.0,
-                'explanation': "Error: OpenAI API key is not configured. Cannot perform analysis.",
-                'evidence': "",
-                'method': 'error',
-                'error': "Missing API key"
-            }
+            if item in processed_items:
+                continue
+                
+            processed_items.add(item)
+            results[item] = fallback_analyze_item(item, document_text, additional_context)
+            fallback_count += 1
+            
+        logger.info(f'Completed analysis of {len(processed_items)} items using fallback methods')
         return results
 
     # First pass: Classify and prioritize items
     prioritized_items = []
     for i, item in enumerate(items):
+        # Skip if already processed (handles potential duplicates)
+        if item in processed_items:
+            continue
+            
         item_priority = 1  # Default priority (lower is higher priority)
         
         # Identify high-priority items
@@ -762,20 +770,20 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     
     # Process items in priority order
     for _, i, item in prioritized_items:
+        # Skip if already processed (handles potential duplicates)
+        if item in processed_items:
+            continue
+            
+        processed_items.add(item)
+        
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
         # For remaining quota-based decisions
         if remaining_quota < 1000:  # Set a minimum threshold for remaining tokens
-            logger.warning(f"Token quota nearly exhausted. Skipping analysis for {item_id}")
-            results[item] = {
-                'present': False,
-                'confidence': 0.0,
-                'explanation': "Error: API token quota exhausted. Analysis could not be completed.",
-                'evidence': "",
-                'method': 'error',
-                'error': "Token quota exhausted"
-            }
+            logger.warning(f"Token quota nearly exhausted. Using fallback analysis for {item_id}")
+            results[item] = fallback_analyze_item(item, document_text, additional_context)
+            fallback_count += 1
             continue
         
         # Make multiple API attempts per item for verification (as specified by max_attempts)
@@ -786,6 +794,12 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             try:
                 logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{max_attempts})")
                 result = ai_analyze_item(item, document_text, additional_context)
+                
+                # Check if API returned an error that requires fallback
+                if result.get('error') and result.get('fallback_required', False):
+                    logger.warning(f"API error for {item_id}: {result.get('error')}")
+                    raise Exception(result.get('error'))
+                
                 total_api_calls += 1
                 api_success = True
                 
@@ -801,12 +815,12 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             except Exception as e:
                 api_errors += 1
                 logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
-                if "insufficient_quota" in str(e):
-                    logger.warning("API quota exceeded - cannot complete analysis")
+                if "insufficient_quota" in str(e) or remaining_quota < 1000:
+                    logger.warning("API quota exceeded - switching to fallback analysis")
                     remaining_quota = 0
                     break  # Stop trying if quota is exceeded
         
-        # Process verification results or report error
+        # Process verification results or use fallback
         if api_success and verification_results:
             # Use the most common result for present/not present
             present_votes = sum(1 for r in verification_results if r.get('present', False))
@@ -818,11 +832,19 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             if is_present:
                 # Use the result with highest confidence that says "present"
                 present_results = [r for r in verification_results if r.get('present', False)]
-                selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
+                if present_results:
+                    selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
+                else:
+                    # Fallback if votes calculation and filtering produced inconsistent results
+                    selected_result = verification_results[0]
             else:
                 # Use the result with highest confidence that says "not present"
                 absent_results = [r for r in verification_results if not r.get('present', False)]
-                selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
+                if absent_results:
+                    selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
+                else:
+                    # Fallback if votes calculation and filtering produced inconsistent results
+                    selected_result = verification_results[0]
             
             # Add verification metadata
             selected_result['verification_attempts'] = len(verification_results)
@@ -830,18 +852,25 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             
             results[item] = selected_result
         else:
-            # Report API errors
-            results[item] = {
-                'present': False,
-                'confidence': 0.0,
-                'explanation': f"Error: AI analysis failed after {max_attempts} attempts.",
-                'evidence': "",
-                'method': 'error',
-                'error': "API analysis failed"
-            }
+            # Use fallback analysis method instead of just reporting an error
+            logger.warning(f"Using fallback analysis for {item_id} after API failures")
+            results[item] = fallback_analyze_item(item, document_text, additional_context)
+            fallback_count += 1
+    
+    # Check if we've covered all items
+    all_items_set = set(items)
+    if len(processed_items) < len(all_items_set):
+        missing_items = all_items_set - processed_items
+        logger.warning(f"Found {len(missing_items)} unprocessed items. Processing with fallback method.")
+        
+        for item in missing_items:
+            results[item] = fallback_analyze_item(item, document_text, additional_context)
+            fallback_count += 1
     
     # Log final usage stats
     logger.info(f"Analysis complete. Total API calls made: {total_api_calls}")
+    logger.info(f"Fallback method used for {fallback_count} items")
     logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+    logger.info(f"Total items analyzed: {len(results)}/{len(items)}")
     
     return results

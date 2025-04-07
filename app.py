@@ -368,9 +368,21 @@ def download_pdf():
                 if is_grade_item:
                     pdf.set_text_color(200, 0, 0)  # Red for important missing items
                 
+                # Format the missing item text
                 pdf.multi_cell(190, 7, f"- {item}", 0, 'L')
                 
+                # Add rationale for why the item is missing
+                result = analysis_data['analysis_results'].get(item, {})
+                explanation = result.get('explanation', '')
+                if explanation:
+                    pdf.set_text_color(100, 100, 100)  # Gray
+                    pdf.set_font('DejaVu', 'I', 9)  # Italic, smaller font
+                    pdf.multi_cell(180, 5, f"   Rationale: {explanation}", 0, 'L')
+                    pdf.set_font('DejaVu', '', 10)  # Reset font
+                
                 if is_grade_item:
+                    pdf.set_text_color(0, 0, 0)  # Reset to black
+                else:
                     pdf.set_text_color(0, 0, 0)  # Reset to black
                     
             pdf.ln(5)
@@ -392,16 +404,26 @@ def download_pdf():
             is_present = result.get('present', False)
             is_grade_item = item in analysis_data['grade_table_items']
             
-            # Format cell
+            # Format cell with adequate height based on text length
             y_position = pdf.get_y()
+            
+            # Calculate required height for the item text (estimate 55 chars per line at font size 10)
+            # This ensures multi-cell has enough height to display all text without overlap
+            font_size = 10
+            chars_per_line = 55
+            num_lines = max(1, len(item) / chars_per_line)
+            row_height = max(8, num_lines * (font_size * 0.35))  # Minimum 8mm height, otherwise calculate based on content
             
             # Highlight grade table items with slightly different formatting
             if is_grade_item:
-                pdf.set_font('DejaVu', 'B', 10)
+                pdf.set_font('DejaVu', 'B', font_size)
             else:
-                pdf.set_font('DejaVu', '', 10)
-                
-            pdf.multi_cell(140, 8, item, 1, 'L')
+                pdf.set_font('DejaVu', '', font_size)
+            
+            # Draw the checklist item cell with calculated height    
+            pdf.multi_cell(140, row_height, item, 1, 'L')
+            
+            # Position cursor for the status cell
             pdf.set_xy(pdf.get_x() + 140, y_position)
             
             # Color-code status
@@ -410,17 +432,19 @@ def download_pdf():
             else:
                 pdf.set_text_color(200, 0, 0)  # Red
                 
-            pdf.cell(50, pdf.get_y() - y_position, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            # Match height of status cell to the row height of the item cell
+            status_height = pdf.get_y() - y_position
+            pdf.cell(50, status_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
             
-            # Include evidence if present (max 200 chars)
+            # Include evidence if present (max 300 chars)
             if is_present:
                 evidence = result.get('evidence', '')
                 if evidence:
                     # Strip HTML tags for clean PDF text
                     evidence = re.sub(r'<[^>]*>', '', evidence)
-                    if len(evidence) > 200:
-                        evidence = evidence[:197] + '...'
+                    if len(evidence) > 300:
+                        evidence = evidence[:297] + '...'
                     
                     pdf.set_font('DejaVu', '', 8)
                     pdf.set_text_color(100, 100, 100)  # Gray

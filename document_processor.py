@@ -51,6 +51,7 @@ def extract_checklist_items(text: str) -> List[str]:
     """
     Extract checklist items from the checklist document.
     Only extract numbered or bulleted items, excluding any other text.
+    Enhanced to be more flexible with various document formats.
     """
     # Define patterns for numbered or bulleted items
     patterns = [
@@ -65,7 +66,7 @@ def extract_checklist_items(text: str) -> List[str]:
         r'^\s*(?:o|⚬)\s*(.*?)(?=\n\s*(?:o|⚬)|\n\s*$|$)',  # Circle bullets
         
         # Indented items that might be part of a list
-        r'^\s{2,}([A-Z][^.\n]+\.)(?=\n|$)',  # Indented capitalized sentences
+        r'^\s{2,}([A-Z][^.\n]+\.?)(?=\n|$)',  # Indented capitalized sentences
         r'^\s{2,}([^\n]+?)(?=\n(?:\s{2,}[^\n]+|\s*$)|$)'  # General indented items
     ]
     
@@ -74,43 +75,80 @@ def extract_checklist_items(text: str) -> List[str]:
     
     # First pass: extract items based on patterns
     for pattern in patterns:
-        for line in lines:
-            line = line.strip()
+        for i in range(len(lines)):
+            line = lines[i].strip()
             matches = re.findall(pattern, line, re.MULTILINE)
             items.extend([match.strip() for match in matches if match.strip()])
     
-    # Second pass: if no items found with patterns, try parsing lines directly
-    if not items:
-        current_item = ""
-        for line in lines:
-            line = line.strip()
-            
-            # Check if line starts with a potential list marker
-            if re.match(r'^\s*(\d+\.|[a-zA-Z]\.|•|\*|-|o)\s+', line):
-                if current_item:
-                    items.append(current_item)
-                current_item = re.sub(r'^\s*(\d+\.|[a-zA-Z]\.|•|\*|-|o)\s+', '', line)
-            elif current_item and line:  # Continue previous item if it's not a new marker
-                current_item += " " + line
-        
-        # Add the last item if exists
-        if current_item:
-            items.append(current_item)
+    # Second pass: look for multi-line items and sequential numbers
+    current_item = ""
+    item_num = None
     
-    # Remove duplicate items and short/invalid entries
-    unique_items = []
+    for line in lines:
+        line = line.strip()
+        
+        # Check if line starts with a sequential number or letter
+        num_match = re.match(r'^\s*(\d+)[\.\)]', line)
+        letter_match = re.match(r'^\s*([a-zA-Z])[\.\)]', line)
+        bullet_match = re.match(r'^\s*([•⚫⚪○●◆◇■□▪▫\*\-\+o⚬])', line)
+        
+        if num_match:
+            # Check if this is a new item or continuing a list
+            new_num = int(num_match.group(1))
+            if current_item:
+                items.append(current_item)
+                current_item = ""
+            
+            item_num = new_num
+            current_item = re.sub(r'^\s*\d+[\.\)]\s*', '', line)
+        
+        elif letter_match or bullet_match:
+            # It's a new item with a letter or bullet
+            if current_item:
+                items.append(current_item)
+            current_item = re.sub(r'^\s*[a-zA-Z•⚫⚪○●◆◇■□▪▫\*\-\+o⚬][\.\)]*\s*', '', line)
+            item_num = None  # Reset numerical sequence
+        
+        elif line and current_item:
+            # This could be a continuation of the current item
+            # If it's indented, especially likely
+            if line.startswith('  ') or len(line) < 50:  # Short lines or indented ones
+                current_item += " " + line
+    
+    # Add the last item if it exists
+    if current_item:
+        items.append(current_item)
+    
+    # Process and clean up items
+    processed_items = []
     for item in items:
+        # Remove any trailing spaces or extra punctuation
+        item = item.strip()
+        if not item:
+            continue
+            
+        # Add a period if it doesn't end with one
+        if not any(item.endswith(p) for p in ['.', '?', '!']):
+            item = item + '.'
+            
+        processed_items.append(item)
+    
+    # Remove duplicate items and very short entries
+    unique_items = []
+    for item in processed_items:
         item = item.strip()
         if (
-            item and len(item) > 10  # Increase minimum length
+            item and len(item) > 5  # More permissive minimum length
             and item not in unique_items
             and not item.startswith('Page')  # Skip page numbers
             and not re.match(r'^[\d\s]+$', item)  # Skip items with only numbers
-            and item[0].isalpha()  # Must start with a letter
-            and item.endswith('.')  # Must end with a period
-            and len(item.split()) > 2  # Must have at least 3 words
+            and not all(c.isdigit() or c.isspace() or c in ',.()' for c in item)  # Skip date/numbers
+            and len(item.split()) >= 2  # Must have at least 2 words
         ):
             unique_items.append(item)
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Extracted {len(unique_items)} checklist items")
     
     return unique_items
 
@@ -389,18 +427,20 @@ def check_special_entity_patterns(item, document, additional_context=""):
     Supports various document formats and considers additional context.
     Ensures each item is thoroughly scanned and reported only once.
     """
-    # Track if this item has been processed to avoid duplicates
-    item_hash = hash(item.lower().strip())
-    if hasattr(check_special_entity_patterns, '_processed_items') and \
-       item_hash in check_special_entity_patterns._processed_items:
-        return False
+    # Use a global variable instead of a function attribute to track processed items
+    global _processed_pattern_items
     
     # Initialize processed items set if not exists
-    if not hasattr(check_special_entity_patterns, '_processed_items'):
-        check_special_entity_patterns._processed_items = set()
+    if '_processed_pattern_items' not in globals():
+        _processed_pattern_items = set()
+    
+    # Track if this item has been processed to avoid duplicates
+    item_hash = hash(item.lower().strip())
+    if item_hash in _processed_pattern_items:
+        return False
     
     # Add this item to processed set
-    check_special_entity_patterns._processed_items.add(item_hash)
+    _processed_pattern_items.add(item_hash)
     # Check for instructor email requirement
     if 'instructor' in item and 'email' in item:
         # Look for email patterns in the document
