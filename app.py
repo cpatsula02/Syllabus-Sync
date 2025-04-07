@@ -328,6 +328,7 @@ def download_pdf():
         flash('No analysis results available. Please analyze documents first.')
         return redirect('/')
     
+    import os
     try:
         # Create PDF with UTF-8 support
         pdf = FPDF(orientation='P', unit='mm', format='A4')
