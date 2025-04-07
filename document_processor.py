@@ -728,6 +728,39 @@ def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
 
     return False, ""
 
+def extract_checklist_items_strict(text: str) -> List[str]:
+    """
+    Extract checklist items from text, ensuring each numbered/bulleted item is separate.
+    Only extracts items that start with numbers or bullets.
+    """
+    items = []
+    lines = text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Match numbered items (1., 1), etc.)
+        if re.match(r'^\d+[\.\)]\s+\w+', line):
+            items.append(line)
+        # Match lettered items (a., a), etc.)
+        elif re.match(r'^[a-zA-Z][\.\)]\s+\w+', line):
+            items.append(line)
+        # Match bullet points
+        elif re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s+\w+', line):
+            items.append(line)
+
+    # Clean up items
+    cleaned_items = []
+    for item in items:
+        # Remove leading numbers/bullets and clean up
+        cleaned = re.sub(r'^\d+[\.\)]|^[a-zA-Z][\.\)]|^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s*', '', item).strip()
+        if cleaned:
+            cleaned_items.append(cleaned)
+
+    return cleaned_items
+
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
     """
     Enhanced document processing with context awareness and improved pattern recognition.
@@ -755,8 +788,8 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         if not outline_text.strip():
             raise ValueError("Course outline file is empty")
 
-        # Parse checklist items, focusing on numbered/bulleted items
-        checklist_items = extract_checklist_items(checklist_text)
+        # Parse checklist items, ensuring each numbered/bulleted item is separate
+        checklist_items = extract_checklist_items_strict(checklist_text)
         if not checklist_items:
             raise ValueError("No checklist items found in the document")
 
