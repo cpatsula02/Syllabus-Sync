@@ -24,6 +24,14 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.secret_key = os.environ.get('SESSION_SECRET', 'dev_secret_key')
 
+@app.errorhandler(Exception)
+def handle_error(e):
+    app.logger.error(f"Unhandled error: {str(e)}")
+    return render_template(
+        'index.html',
+        error="An error occurred while processing your request. Please try again with a smaller file or contact support."
+    ), 500
+
 # In-memory storage for last analysis
 analysis_data = {
     'checklist_items': [],
@@ -585,4 +593,13 @@ def download_pdf():
         return redirect('/')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Configure server timeouts
+    from werkzeug.serving import WSGIRequestHandler
+    WSGIRequestHandler.protocol_version = "HTTP/1.1"
+    
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        threaded=True,
+        request_handler=WSGIRequestHandler
+    )
