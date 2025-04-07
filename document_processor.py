@@ -95,10 +95,13 @@ def extract_checklist_items(text: str) -> List[str]:
     for item in items:
         item = item.strip()
         if (
-            item and len(item) > 5  # Skip very short entries
+            item and len(item) > 10  # Increase minimum length
             and item not in unique_items
             and not item.startswith('Page')  # Skip page numbers
             and not re.match(r'^[\d\s]+$', item)  # Skip items with only numbers
+            and item[0].isalpha()  # Must start with a letter
+            and item.endswith('.')  # Must end with a period
+            and len(item.split()) > 2  # Must have at least 3 words
         ):
             unique_items.append(item)
     
