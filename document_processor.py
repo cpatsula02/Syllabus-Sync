@@ -427,11 +427,9 @@ def check_special_entity_patterns(item, document, additional_context=""):
     Supports various document formats and considers additional context.
     Ensures each item is thoroughly scanned and reported only once.
     """
-    # Use a global variable instead of a function attribute to track processed items
+    # Initialize global set to track processed items if it doesn't exist yet
     global _processed_pattern_items
-    
-    # Initialize processed items set if not exists
-    if '_processed_pattern_items' not in globals():
+    if not globals().get('_processed_pattern_items'):
         _processed_pattern_items = set()
     
     # Track if this item has been processed to avoid duplicates

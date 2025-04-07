@@ -94,13 +94,31 @@ def index():
             except ValueError:
                 api_attempts = 3  # Default to 3 attempts if invalid value
 
-            # Process files with specified API attempts and context
-            checklist_items, analysis_results = process_documents(
-                checklist_path, 
-                outline_path, 
-                api_attempts=api_attempts, 
-                additional_context=additional_context
-            )
+            try:
+                # Process files with specified API attempts and context
+                checklist_items, analysis_results = process_documents(
+                    checklist_path, 
+                    outline_path, 
+                    api_attempts=api_attempts, 
+                    additional_context=additional_context
+                )
+            except Exception as api_error:
+                logger.exception(f"API error during document processing: {str(api_error)}")
+                error_message = str(api_error)
+                
+                # Check if this is likely an API error
+                if "openai" in error_message.lower() or "api" in error_message.lower():
+                    flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
+                    # Retry with no API calls (force fallback methods)
+                    checklist_items, analysis_results = process_documents(
+                        checklist_path, 
+                        outline_path, 
+                        api_attempts=0,  # Force fallback methods 
+                        additional_context=additional_context
+                    )
+                else:
+                    # Re-raise for other types of errors
+                    raise
 
             if "error" in analysis_results:
                 flash(analysis_results["error"])
