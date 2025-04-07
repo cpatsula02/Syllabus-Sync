@@ -329,13 +329,19 @@ def download_pdf():
         return redirect('/')
     
     try:
-        # Create a custom PDF class with UTF-8 support
-        # Initialize with UTF-8 encoding explicitly
+        # Create PDF with UTF-8 support
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
-        # Add Unicode font support with full paths to the font files
-        pdf.add_font('DejaVu', '', './static/fonts/DejaVuSansCondensed.ttf', uni=True)
-        pdf.add_font('DejaVu', 'B', './static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+        
+        # Add Unicode font support with absolute paths
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        font_path = os.path.join(base_path, 'static', 'fonts')
+        
+        # Add all required font variations
+        pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
+        pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
+        pdf.add_font('DejaVu', 'I', os.path.join(font_path, 'DejaVuSansCondensed-Oblique.ttf'), uni=True)
+        pdf.add_font('DejaVu', 'BI', os.path.join(font_path, 'DejaVuSansCondensed-BoldOblique.ttf'), uni=True)
         
         # Set up document
         pdf.set_font('DejaVu', 'B', 16)
