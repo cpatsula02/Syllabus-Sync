@@ -583,6 +583,19 @@ def download_pdf():
         pdf.ln(5)
         pdf.cell(190, 8, 'Overall Compliance', 0, 1, 'L')
         pdf.set_font('DejaVu', '', 10)
+
+        # Present Items Section
+        pdf.ln(5)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 8, 'Present Items', 0, 1, 'L')
+        pdf.set_font('DejaVu', '', 9)
+        
+        for item in analysis_data['checklist_items']:
+            if item not in analysis_data['missing_items']:
+                pdf.set_text_color(0, 128, 0)  # Green for present items
+                pdf.cell(5, 5, '•', 0, 0, 'L')
+                pdf.multi_cell(185, 5, item, 0, 'L')
+                pdf.set_text_color(0, 0, 0)  # Reset color
         
         total_items = len(analysis_data['checklist_items'])
         missing_items = len(analysis_data['missing_items'])
@@ -594,19 +607,19 @@ def download_pdf():
         pdf.cell(95, 8, f'Items Present: {present_items}', 1, 0, 'L')
         pdf.cell(95, 8, f'Items Missing: {missing_items}', 1, 1, 'L')
         
-        # Critical Missing Items
+        # Missing Items Section
         if missing_items > 0:
             pdf.ln(5)
             pdf.set_font('DejaVu', 'B', 12)
-            pdf.cell(190, 8, 'Critical Missing Items', 0, 1, 'L')
-            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(190, 8, 'Missing Items', 0, 1, 'L')
+            pdf.set_font('DejaVu', '', 9)
             
-            # Focus on grade-related and policy-related missing items
-            critical_items = [item for item in analysis_data['missing_items'] 
-                            if any(term in item.lower() for term in ['grade', 'policy', 'exam', 'assessment'])]
-            
-            for item in critical_items[:5]:  # Show top 5 critical items
-                pdf.multi_cell(190, 6, f"• {item}", 0, 'L')
+            for item in analysis_data['missing_items']:
+                is_critical = any(term in item.lower() for term in ['grade', 'policy', 'exam', 'assessment'])
+                pdf.set_text_color(255 if is_critical else 200, 0, 0)  # Darker red for critical items
+                pdf.cell(5, 5, '•', 0, 0, 'L')
+                pdf.multi_cell(185, 5, item, 0, 'L')
+            pdf.set_text_color(0, 0, 0)  # Reset color
         
         # Major Sections Analysis
         pdf.ln(5)
