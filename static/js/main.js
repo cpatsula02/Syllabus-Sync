@@ -242,8 +242,22 @@ function loadMatchDetails(button) {
                 const explanation = filteredMatches.length > 0 ? 
                     '<div class="mt-2 small text-muted"><i class="fas fa-info-circle me-1"></i>Green highlighted text shows matching content from the outline.</div>' : '';
                 
-                // Display the highlighted excerpt with explanation
-                evidenceBox.innerHTML = result + explanation;
+                // Add verification metadata if available
+                let verificationInfo = '';
+                if (data.verification_attempts && data.verification_attempts > 0) {
+                    verificationInfo = `<div class="mt-2 small text-info">
+                        <i class="fas fa-check-circle me-1"></i>Verified with ${data.verification_attempts} AI verification attempt(s)
+                    </div>`;
+                    
+                    if (data.verification_present_votes !== undefined) {
+                        verificationInfo += `<div class="small text-muted">
+                            ${data.verification_present_votes} out of ${data.verification_attempts} verifications confirmed this item is present
+                        </div>`;
+                    }
+                }
+                
+                // Display the highlighted excerpt with explanation and verification info
+                evidenceBox.innerHTML = result + explanation + verificationInfo;
             } else {
                 evidenceBox.innerHTML = '<div class="text-muted"><i class="fas fa-info-circle me-2"></i>No specific excerpt available. This item was detected through pattern matching or AI analysis.</div>';
             }

@@ -1,368 +1,250 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-10">
-        <div class="card shadow-lg">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h1 class="h3 mb-0">Syllabus Sync Analysis Results</h1>
-                <a href="{{ url_for('index') }}" class="btn btn-light btn-sm">
-                    <i class="fas fa-arrow-left me-1"></i> Back
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Home
                 </a>
-            </div>
-            <div class="card-body">
-                <div class="results-summary mb-4">
-                    {% set total_items = checklist_items|length %}
-                    {% set present_items = namespace(count=0) %}
-                    {% set missing_items_list = [] %}
-                    
-                    {% for item in checklist_items %}
-                        {% if matching_results[item] is mapping and matching_results[item].present %}
-                            {% set present_items.count = present_items.count + 1 %}
-                        {% elif matching_results[item] is boolean and matching_results[item] %}
-                            {% set present_items.count = present_items.count + 1 %}
-                        {% else %}
-                            {% set _ = missing_items_list.append(item) %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% set missing_items = total_items - present_items.count %}
-                    
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="row">
-                                <div class="col-6">
-                                    <div class="summary-box p-3 rounded bg-light mb-2">
-                                        <div class="d-flex align-items-center">
-                                            <div class="summary-icon me-3 rounded-circle bg-success text-white">
-                                                <i class="fas fa-check"></i>
-                                            </div>
-                                            <div>
-                                                <h4 class="h2 mb-0">{{ present_items.count }}</h4>
-                                                <p class="small mb-0">Items Present</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="summary-box p-3 rounded bg-light">
-                                        <div class="d-flex align-items-center">
-                                            <div class="summary-icon me-3 rounded-circle bg-danger text-white">
-                                                <i class="fas fa-times"></i>
-                                            </div>
-                                            <div>
-                                                <h4 class="h2 mb-0">{{ missing_items }}</h4>
-                                                <p class="small mb-0">Items Missing</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {% if missing_items > 0 %}
-                            <div class="alert alert-warning mt-3">
-                                <h5><i class="fas fa-exclamation-triangle me-2"></i>Missing Items:</h5>
-                                <ul class="mb-0">
-                                    {% for item in missing_items_list %}
-                                    <li>{{ item }}</li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                            {% else %}
-                            <div class="alert alert-success mt-3">
-                                <i class="fas fa-check-circle me-2"></i>
-                                Congratulations! Your course outline meets all checklist requirements.
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                
-                <h2 class="h4 mb-3">Detailed Checklist</h2>
-                
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th scope="col" style="width: 50%">Checklist Item</th>
-                                <th scope="col" style="width: 35%">Match Details</th>
-                                <th scope="col" style="width: 15%">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in checklist_items %}
-                            {% set is_present = false %}
-                            {% set confidence = 0 %}
-                            {% set explanation = "" %}
-                            {% set method = "traditional" %}
-                            
-                            {% if matching_results[item] is mapping %}
-                                {% set is_present = matching_results[item].present %}
-                                {% set confidence = matching_results[item].confidence | float %}
-                                {% set explanation = matching_results[item].explanation %}
-                                {% if matching_results[item].method is defined %}
-                                    {% set method = matching_results[item].method %}
-                                {% endif %}
-                            {% elif matching_results[item] is boolean %}
-                                {% set is_present = matching_results[item] %}
-                                {% set confidence = 1.0 if is_present else 0.0 %}
-                                {% set explanation = "Found in document" if is_present else "Not found in document" %}
-                            {% endif %}
-                            
-                            <tr class="{% if is_present %}table-success{% else %}table-danger{% endif %}">
-                                <td>
-                                    <strong>{{ item }}</strong>
-                                    {% if explanation %}
-                                    <div class="small text-muted mt-1">{{ explanation }}</div>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="d-flex align-items-center mb-2">
-                                        {% if is_present %}
-                                        <span class="badge bg-success">Present</span>
-                                        {% else %}
-                                        <span class="badge bg-danger">Missing</span>
-                                        {% endif %}
-                                        
-                                        {% if method == "academic_review" %}
-                                        <span class="badge bg-primary ms-1">Academic Review</span>
-                                        {% elif method and method.startswith("openai") %}
-                                        <span class="badge bg-primary ms-1">AI Analysis</span>
-                                        {% elif method %}
-                                        <span class="badge bg-secondary ms-1">{{ method }}</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary ms-1">Pattern Matching</span>
-                                        {% endif %}
-                                    </div>
-                                    
-                                    {% if is_present %}
-                                    <button class="btn btn-sm btn-outline-success view-match-btn" 
-                                            data-item="{{ item }}" data-bs-toggle="modal" data-bs-target="#matchDetailsModal">
-                                        <i class="fas fa-search me-1"></i> View Match
-                                    </button>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if not is_present %}
-                                    <button class="btn btn-sm btn-outline-primary copy-text" data-text="{{ item }}">
-                                        <i class="fas fa-copy me-1"></i> Copy
-                                    </button>
-                                    {% else %}
-                                    <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="mt-4">
-                    <div class="alert alert-info">
-                        <h5><i class="fas fa-info-circle me-2"></i>About This Analysis</h5>
-                        <p>This tool uses a combination of pattern matching and AI-powered analysis to check if your course outline meets the university's requirements.</p>
-                        <ul class="mb-0">
-                            <li><span class="badge bg-primary">AI Analysis</span> - Uses advanced AI to understand content semantically</li>
-                            <li><span class="badge bg-secondary">Pattern Matching</span> - Uses traditional text analysis techniques</li>
-                        </ul>
-                    </div>
-                </div>
-                
-                <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                    <a href="{{ url_for('download_pdf') }}" class="btn btn-primary" target="_blank">
-                        <i class="fas fa-file-pdf me-2"></i> View PDF Report
+                <div>
+                    <a href="/download_pdf" target="_blank" class="btn btn-success">
+                        <i class="fas fa-file-pdf me-2"></i>View PDF Report
                     </a>
                 </div>
             </div>
-            <div class="card-footer text-center">
-                <p class="mb-0 small text-muted">Syllabus Sync - University of Calgary</p>
-            </div>
         </div>
     </div>
-</div>
 
-<!-- Match Details Modal -->
-<div class="modal fade" id="matchDetailsModal" tabindex="-1" aria-labelledby="matchDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="matchDetailsModalLabel">Match Details</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <h6 class="mb-3" id="modalItemText"></h6>
-                <div class="alert alert-success">
-                    <div class="mb-2"><strong>Match found in document:</strong></div>
-                    <div id="matchExcerpt" class="p-3 bg-light rounded border" style="font-size: 15px; line-height: 1.5;">
-                        <p class="placeholder-glow">
-                            <span class="placeholder col-12"></span>
-                            <span class="placeholder col-12"></span>
-                            <span class="placeholder col-10"></span>
-                        </p>
+    <h1 class="mb-4">Syllabus Sync Analysis Results</h1>
+
+    <!-- Summary stats -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Summary</h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>Present Items: {{ present_count }}
                     </div>
                 </div>
-                <div id="highlightExplanation" class="alert alert-info mt-3" style="display: none;">
-                    <i class="fas fa-info-circle me-1"></i> 
-                    <strong>How to read this:</strong> The highlighted terms in <span style="background-color: #c2f0c2; font-weight: bold;">green</span> show exactly which parts of the document match the checklist requirement.
+                <div class="col-md-3">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-times-circle me-2"></i>Missing Items: {{ missing_count }}
+                    </div>
                 </div>
-                <div class="text-muted small">
-                    <i class="fas fa-info-circle me-1"></i> 
-                    The matched content is shown above. Key terms and related content were used to identify this match.
+                <div class="col-md-3">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>Total Items: {{ total_count }}
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="alert alert-secondary">
+                        <i class="fas fa-bolt me-2"></i>AI Verifications: {{ api_calls_made|default(0) }}
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            {% if analysis_methods %}
+            <div class="row mt-2">
+                <div class="col-12">
+                    <div class="alert alert-light border">
+                        <h6 class="mb-2"><i class="fas fa-tachometer-alt me-2"></i>Analysis Method Stats</h6>
+                        <div class="d-flex flex-wrap">
+                            {% for method_name, count in analysis_methods.items() %}
+                            <div class="badge bg-{{ 'info' if 'ai_' in method_name else 'secondary' }} me-2 mb-1 p-2">
+                                {{ method_name|replace('_', ' ')|title }}: {{ count }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Missing items section - consolidated into a single box -->
+    {% if missing_items and missing_items|length > 0 %}
+    <div class="card mb-4">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-exclamation-triangle me-2"></i>Missing Components
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="missing-items-box p-3 border border-danger rounded">
+                <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
+
+                <ul class="list-unstyled">
+                    {% for item in missing_items %}
+                        <li class="missing-item-entry {% if item in grade_table_items %}grade-item{% endif %} mb-2">
+                            <i class="fas {% if item in grade_table_items %}fa-table text-danger{% else %}fa-times-circle text-warning{% endif %} me-2"></i>
+                            {{ item }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed analysis section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Detailed Checklist Analysis</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush" id="results-content">
+            {% for result in results %}
+                <div class="list-group-item {% if result.present %}list-group-item-success{% else %}list-group-item-danger{% endif %} {% if result.is_grade_item %}border-warning border-2{% endif %}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="mb-2">
+                            {% if result.is_grade_item %}
+                            <i class="fas fa-table me-2" title="Grade/Assessment Related Item"></i>
+                            {% endif %}
+                            {{ result.item }}
+                        </h5>
+                        <span class="badge {% if result.present %}bg-success{% else %}bg-danger{% endif %}">
+                            {% if result.present %}
+                            <i class="fas fa-check me-1"></i>Present
+                            {% else %}
+                            <i class="fas fa-times me-1"></i>Missing
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <p class="mb-2"><strong>Analysis:</strong> {{ result.explanation }}</p>
+
+                    <!-- Detection Method Information -->
+                    <p class="mb-2 detection-method">
+                        <strong>Detection Method:</strong> 
+                        <span class="badge bg-info">{{ result.method|replace('_', ' ')|title }}</span>
+                        {% if result.confidence %}
+                        <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
+                        {% endif %}
+                        
+                        {% if result.verification_attempts and result.verification_attempts > 0 %}
+                        <span class="ms-3">
+                            <i class="fas fa-check-circle text-primary"></i>
+                            <span class="text-primary">{{ result.verification_attempts }} verification attempt{{ 's' if result.verification_attempts > 1 else '' }}</span>
+                            {% if result.verification_present_votes is defined %}
+                            <span class="text-muted">({{ result.verification_present_votes }} confirmation{{ 's' if result.verification_present_votes != 1 else '' }})</span>
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </p>
+
+                    {% if result.present and result.evidence %}
+                    <div class="mt-2">
+                        <div class="d-flex align-items-center mb-1">
+                            <strong class="me-2">Evidence:</strong>
+                            <button class="btn btn-sm btn-outline-success view-evidence-btn" 
+                                    data-item="{{ result.item }}"
+                                    onclick="loadMatchDetails(this)">
+                                <i class="fas fa-eye me-1"></i>View Match
+                            </button>
+                        </div>
+                        <div class="evidence-box p-3 mt-1 bg-light rounded border-success" style="display: none;" 
+                             id="evidence-{{ loop.index }}">
+                            <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span>Loading evidence...</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
             </div>
         </div>
     </div>
 </div>
 
+<style>
+/* Flag box styling for missing items */
+.flag-box {
+    border-radius: 5px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.flag-header {
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    color: white;
+}
+
+.grade-flag .flag-header {
+    background-color: #dc3545; /* Red for grade items */
+}
+
+.regular-flag .flag-header {
+    background-color: #ffc107; /* Yellow for regular items */
+    color: #212529;
+}
+
+.flag-icon {
+    margin-right: 10px;
+    font-size: 1.2em;
+}
+
+.flag-content {
+    padding: 12px 15px;
+    background-color: #f8f9fa;
+    border: 1px solid rgba(0,0,0,0.125);
+    border-top: none;
+}
+
+/* Evidence box styling */
+.evidence-box {
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.95em;
+    border-left: 4px solid #198754;
+}
+
+/* Highlight matched terms in green */
+.evidence-box span {
+    border-radius: 2px;
+}
+</style>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Handle copy button clicks
-        document.querySelectorAll('.copy-text').forEach(function(button) {
-            button.addEventListener('click', function() {
-                var text = this.getAttribute('data-text');
-                navigator.clipboard.writeText(text).then(function() {
-                    // Change button text temporarily
-                    var originalHTML = button.innerHTML;
-                    button.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
-                    button.classList.remove('btn-outline-primary');
-                    button.classList.add('btn-success');
-                    
-                    setTimeout(function() {
-                        button.innerHTML = originalHTML;
-                        button.classList.remove('btn-success');
-                        button.classList.add('btn-outline-primary');
-                    }, 2000);
-                });
+// Function to load and display match details when the View Match button is clicked
+function loadMatchDetails(button) {
+    const item = button.getAttribute('data-item');
+    const evidenceBoxId = button.closest('.list-group-item').querySelector('.evidence-box').id;
+    const evidenceBox = document.getElementById(evidenceBoxId);
+
+    // Toggle visibility
+    if (evidenceBox.style.display === 'none' || evidenceBox.style.display === '') {
+        evidenceBox.style.display = 'block';
+
+        // Fetch the matching details
+        fetch(`/get-match-details?item=${encodeURIComponent(item)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.found) {
+                    evidenceBox.innerHTML = data.excerpt;
+
+                    // Add special styling for grade items
+                    if (data.is_grade_item) {
+                        evidenceBox.style.borderLeft = '4px solid #fd7e14'; // Orange for grade items
+                    }
+                } else {
+                    evidenceBox.innerHTML = '<em>No detailed evidence available.</em>';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching match details:', error);
+                evidenceBox.innerHTML = '<em>Error loading evidence.</em>';
             });
-        });
-        
-        // Handle view match button clicks
-        document.querySelectorAll('.view-match-btn').forEach(function(button) {
-            button.addEventListener('click', function() {
-                var item = this.getAttribute('data-item');
-                document.getElementById('modalItemText').textContent = item;
-                document.getElementById('matchExcerpt').innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading...</span></div> Fetching match details...';
-                document.getElementById('highlightExplanation').style.display = 'none';
-                
-                // Fetch the match details
-                fetch('/get-match-details?item=' + encodeURIComponent(item))
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.found && data.excerpt) {
-                            // Extract key terms from the checklist item for highlighting
-                            const itemText = item.toLowerCase();
-                            const keyTerms = [];
-                            
-                            // Extract words longer than 3 letters, excluding common words
-                            const commonWords = ['and', 'the', 'that', 'this', 'with', 'from', 'have', 
-                                              'for', 'are', 'should', 'would', 'could', 'will', 
-                                              'been', 'must', 'they', 'their', 'there', 'than', 
-                                              'when', 'what', 'where', 'which'];
-                            
-                            const words = itemText.match(/\b\w+\b/g) || [];
-                            words.forEach(word => {
-                                if (word.length > 3 && !commonWords.includes(word)) {
-                                    keyTerms.push(word);
-                                }
-                            });
-                            
-                            // Add special terms based on item content
-                            if (itemText.includes('email') || itemText.includes('contact')) {
-                                keyTerms.push('@ucalgary.ca');
-                            }
-                            if (itemText.includes('late') || itemText.includes('deadline')) {
-                                keyTerms.push('late', 'deadline', 'penalty');
-                            }
-                            if (itemText.includes('grade')) {
-                                keyTerms.push('grade', 'grading', 'assessment', 'mark');
-                            }
-                            
-                            // Highlight the matching terms in the excerpt
-                            let highlightedExcerpt = data.excerpt;
-                            
-                            // Sort terms by length (longest first) to avoid highlighting parts of words
-                            keyTerms.sort((a, b) => b.length - a.length);
-                            
-                            // Create a safe version for case-insensitive matching
-                            const excerptLower = data.excerpt.toLowerCase();
-                            
-                            // Create spans with different highlight colors for better visibility
-                            const highlightColors = ['#c2f0c2', '#d6f5d6', '#e6ffe6']; // Different shades of green
-                            let colorIndex = 0;
-                            
-                            // First find all matches to avoid overlapping highlights
-                            const matches = [];
-                            keyTerms.forEach(term => {
-                                const termLower = term.toLowerCase();
-                                let startPos = 0;
-                                while (startPos < excerptLower.length) {
-                                    const matchPos = excerptLower.indexOf(termLower, startPos);
-                                    if (matchPos === -1) break;
-                                    
-                                    matches.push({
-                                        start: matchPos,
-                                        end: matchPos + termLower.length,
-                                        term: data.excerpt.substring(matchPos, matchPos + termLower.length),
-                                        original: term
-                                    });
-                                    
-                                    startPos = matchPos + 1;
-                                }
-                            });
-                            
-                            // Sort matches by position
-                            matches.sort((a, b) => a.start - b.start);
-                            
-                            // Remove overlapping matches
-                            const filteredMatches = [];
-                            let lastEnd = -1;
-                            
-                            matches.forEach(match => {
-                                if (match.start >= lastEnd) {
-                                    filteredMatches.push(match);
-                                    lastEnd = match.end;
-                                }
-                            });
-                            
-                            // Build the highlighted excerpt
-                            let result = '';
-                            let lastPos = 0;
-                            
-                            filteredMatches.forEach(match => {
-                                // Add text before this match
-                                result += data.excerpt.substring(lastPos, match.start);
-                                
-                                // Add the highlighted match
-                                const color = highlightColors[colorIndex % highlightColors.length];
-                                result += `<span class="highlight" style="background-color: ${color}; font-weight: bold;">${match.term}</span>`;
-                                
-                                lastPos = match.end;
-                                colorIndex++;
-                            });
-                            
-                            // Add any remaining text
-                            result += data.excerpt.substring(lastPos);
-                            
-                            // Display the highlighted excerpt
-                            document.getElementById('matchExcerpt').innerHTML = result;
-                            
-                            // Show explanation of highlighted terms if matches were found
-                            document.getElementById('highlightExplanation').style.display = filteredMatches.length > 0 ? 'block' : 'none';
-                        } else {
-                            document.getElementById('matchExcerpt').textContent = 'No specific excerpt available. The item was detected through pattern matching.';
-                            document.getElementById('highlightExplanation').style.display = 'none';
-                        }
-                    })
-                    .catch(error => {
-                        document.getElementById('matchExcerpt').textContent = 'Error fetching match details. Please try again.';
-                        document.getElementById('highlightExplanation').style.display = 'none';
-                        console.error('Error:', error);
-                    });
-            });
-        });
-    });
+    } else {
+        evidenceBox.style.display = 'none';
+    }
+}
 </script>
 {% endblock %}

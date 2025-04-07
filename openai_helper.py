@@ -691,8 +691,8 @@ def fallback_analyze_item(item: str, document_text: str, additional_context: str
 
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
-    Process each checklist item using our semantic understanding approach,
-    with optional AI-powered analysis for better results.
+    Process each checklist item using AI-powered semantic understanding.
+    If AI analysis fails, notify the user instead of using a fallback method.
 
     This function acts as a university academic reviewer, focusing on whether each requirement 
     described in the checklist items is meaningfully fulfilled in the course outline.
@@ -704,30 +704,39 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     Args:
         items: List of checklist items to analyze
         document_text: The full text of the document to check against
-        max_attempts: Maximum number of API analysis attempts
+        max_attempts: Number of AI analysis attempts PER ITEM for verification
         additional_context: Optional context provided by the user about the course
 
     Returns:
         A dictionary mapping each item to its analysis result
     """
     results = {}
-    ai_calls_made = 0
+    total_api_calls = 0
     api_errors = 0
     
     # Reset token tracking at the start of a new session
     global CURRENT_SESSION_TOKENS
     CURRENT_SESSION_TOKENS = 0
 
-    # Decide whether to use AI analysis based on max_attempts and API key
-    use_ai = max_attempts > 0 and OPENAI_API_KEY is not None
+    # Decide whether AI analysis is available based on API key
+    use_ai = OPENAI_API_KEY is not None
 
     if use_ai:
         logger.info(f'Analyzing {len(items)} checklist items with AI-powered semantic understanding')
-        logger.info(f'Maximum API attempts set to: {max_attempts}')
+        logger.info(f'Using {max_attempts} verification attempts per item')
     else:
-        logger.info(f'Analyzing {len(items)} checklist items with traditional semantic understanding')
-        if not OPENAI_API_KEY:
-            logger.warning("OpenAI API key is not set. Using traditional analysis only.")
+        logger.info(f'Cannot analyze items: OpenAI API key is not set')
+        # Return error for all items if API key is missing
+        for item in items:
+            results[item] = {
+                'present': False,
+                'confidence': 0.0,
+                'explanation': "Error: OpenAI API key is not configured. Cannot perform analysis.",
+                'evidence': "",
+                'method': 'error',
+                'error': "Missing API key"
+            }
+        return results
 
     # First pass: Classify and prioritize items
     prioritized_items = []
@@ -756,49 +765,83 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
-        # Check if we should use API for this item
-        should_use_api_for_item = use_ai and ai_calls_made < max_attempts and api_errors < 3
-        
         # For remaining quota-based decisions
-        if should_use_api_for_item:
-            use_api_decision = should_use_api(item, document_text, remaining_quota)
-            if not use_api_decision:
-                logger.info(f"Skipping API for {item_id} based on priority/quota management")
-                should_use_api_for_item = False
+        if remaining_quota < 1000:  # Set a minimum threshold for remaining tokens
+            logger.warning(f"Token quota nearly exhausted. Skipping analysis for {item_id}")
+            results[item] = {
+                'present': False,
+                'confidence': 0.0,
+                'explanation': "Error: API token quota exhausted. Analysis could not be completed.",
+                'evidence': "",
+                'method': 'error',
+                'error': "Token quota exhausted"
+            }
+            continue
         
-        # Attempt AI analysis if conditions are met
-        if should_use_api_for_item:
+        # Make multiple API attempts per item for verification (as specified by max_attempts)
+        api_success = False
+        verification_results = []
+        
+        for attempt in range(max_attempts):
             try:
-                logger.info(f"Using AI analysis for {item_id} (call {ai_calls_made+1}/{max_attempts})")
+                logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{max_attempts})")
                 result = ai_analyze_item(item, document_text, additional_context)
-                ai_calls_made += 1
+                total_api_calls += 1
+                api_success = True
                 
                 # Update token usage stats
                 remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
                 logger.info(f"Remaining token quota: ~{remaining_quota}")
                 
-                results[item] = result
-                continue
+                verification_results.append(result)
+                
+                # We could stop after one successful attempt, but we're making multiple attempts
+                # for verification as per the requested functionality
+                
             except Exception as e:
                 api_errors += 1
-                logger.error(f"Error in AI analysis for {item_id}: {str(e)}")
+                logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
                 if "insufficient_quota" in str(e):
-                    logger.warning("API quota exceeded - using enhanced traditional analysis for remaining items")
-                    use_ai = False  # Disable API usage for all remaining items
+                    logger.warning("API quota exceeded - cannot complete analysis")
+                    remaining_quota = 0
+                    break  # Stop trying if quota is exceeded
         
-        # Log fallback reason if applicable
-        if use_ai and ai_calls_made >= max_attempts:
-            logger.info(f"Using fallback analysis for {item_id} (reached maximum API attempts: {max_attempts})")
-        elif api_errors >= 3:
-            logger.warning(f"Using fallback analysis for {item_id} (too many API errors: {api_errors})")
-        
-        # Use the traditional analyzer as fallback
-        result = analyze_checklist_item(item, document_text)
-        results[item] = result
+        # Process verification results or report error
+        if api_success and verification_results:
+            # Use the most common result for present/not present
+            present_votes = sum(1 for r in verification_results if r.get('present', False))
+            
+            # If majority of attempts say item is present, mark as present
+            is_present = present_votes > len(verification_results) / 2
+            
+            # Combine results from multiple verification attempts
+            if is_present:
+                # Use the result with highest confidence that says "present"
+                present_results = [r for r in verification_results if r.get('present', False)]
+                selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
+            else:
+                # Use the result with highest confidence that says "not present"
+                absent_results = [r for r in verification_results if not r.get('present', False)]
+                selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
+            
+            # Add verification metadata
+            selected_result['verification_attempts'] = len(verification_results)
+            selected_result['verification_present_votes'] = present_votes
+            
+            results[item] = selected_result
+        else:
+            # Report API errors
+            results[item] = {
+                'present': False,
+                'confidence': 0.0,
+                'explanation': f"Error: AI analysis failed after {max_attempts} attempts.",
+                'evidence': "",
+                'method': 'error',
+                'error': "API analysis failed"
+            }
     
     # Log final usage stats
-    if use_ai:
-        logger.info(f"Analysis complete. AI calls made: {ai_calls_made}/{max_attempts}")
-        logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+    logger.info(f"Analysis complete. Total API calls made: {total_api_calls}")
+    logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
     
     return results

@@ -170,6 +170,7 @@ def index():
             # Calculate analysis method statistics
             analysis_methods = {}
             api_calls_made = 0
+            total_verification_calls = 0
             
             for item in checklist_items:
                 result = analysis_results.get(item, {})
@@ -181,8 +182,12 @@ def index():
                 else:
                     analysis_methods[method] = 1
                     
-                # Count API calls based on AI methods
-                if method.startswith("ai_") or "academic_review" in method:
+                # Count verification attempts per item
+                verification_attempts = result.get("verification_attempts", 0)
+                total_verification_calls += verification_attempts
+                
+                # Count items that used AI (at least one successful call)
+                if verification_attempts > 0:
                     api_calls_made += 1
 
             return render_template('results.html', 
@@ -260,13 +265,21 @@ def get_match_details():
                     pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
                     excerpt = pattern.sub(f'<span style="background-color: #c2f0c2; font-weight: bold;">{term}</span>', excerpt)
         
-        return jsonify({
+        response_data = {
             'found': True,
             'excerpt': excerpt,
             'is_grade_item': is_grade_item,
             'method': result.get('method', 'pattern_matching'),
             'confidence': result.get('confidence', None)
-        })
+        }
+        
+        # Add verification metadata if available
+        if 'verification_attempts' in result:
+            response_data['verification_attempts'] = result['verification_attempts']
+        if 'verification_present_votes' in result:
+            response_data['verification_present_votes'] = result['verification_present_votes']
+        
+        return jsonify(response_data)
     
     return jsonify({'found': False})
 
@@ -300,7 +313,8 @@ def download_pdf():
         
         # Calculate API usage statistics for the PDF report
         analysis_methods = {}
-        api_calls_made = 0
+        ai_analyzed_items = 0
+        total_verification_calls = 0
         
         for item in analysis_data['checklist_items']:
             result = analysis_data['analysis_results'].get(item, {})
@@ -312,14 +326,18 @@ def download_pdf():
             else:
                 analysis_methods[method] = 1
                 
-            # Count API calls based on AI methods
-            if method.startswith("ai_") or "academic_review" in method:
-                api_calls_made += 1
+            # Count verification attempts per item
+            verification_attempts = result.get("verification_attempts", 0)
+            total_verification_calls += verification_attempts
+            
+            # Count items that used AI (at least one successful verification)
+            if verification_attempts > 0:
+                ai_analyzed_items += 1
         
         pdf.cell(95, 8, f'Total checklist items: {total_items}', 1, 0, 'L')
         pdf.cell(95, 8, f'Items present: {present_items}', 1, 1, 'L')
         pdf.cell(95, 8, f'Items missing: {missing_items}', 1, 0, 'L')
-        pdf.cell(95, 8, f'AI Analysis Used: {api_calls_made} items', 1, 1, 'L')
+        pdf.cell(95, 8, f'AI verifications: {total_verification_calls}', 1, 1, 'L')
         pdf.ln(5)
         
         # Add analysis method statistics
