@@ -54,16 +54,15 @@ def extract_checklist_items(text: str) -> List[str]:
     """
     Extract checklist items from the checklist document.
     Only extract numbered or bulleted items, excluding any other text.
-    Enhanced to be more flexible with various document formats.
+    Ensures no duplicate items are included.
     """
     logger = logging.getLogger(__name__)
     logger.info(f"Extracting checklist items from text of length: {len(text)}")
     
-    # Fallback if nothing else works - pure paragraphs with reasonable length
     if len(text) < 50:
         logger.warning(f"Text is very short ({len(text)} chars), might not be valid")
         
-    # Define patterns for numbered or bulleted items
+    # Define patterns only for numbered and bulleted items
     patterns = [
         # Numbered items with various formats
         r'^\s*\d+[\.\)]\s*(.*?)(?=\n\s*\d+[\.\)]|\n\s*$|$)',  # 1. or 1) Item
@@ -74,16 +73,6 @@ def extract_checklist_items(text: str) -> List[str]:
         r'^\s*[•⚫⚪○●◆◇■□▪▫]\s*(.*?)(?=\n\s*[•⚫⚪○●◆◇■□▪▫]|\n\s*$|$)',  # Various bullet symbols
         r'^\s*[\*\-\+]\s*(.*?)(?=\n\s*[\*\-\+]|\n\s*$|$)',  # *, -, + items
         r'^\s*(?:o|⚬)\s*(.*?)(?=\n\s*(?:o|⚬)|\n\s*$|$)',  # Circle bullets
-        
-        # Indented items that might be part of a list
-        r'^\s{2,}([A-Z][^.\n]+\.?)(?=\n|$)',  # Indented capitalized sentences
-        r'^\s{2,}([^\n]+?)(?=\n(?:\s{2,}[^\n]+|\s*$)|$)'  # General indented items
-    ]
-    
-    # Add additional pattern for header-like items without bullets or numbers
-    special_headers = [
-        r'^([A-Z][^.\n]{10,})$',  # All caps header-like text (at least 10 chars)
-        r'^([A-Z][a-z]+ [A-Z][a-z]+.{5,})$',  # Title case phrases of decent length
     ]
     
     items = []
@@ -150,40 +139,36 @@ def extract_checklist_items(text: str) -> List[str]:
                     matches = re.findall(pattern, line)
                     items.extend([match.strip() for match in matches if match.strip()])
     
-    # Process and clean up items
-    processed_items = []
+    # Process and clean up items, tracking used items to prevent duplicates
+    seen_items = set()
+    unique_items = []
+    excluded_count = 0
+    
     for item in items:
-        # Remove any trailing spaces or extra punctuation
+        # Clean up the item
         item = item.strip()
         if not item:
             continue
             
-        # Add a period if it doesn't end with one
+        # Add a period if needed
         if not any(item.endswith(p) for p in ['.', '?', '!']):
             item = item + '.'
             
-        processed_items.append(item)
-    
-    # Remove duplicate items and very short entries
-    unique_items = []
-    excluded_count = 0
-    
-    for item in processed_items:
-        item = item.strip()
-        included = False
+        # Convert to lowercase for comparison to prevent case-based duplicates
+        item_lower = item.lower()
         
+        # Only include items that meet our criteria and haven't been seen before
         if (
-            item and len(item) > 5  # More permissive minimum length
-            and item not in unique_items
+            len(item) > 5  # Minimum length
+            and item_lower not in seen_items
             and not item.startswith('Page')  # Skip page numbers
             and not re.match(r'^[\d\s]+$', item)  # Skip items with only numbers
             and not all(c.isdigit() or c.isspace() or c in ',.()' for c in item)  # Skip date/numbers
             and len(item.split()) >= 2  # Must have at least 2 words
         ):
+            seen_items.add(item_lower)
             unique_items.append(item)
-            included = True
-        
-        if not included:
+        else:
             excluded_count += 1
     
     logger.info(f"Extracted {len(unique_items)} checklist items (excluded {excluded_count} irrelevant items)")
