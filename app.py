@@ -583,19 +583,68 @@ def download_pdf():
         pdf.ln(5)
         pdf.cell(190, 8, 'Overall Compliance', 0, 1, 'L')
         pdf.set_font('DejaVu', '', 10)
-
-        # Present Items Section
-        pdf.ln(5)
-        pdf.set_font('DejaVu', 'B', 12)
-        pdf.cell(190, 8, 'Present Items', 0, 1, 'L')
-        pdf.set_font('DejaVu', '', 9)
         
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_checklist_items = []
         for item in analysis_data['checklist_items']:
-            if item not in analysis_data['missing_items']:
-                pdf.set_text_color(0, 128, 0)  # Green for present items
-                pdf.cell(5, 5, '•', 0, 0, 'L')
-                pdf.multi_cell(185, 5, item, 0, 'L')
-                pdf.set_text_color(0, 0, 0)  # Reset color
+            if item not in seen:
+                seen.add(item)
+                unique_checklist_items.append(item)
+        
+        # Calculate stats based on unique items
+        total_items = len(unique_checklist_items)
+        missing_items = [item for item in unique_checklist_items if item in analysis_data['missing_items']]
+        present_items = [item for item in unique_checklist_items if item not in analysis_data['missing_items']]
+        
+        # Summary statistics
+        pdf.cell(95, 8, f'Total Items: {total_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Items Present: {len(present_items)}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Items Missing: {len(missing_items)}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Compliance Rate: {(len(present_items)/total_items)*100:.1f}%', 1, 1, 'L')
+        
+        # All Items Section with Status
+        pdf.ln(10)
+        pdf.set_font('DejaVu', 'B', 14)
+        pdf.cell(190, 10, 'Checklist Items Status', 0, 1, 'L')
+        
+        # Header for items table
+        pdf.set_font('DejaVu', 'B', 10)
+        pdf.cell(160, 8, 'Item Description', 1, 0, 'L')
+        pdf.cell(30, 8, 'Status', 1, 1, 'C')
+        
+        # List all items with their status
+        pdf.set_font('DejaVu', '', 9)
+        for item in unique_checklist_items:
+            is_present = item not in missing_items
+            
+            # Calculate required height for the item text
+            item_length = len(item)
+            chars_per_line = 90  # Adjusted for better formatting
+            lines_needed = max(1, item_length / chars_per_line)
+            row_height = max(6, lines_needed * 4)
+            
+            # Save position for status cell
+            x_pos = pdf.get_x()
+            y_pos = pdf.get_y()
+            
+            # Print item description
+            pdf.multi_cell(160, row_height, item, 1, 'L')
+            
+            # Print status
+            pdf.set_xy(x_pos + 160, y_pos)
+            pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
+            pdf.cell(30, row_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            pdf.set_text_color(0, 0, 0)  # Reset color
+            
+            # Check if we need a new page
+            if pdf.get_y() > 250:  # Leave some margin at bottom
+                pdf.add_page()
+                # Reprint headers on new page
+                pdf.set_font('DejaVu', 'B', 10)
+                pdf.cell(160, 8, 'Item Description', 1, 0, 'L')
+                pdf.cell(30, 8, 'Status', 1, 1, 'C')
+                pdf.set_font('DejaVu', '', 9)
         
         total_items = len(analysis_data['checklist_items'])
         missing_items = len(analysis_data['missing_items'])
