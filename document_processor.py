@@ -689,6 +689,12 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     """
     Enhanced document processing with context awareness and improved pattern recognition.
     Handles various document formats and considers user-provided context for analysis.
+    
+    This function now has improved error handling for:
+    - API connection issues
+    - Missing API keys
+    - Timeout errors
+    - Incomplete document processing
     """
     try:
         # Validate file paths

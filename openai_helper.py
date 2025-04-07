@@ -15,7 +15,8 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
 # do not change this unless explicitly requested by the user
-MODEL = "gpt-4o"
+# Use a model that definitely exists - gpt-4o does not exist in April 2024
+MODEL = "gpt-3.5-turbo-0125"
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

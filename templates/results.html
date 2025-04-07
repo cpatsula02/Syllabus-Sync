@@ -134,27 +134,6 @@
                         </span>
                         {% endif %}
                     </p>
-                        {% if result.verification_attempts and result.verification_attempts > 0 %}
-                        <span class="ms-3">
-                            <i class="fas fa-check-circle text-primary"></i>
-                            <span class="text-primary">{{ result.verification_attempts }} verification attempt{{ 's' if result.verification_attempts > 1 else '' }}</span>
-                            {% if result.verification_present_votes is defined %}
-                            <span class="text-muted">({{ result.verification_present_votes }} confirmation{{ 's' if result.verification_present_votes != 1 else '' }})</span>
-                            {% endif %}
-                        </span>
-                        {% endif %}
-                    </p>
-
-                    {% if result.present and result.evidence %}
-                    <div class="mt-2">
-                        <div class="d-flex align-items-center mb-1">
-                            <strong class="me-2">Evidence:</strong>
-                            <button class="btn btn-sm btn-outline-success view-evidence-btn" 
-                                    data-item="{{ result.item }}"
-                                    onclick="loadMatchDetails(this)">
-                                <i class="fas fa-eye me-1"></i>View Match
-                            </button>
-                        </div>
                         <div class="evidence-box p-3 mt-1 bg-light rounded border-success" style="display: none;" 
                              id="evidence-{{ loop.index }}">
                             <div class="spinner-border spinner-border-sm text-secondary" role="status">

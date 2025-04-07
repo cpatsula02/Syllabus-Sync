@@ -7,8 +7,9 @@ import re
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with more detailed output
+logging.basicConfig(level=logging.DEBUG, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Check if OpenAI API key is available
@@ -386,8 +387,14 @@ def download_pdf():
                 if is_grade_item:
                     pdf.set_text_color(200, 0, 0)  # Red for important missing items
                 
-                # Format the missing item text
-                pdf.multi_cell(190, 7, f"- {item}", 0, 'L')
+                # Calculate required height for the missing item text
+                item_length = len(item)
+                chars_per_line = 60  # Conservative estimate
+                item_lines = max(1, item_length / chars_per_line)
+                item_height = max(7, item_lines * 5)  # Minimum 7mm, 5mm per line
+                
+                # Format the missing item text with generous spacing
+                pdf.multi_cell(190, item_height, f"- {item}", 0, 'L')
                 
                 # Add rationale for why the item is missing
                 result = analysis_data['analysis_results'].get(item, {})
@@ -396,15 +403,25 @@ def download_pdf():
                     pdf.set_text_color(100, 100, 100)  # Gray
                     pdf.set_font('DejaVu', 'I', 9)  # Italic, smaller font
                     
-                    # Calculate height needed for explanation text
+                    # Calculate height needed for explanation text with generous spacing
                     explanation_text = f"   Rationale: {explanation}"
                     explanation_length = len(explanation_text)
-                    explanation_lines = max(1, explanation_length / 75)  # Estimate 75 chars per line at font size 9
-                    explanation_height = max(5, explanation_lines * 4)  # At least 5mm height, 4mm per line
                     
+                    # Use very conservative estimate for chars per line
+                    explanation_chars_per_line = 50  # Conservative estimate for font size 9
+                    explanation_lines = max(1, explanation_length / explanation_chars_per_line)
+                    
+                    # Use generous line height
+                    explanation_height = max(6, explanation_lines * 5)  # At least 6mm, 5mm per line
+                    
+                    # Add extra padding for longer explanations
+                    if explanation_lines > 3:
+                        explanation_height += 3  # Add 3mm extra padding
+                    
+                    # Write the explanation with calculated height
                     pdf.multi_cell(180, explanation_height, explanation_text, 0, 'L')
                     pdf.set_font('DejaVu', '', 10)  # Reset font
-                    pdf.ln(1)  # Add a small space after the rationale
+                    pdf.ln(3)  # Add more space after the rationale
                 
                 if is_grade_item:
                     pdf.set_text_color(0, 0, 0)  # Reset to black
@@ -434,31 +451,7 @@ def download_pdf():
             y_position = pdf.get_y()
             
             # Calculate required height for the item text with more accurate estimation
-            # At font size 10, with proper character width estimation
             font_size = 10
-            char_width_mm = 1.8  # Estimated average character width in mm
-            line_width_mm = 140  # Width of the cell in mm
-            chars_per_line = int(line_width_mm / char_width_mm)
-            
-            # Calculate number of lines needed based on word boundaries rather than just character count
-            words = item.split()
-            lines = 1
-            current_line_length = 0
-            
-            for word in words:
-                if current_line_length + len(word) + 1 <= chars_per_line:  # +1 for space
-                    current_line_length += len(word) + 1
-                else:
-                    lines += 1
-                    current_line_length = len(word)
-            
-            # Add extra padding for longer items to prevent overlap
-            line_height_mm = font_size * 0.5  # Line height in mm (increased from 0.35)
-            row_height = max(8, lines * line_height_mm)  # Minimum 8mm height
-            
-            # If this is a very long item, add some extra padding
-            if lines > 3:
-                row_height += 2  # Add 2mm extra padding for long items
             
             # Highlight grade table items with slightly different formatting
             if is_grade_item:
@@ -466,31 +459,23 @@ def download_pdf():
             else:
                 pdf.set_font('DejaVu', '', font_size)
             
-            # Create a temporary PDF object to measure the actual height of the text
-            pdf_temp = FPDF(orientation='P', unit='mm', format='A4')
-            pdf_temp.add_page()
-            pdf_temp.add_font('DejaVu', '', './static/fonts/DejaVuSansCondensed.ttf', uni=True)
-            pdf_temp.add_font('DejaVu', 'B', './static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
+            # A simpler and more reliable approach: use a fixed character per line estimate,
+            # but be generous with space allocation to prevent overlapping
+            item_length = len(item)
+            chars_per_line = 50  # Conservative estimate to ensure enough space
+            estimated_lines = max(1, item_length / chars_per_line)
             
-            if is_grade_item:
-                pdf_temp.set_font('DejaVu', 'B', font_size)
-            else:
-                pdf_temp.set_font('DejaVu', '', font_size)
+            # Set a generous row height based on the estimated number of lines
+            # Use a larger multiplier to ensure enough space
+            line_height = 5  # mm per line - generous spacing
+            row_height = max(8, estimated_lines * line_height)  # Minimum 8mm
             
-            # Store initial Y position
-            start_y = pdf_temp.get_y()
+            # For very long items, add extra space to be safe
+            if estimated_lines > 3:
+                row_height += 5  # Add 5mm extra padding for long items
             
-            # Draw the text in the temporary PDF to measure actual height
-            pdf_temp.multi_cell(140, row_height/lines, item, 0, 'L')
-            
-            # Get the actual height used
-            actual_height = pdf_temp.get_y() - start_y
-            
-            # Use the actual height from temp PDF, with a small buffer
-            final_row_height = actual_height + 2  # 2mm buffer
-            
-            # Draw the checklist item cell with calculated height
-            pdf.multi_cell(140, final_row_height, item, 1, 'L')
+            # Draw the checklist item cell
+            pdf.multi_cell(140, row_height, item, 1, 'L')
             
             # Position cursor for the status cell
             pdf.set_xy(pdf.get_x() + 140, y_position)
@@ -501,8 +486,10 @@ def download_pdf():
             else:
                 pdf.set_text_color(200, 0, 0)  # Red
                 
-            # Match height of status cell to the row height of the item cell
+            # Calculate the height that was actually used for the item
             status_height = pdf.get_y() - y_position
+            
+            # Make sure the status cell matches the height of the item cell
             pdf.cell(50, status_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
             
@@ -524,11 +511,23 @@ def download_pdf():
                     confidence_str = f" (Confidence: {int(confidence * 100)}%)" if confidence else ""
                     
                     # Calculate height needed for evidence text to prevent overlap
-                    evidence_length = len(f"Match via {method}{confidence_str}: {evidence}")
-                    evidence_lines = max(1, evidence_length / 80)  # Estimate 80 chars per line at font size 8
-                    evidence_height = max(5, evidence_lines * 4)  # At least 5mm height, 4mm per line
+                    evidence_text = f"Match via {method}{confidence_str}: {evidence}"
+                    evidence_length = len(evidence_text)
                     
-                    pdf.multi_cell(190, evidence_height, f"Match via {method}{confidence_str}: {evidence}", 0, 'L')
+                    # Use a very conservative estimate of characters per line to ensure enough space
+                    chars_per_line = 60  # Conservative estimate for font size 8
+                    evidence_lines = max(1, evidence_length / chars_per_line)
+                    
+                    # Use generous line height for evidence text
+                    line_height = 4  # mm per line for font size 8
+                    evidence_height = max(6, evidence_lines * line_height)  # At least 6mm height
+                    
+                    # Add extra padding for longer evidence text
+                    if evidence_lines > 4:
+                        evidence_height += 4  # Add 4mm extra padding for long evidence
+                    
+                    # Write the evidence with calculated height
+                    pdf.multi_cell(190, evidence_height, evidence_text, 0, 'L')
                     pdf.set_text_color(0, 0, 0)  # Reset to black
             
             # Add space between items
