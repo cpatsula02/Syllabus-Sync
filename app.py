@@ -4,7 +4,7 @@ import os
 import io
 import logging
 import re
-from fpdf import FPDF
+from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents
 
 # Configure logging
@@ -291,21 +291,25 @@ def download_pdf():
         return redirect('/')
     
     try:
-        # Create PDF document
-        pdf = FPDF()
+        # Create a custom PDF class with UTF-8 support
+        # Initialize with UTF-8 encoding explicitly
+        pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
+        # Add Unicode font support with full paths to the font files
+        pdf.add_font('DejaVu', '', './static/fonts/DejaVuSansCondensed.ttf', uni=True)
+        pdf.add_font('DejaVu', 'B', './static/fonts/DejaVuSansCondensed-Bold.ttf', uni=True)
         
         # Set up document
-        pdf.set_font('Arial', 'B', 16)
+        pdf.set_font('DejaVu', 'B', 16)
         pdf.cell(190, 10, 'Syllabus Sync Analysis Report', 0, 1, 'C')
-        pdf.set_font('Arial', '', 10)
+        pdf.set_font('DejaVu', '', 10)
         pdf.cell(190, 10, 'University of Calgary', 0, 1, 'C')
         pdf.ln(5)
         
         # Summary section
-        pdf.set_font('Arial', 'B', 14)
+        pdf.set_font('DejaVu', 'B', 14)
         pdf.cell(190, 10, 'Summary', 0, 1, 'L')
-        pdf.set_font('Arial', '', 10)
+        pdf.set_font('DejaVu', '', 10)
         
         total_items = len(analysis_data['checklist_items'])
         missing_items = len(analysis_data['missing_items'])
@@ -342,21 +346,21 @@ def download_pdf():
         
         # Add analysis method statistics
         if len(analysis_methods) > 1:  # Only add if we have different methods
-            pdf.set_font('Arial', 'I', 9)
+            pdf.set_font('DejaVu', 'B', 9)
             pdf.cell(190, 8, 'Analysis Methods Used:', 0, 1, 'L')
             
             for method, count in analysis_methods.items():
                 method_name = method.replace('_', ' ').title()
-                pdf.cell(190, 6, f'• {method_name}: {count} items', 0, 1, 'L')
+                pdf.cell(190, 6, f'- {method_name}: {count} items', 0, 1, 'L')
                 
             pdf.ln(3)
-            pdf.set_font('Arial', '', 10)  # Reset font
+            pdf.set_font('DejaVu', '', 10)  # Reset font
         
         # Missing items section
         if missing_items > 0:
-            pdf.set_font('Arial', 'B', 12)
+            pdf.set_font('DejaVu', 'B', 12)
             pdf.cell(190, 10, 'Missing Items:', 0, 1, 'L')
-            pdf.set_font('Arial', '', 10)
+            pdf.set_font('DejaVu', '', 10)
             
             for item in analysis_data['missing_items']:
                 # Highlight grade table items in the missing list
@@ -364,7 +368,7 @@ def download_pdf():
                 if is_grade_item:
                     pdf.set_text_color(200, 0, 0)  # Red for important missing items
                 
-                pdf.multi_cell(190, 7, f"• {item}", 0, 'L')
+                pdf.multi_cell(190, 7, f"- {item}", 0, 'L')
                 
                 if is_grade_item:
                     pdf.set_text_color(0, 0, 0)  # Reset to black
@@ -372,16 +376,16 @@ def download_pdf():
             pdf.ln(5)
         
         # Detailed analysis section
-        pdf.set_font('Arial', 'B', 14)
+        pdf.set_font('DejaVu', 'B', 14)
         pdf.cell(190, 10, 'Detailed Checklist Analysis', 0, 1, 'L')
         
         # Table header
-        pdf.set_font('Arial', 'B', 10)
+        pdf.set_font('DejaVu', 'B', 10)
         pdf.cell(140, 8, 'Checklist Item', 1, 0, 'L')
         pdf.cell(50, 8, 'Status', 1, 1, 'C')
         
         # Table content
-        pdf.set_font('Arial', '', 10)
+        pdf.set_font('DejaVu', '', 10)
         for item in analysis_data['checklist_items']:
             # Get result details
             result = analysis_data['analysis_results'].get(item, {})
@@ -393,9 +397,9 @@ def download_pdf():
             
             # Highlight grade table items with slightly different formatting
             if is_grade_item:
-                pdf.set_font('Arial', 'B', 10)
+                pdf.set_font('DejaVu', 'B', 10)
             else:
-                pdf.set_font('Arial', '', 10)
+                pdf.set_font('DejaVu', '', 10)
                 
             pdf.multi_cell(140, 8, item, 1, 'L')
             pdf.set_xy(pdf.get_x() + 140, y_position)
@@ -418,7 +422,7 @@ def download_pdf():
                     if len(evidence) > 200:
                         evidence = evidence[:197] + '...'
                     
-                    pdf.set_font('Arial', 'I', 8)
+                    pdf.set_font('DejaVu', '', 8)
                     pdf.set_text_color(100, 100, 100)  # Gray
                     
                     # Add method information
@@ -432,9 +436,26 @@ def download_pdf():
             # Add space between items
             pdf.ln(2)
         
-        # Save PDF to memory
+        # Create a temporary file to save the PDF
+        import tempfile
+        import os
+        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        temp_filename = temp_file.name
+        temp_file.close()
+        
+        # Save PDF to the temporary file
+        pdf.output(temp_filename)
+        
+        # Read the PDF file into a BytesIO object
         pdf_buffer = io.BytesIO()
-        pdf.output(pdf_buffer)
+        with open(temp_filename, 'rb') as f:
+            pdf_buffer.write(f.read())
+        
+        # Delete the temporary file
+        os.unlink(temp_filename)
+        
+        # Reset the buffer position
         pdf_buffer.seek(0)
         
         # Send the PDF to the browser for viewing rather than downloading
