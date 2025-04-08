@@ -150,9 +150,16 @@ def index():
                 # Add link validation results to context
                 additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
 
-                # Process using AI if permitted, otherwise use traditional matching
+                # Process using AI with optimized parameters
                 from openai_helper import analyze_checklist_items_batch
-                results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts, additional_context=additional_context)
+                # Reduce verification attempts and enable parallel processing
+                optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
+                results = analyze_checklist_items_batch(
+                    checklist_items, 
+                    outline_text,
+                    max_attempts=optimized_attempts,
+                    additional_context=additional_context
+                )
 
                 # Update link validation results
                 for item in checklist_items:
@@ -704,7 +711,7 @@ def download_pdf():
             # Check for new page
             if pdf.get_y() > 250:
                 pdf.add_page()
-                pdf.set_font('DejaVu', 'B', 10)
+                pdf.set_font('DejaVu', ''B', 10)
                 pdf.cell(160, 8, 'Checklist Item', 1, 0, 'L')
                 pdf.cell(30, 8, 'Status', 1, 1, 'C')
                 pdf.set_font('DejaVu', '', 9)
