@@ -124,7 +124,7 @@ def index():
             checklist_text = request.form['checklist']
             outline = request.files['outline']
 
-        if not checklist_text.strip() or outline.filename == '':
+            if not checklist_text.strip() or outline.filename == '':
             return jsonify({'error': 'Both checklist and outline file are required'}), 400
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
