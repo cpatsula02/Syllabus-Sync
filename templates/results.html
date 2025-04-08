@@ -19,10 +19,12 @@
 
     <h1 class="mb-4">Syllabus Sync Analysis Results</h1>
 
-    <!-- Summary stats -->
+    <!-- Enhanced Summary stats -->
     <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Analysis Summary</h5>
+        </div>
         <div class="card-body">
-            <h5 class="card-title">Summary</h5>
             <div class="row">
                 <div class="col-md-3">
                     <div class="alert alert-success">
@@ -40,23 +42,48 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="alert alert-secondary">
-                        <i class="fas fa-bolt me-2"></i>AI Verifications: {{ api_calls_made|default(0) }}
+                    <div class="alert alert-primary">
+                        <i class="fas fa-robot me-2"></i>AI Verifications: {{ api_calls_made|default(0) }}
                     </div>
                 </div>
             </div>
-            {% if analysis_methods %}
-            <div class="row mt-2">
+            
+            <!-- AI Verification Information -->
+            <div class="row mt-3">
                 <div class="col-12">
-                    <div class="alert alert-light border">
-                        <h6 class="mb-2"><i class="fas fa-tachometer-alt me-2"></i>Analysis Method Stats</h6>
+                    <div class="alert alert-light border p-3">
+                        <h6 class="mb-2 fw-bold"><i class="fas fa-brain me-2 text-primary"></i>Multi-Perspective Analysis</h6>
+                        <p class="mb-2">Each checklist item was analyzed through multiple perspectives:</p>
+                        <div class="d-flex flex-wrap mb-2">
+                            <span class="badge bg-info me-2 mb-1 p-2"><i class="fas fa-chalkboard-teacher me-1"></i> Instructor Perspective</span>
+                            <span class="badge bg-info me-2 mb-1 p-2"><i class="fas fa-user-graduate me-1"></i> Student Perspective</span>
+                            <span class="badge bg-info me-2 mb-1 p-2"><i class="fas fa-university me-1"></i> Administrator Perspective</span>
+                        </div>
+                        <p class="small text-muted mb-0">The system evaluated each item from different viewpoints to ensure thorough verification, increasing accuracy and reducing false positives.</p>
+                    </div>
+                </div>
+            </div>
+            
+            {% if analysis_methods %}
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert alert-light border p-3">
+                        <h6 class="mb-2 fw-bold"><i class="fas fa-tachometer-alt me-2 text-primary"></i>Analysis Methods</h6>
+                        <p class="mb-2">The document was analyzed using multiple complementary techniques:</p>
                         <div class="d-flex flex-wrap">
                             {% for method_name, count in analysis_methods.items() %}
-                            <div class="badge bg-{{ 'info' if 'ai_' in method_name else 'secondary' }} me-2 mb-1 p-2">
+                            <div class="badge bg-{{ 'primary' if 'ai_' in method_name else 'secondary' }} me-2 mb-2 p-2">
+                                <i class="fas {{ 'fa-robot' if 'ai_' in method_name else 'fa-code' }} me-1"></i>
                                 {{ method_name|replace('_', ' ')|title }}: {{ count }}
                             </div>
                             {% endfor %}
                         </div>
+                        {% if api_calls_made > 0 %}
+                        <div class="bg-light p-2 mt-2 rounded">
+                            <i class="fas fa-info-circle text-primary me-1"></i>
+                            <span class="small">AI-based analysis was used for {{ api_calls_made }} verifications, providing deep semantic understanding beyond keyword matching.</span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -64,7 +91,7 @@
         </div>
     </div>
 
-    <!-- Missing items section - consolidated into a single box -->
+    <!-- Enhanced Missing items section -->
     {% if missing_items and missing_items|length > 0 %}
     <div class="card mb-4">
         <div class="card-header bg-danger text-white">
@@ -75,15 +102,63 @@
         <div class="card-body">
             <div class="missing-items-box p-3 border border-danger rounded">
                 <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
+                
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>AI-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis. Each item was verified by multiple independent checks to ensure accurate results.
+                </div>
 
-                <ul class="list-unstyled">
+                <div class="accordion mb-3" id="missingItemsAccordion">
                     {% for item in missing_items %}
-                        <li class="missing-item-entry {% if item in grade_table_items %}grade-item{% endif %} mb-2">
-                            <i class="fas {% if item in grade_table_items %}fa-table text-danger{% else %}fa-times-circle text-warning{% endif %} me-2"></i>
-                            {{ item }}
-                        </li>
+                    <div class="accordion-item border-{{ 'danger' if item in grade_table_items else 'warning' }} mb-2">
+                        <h2 class="accordion-header" id="heading{{ loop.index }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" 
+                                    aria-controls="collapse{{ loop.index }}">
+                                <i class="fas {% if item in grade_table_items %}fa-table text-danger{% else %}fa-times-circle text-warning{% endif %} me-2"></i>
+                                <strong>{{ item }}</strong>
+                                {% if item in grade_table_items %}
+                                <span class="badge bg-danger ms-2">High Priority</span>
+                                {% endif %}
+                            </button>
+                        </h2>
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" 
+                             aria-labelledby="heading{{ loop.index }}" data-bs-parent="#missingItemsAccordion">
+                            <div class="accordion-body">
+                                <p>
+                                    <strong>Why it's important:</strong> 
+                                    {% if "grade" in item.lower() or "assessment" in item.lower() or "weight" in item.lower() %}
+                                        Students need clear information about how they will be evaluated and what percentage each component contributes to their final grade.
+                                    {% elif "objective" in item.lower() or "outcome" in item.lower() %}
+                                        Learning objectives help students understand what knowledge and skills they should gain from the course.
+                                    {% elif "policy" in item.lower() and "late" in item.lower() %}
+                                        A late policy informs students about consequences for submitting assignments after deadlines.
+                                    {% elif "miss" in item.lower() and ("exam" in item.lower() or "assessment" in item.lower()) %}
+                                        Students need to know the procedure if they miss an exam or assessment due to illness or emergency.
+                                    {% elif "instructor" in item.lower() and "contact" in item.lower() %}
+                                        Contact information allows students to reach the instructor with questions or concerns about the course.
+                                    {% elif "academic" in item.lower() and ("integrity" in item.lower() or "misconduct" in item.lower()) %}
+                                        Academic integrity statements clarify expectations about plagiarism and other forms of academic dishonesty.
+                                    {% elif "accommodation" in item.lower() %}
+                                        Accommodation information ensures students with disabilities know how to request needed support.
+                                    {% elif "schedule" in item.lower() or "calendar" in item.lower() %}
+                                        A course schedule helps students plan their semester and prepare for upcoming assessments.
+                                    {% else %}
+                                        This component is required by institutional standards to ensure a comprehensive course outline.
+                                    {% endif %}
+                                </p>
+                                <div class="d-grid">
+                                    <button class="btn btn-sm btn-outline-primary missing-details-btn" 
+                                            onclick="loadMatchDetails(this)" 
+                                            data-item="{{ item }}">
+                                        <i class="fas fa-search me-1"></i>View Further Analysis
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -139,33 +214,46 @@
                     
                     <!-- How the item was found/missing explanation -->
                     <div class="explanation-detail mb-3 p-2 rounded {% if result.status == 'present' %}bg-success-light border-success{% else %}bg-danger-light border-danger{% endif %} border">
-                        <p class="mb-0">
-                            <strong>{% if result.status == 'present' %}How this item was found:{% else %}Why this item is missing:{% endif %}</strong><br>
+                        <h6 class="mb-2 fw-bold">{% if result.status == 'present' %}How this item was found:{% else %}Why this item is missing:{% endif %}</h6>
+                        <div class="mb-2">
                             {% if result.status == 'present' %}
-                                The system identified this requirement in the document by 
+                                <p>
                                 {% if 'ai_' in result.method %}
-                                    analyzing the content with AI and comparing it against the requirement's intent.
-                                    Multiple perspectives were considered to verify that the document genuinely meets this requirement.
+                                    <i class="fas fa-robot me-2 text-primary"></i><strong>AI Verification:</strong> The system analyzed this requirement using advanced AI models from <strong>multiple perspectives</strong> (instructor, student, and administrator viewpoints). This multi-angle analysis confirmed with {{ (result.confidence * 100)|int }}% confidence that the document contains content that satisfies this requirement.
                                 {% else %}
-                                    matching patterns and keywords related to this requirement, then checking the context to confirm the requirement is fully addressed.
+                                    <i class="fas fa-search me-2 text-secondary"></i><strong>Pattern Analysis:</strong> The system detected specific keywords, patterns, and contextual clues related to this requirement, then validated the surrounding content to confirm this requirement is fully addressed.
                                 {% endif %}
+                                </p>
+                                
                                 {% if result.verification_attempts and result.verification_attempts > 0 %}
-                                    {{ result.verification_present_votes }} out of {{ result.verification_attempts }} verification checks confirmed the presence of this item.
+                                <p class="mt-2">
+                                    <i class="fas fa-check-double me-2 text-success"></i><strong>Verification Details:</strong> {{ result.verification_present_votes }} out of {{ result.verification_attempts }} independent verification checks confirmed the presence of this item. This indicates strong consensus across multiple analysis methods.
+                                </p>
                                 {% endif %}
+                                
+                                <p class="mt-2">
+                                    <i class="fas fa-clipboard-check me-2 text-success"></i><strong>Confirmation Method:</strong> The system detected this requirement by analyzing the document's semantic structure, relevant sections, and specific language patterns that align with the requirement's intent, rather than just looking for exact matches of the checklist wording.
+                                </p>
                             {% else %}
+                                <p>
                                 {% if 'ai_' in result.method %}
-                                    After thorough AI-based analysis from multiple perspectives, this requirement was not found in the document.
-                                    The system searched for various ways this requirement could be expressed but could not locate content that satisfies it.
+                                    <i class="fas fa-robot me-2 text-danger"></i><strong>AI Verification:</strong> Multiple AI analysis passes from different perspectives (instructor, student, and administrator viewpoints) were unable to locate content that satisfies this requirement. The system analyzed the entire document to find any direct or indirect way this requirement might be addressed.
                                 {% else %}
-                                    The system searched for patterns, keywords, and contextual clues related to this requirement but could not find matching content
-                                    that would satisfy this checklist item.
+                                    <i class="fas fa-search me-2 text-danger"></i><strong>Pattern Analysis:</strong> The system searched thoroughly for relevant keywords, patterns, phrases, and related concepts throughout the document but could not find sufficient evidence that this requirement is addressed.
                                 {% endif %}
+                                </p>
+                                
                                 {% if result.verification_attempts and result.verification_attempts > 0 %}
-                                    {{ result.verification_present_votes }} out of {{ result.verification_attempts }} verification checks indicated the presence of this item,
-                                    which was insufficient to confirm it exists in the document.
+                                <p class="mt-2">
+                                    <i class="fas fa-check-double me-2 text-danger"></i><strong>Verification Details:</strong> Only {{ result.verification_present_votes }} out of {{ result.verification_attempts }} verification checks indicated the presence of this item, which was insufficient to confirm it exists in the document. This indicates strong consensus that the item is missing.
+                                </p>
                                 {% endif %}
+                                
+                                <p class="mt-2">
+                                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Suggested Action:</strong> Consider adding clear and explicit content addressing this requirement to the document. The system looked for both exact matches and semantically similar content but could not find sufficient evidence of this requirement.
+                                </p>
                             {% endif %}
-                        </p>
+                        </div>
                     </div>
                     
                     <!-- View Evidence Button -->

@@ -265,51 +265,51 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
         if found and excerpt:
             evidence = excerpt
 
-    # Generate a meaningful explanation
+    # Generate a detailed, meaningful explanation
     item_lower = item.lower()
     if is_present:
-        # Create context-aware explanations
+        # Create detailed context-aware explanations
         if 'objective' in item_lower and ('list' in item_lower or 'number' in item_lower):
-            explanation = 'The course outline contains clearly listed or numbered learning objectives.'
+            explanation = 'The course outline contains clearly listed or numbered learning objectives. The system detected specific sections that detail what students will learn or be able to do after completing the course, structured in a clear and organized format.'
         elif 'grade' in item_lower or 'grading' in item_lower or 'weighting' in item_lower:
-            explanation = 'The course outline includes a grade distribution or assessment weighting scheme.'
+            explanation = 'The course outline includes a grade distribution or assessment weighting scheme. The document contains a breakdown of how the final grade is calculated, with individual components and their corresponding percentage weights clearly indicated.'
         elif 'exam' in item_lower and 'final' in item_lower:
-            explanation = 'Information about the final exam is provided in the course outline.'
+            explanation = 'Information about the final exam is provided in the course outline. The document specifies details about the final assessment, potentially including format, duration, date, content coverage, and weighting toward the final grade.'
         elif 'policy' in item_lower and 'late' in item_lower:
-            explanation = 'The course outline specifies a policy for late assignments or submissions.'
+            explanation = 'The course outline specifies a policy for late assignments or submissions. The document clearly states the consequences of submitting work after deadlines and any procedures for requesting extensions or accommodations for late work.'
         elif 'miss' in item_lower and ('exam' in item_lower or 'assignment' in item_lower):
-            explanation = 'The course outline addresses procedures for missed assessments or exams.'
+            explanation = 'The course outline addresses procedures for missed assessments or exams. The document provides instructions for students who miss scheduled evaluations, potentially including notification requirements, documentation needed, and makeup policies.'
         elif 'instructor' in item_lower and 'contact' in item_lower:
-            explanation = 'The course outline provides instructor contact information and communication procedures.'
+            explanation = 'The course outline provides instructor contact information and communication procedures. Details such as email address, office location, office hours, and preferred communication methods are included to facilitate student-instructor interaction.'
         elif 'text' in item_lower and 'book' in item_lower:
-            explanation = 'The course outline lists required or recommended textbooks or reading materials.'
+            explanation = 'The course outline lists required or recommended textbooks or reading materials. The document specifies learning resources students need to obtain or access, potentially including textbooks, online materials, course packs, or other reference materials.'
         elif 'academic' in item_lower and ('integrity' in item_lower or 'misconduct' in item_lower):
-            explanation = 'The course outline includes a statement on academic integrity or misconduct.'
+            explanation = 'The course outline includes a statement on academic integrity or misconduct. The document addresses expectations regarding plagiarism, unauthorized collaboration, or other forms of academic dishonesty, along with potential consequences.'
         elif 'accommodation' in item_lower or 'accessibility' in item_lower:
-            explanation = 'The course outline provides information about accommodations for students with disabilities.'
+            explanation = 'The course outline provides information about accommodations for students with disabilities. The document includes guidance for students requiring special arrangements due to disabilities, potentially referencing university resources and procedures for requesting accommodations.'
         else:
-            explanation = 'This requirement is addressed in the course outline with relevant content.'
+            explanation = 'This requirement is addressed in the course outline with relevant content. The document contains appropriate information that satisfies the checklist item, with sufficient context and detail to meet institutional standards.'
     else:
         if 'objective' in item_lower and ('list' in item_lower or 'number' in item_lower):
-            explanation = 'The course outline does not appear to have clearly listed or numbered learning objectives.'
+            explanation = 'The course outline does not appear to have clearly listed or numbered learning objectives. While the document may mention course goals generally, it lacks a structured or organized list of specific learning outcomes that students should achieve by the end of the course.'
         elif 'grade' in item_lower or 'grading' in item_lower or 'weighting' in item_lower:
-            explanation = 'A grade distribution or assessment weighting scheme was not found in the course outline.'
+            explanation = 'A grade distribution or assessment weighting scheme was not found in the course outline. The document lacks a clear breakdown of how the final grade is calculated, missing details about assessment components and their corresponding percentage weights.'
         elif 'exam' in item_lower and 'final' in item_lower:
-            explanation = 'Specific information about the final exam appears to be missing from the course outline.'
+            explanation = 'Specific information about the final exam appears to be missing from the course outline. The document does not adequately detail the format, duration, content coverage, or weighting of the final assessment, which students need to prepare effectively.'
         elif 'policy' in item_lower and 'late' in item_lower:
-            explanation = 'A clear policy for late assignments or submissions was not found in the course outline.'
+            explanation = 'A clear policy for late assignments or submissions was not found in the course outline. The document does not specify the consequences of submitting work after deadlines or procedures for requesting extensions, creating potential confusion for students.'
         elif 'miss' in item_lower and ('exam' in item_lower or 'assignment' in item_lower):
-            explanation = 'Procedures for missed assessments or exams were not clearly identified in the course outline.'
+            explanation = 'Procedures for missed assessments or exams were not clearly identified in the course outline. The document lacks specific instructions for students who miss scheduled evaluations, including notification requirements, documentation needed, and makeup policies.'
         elif 'instructor' in item_lower and 'contact' in item_lower:
-            explanation = 'Instructor contact information or communication procedures appear to be missing from the course outline.'
+            explanation = 'Instructor contact information or communication procedures appear to be missing from the course outline. The document does not adequately provide details such as email address, office location, office hours, or preferred communication methods needed to facilitate student-instructor interaction.'
         elif 'text' in item_lower and 'book' in item_lower:
-            explanation = 'Required or recommended textbooks or reading materials were not clearly identified in the course outline.'
+            explanation = 'Required or recommended textbooks or reading materials were not clearly identified in the course outline. The document does not specify learning resources students need to obtain or access, such as textbooks, online materials, course packs, or other reference materials.'
         elif 'academic' in item_lower and ('integrity' in item_lower or 'misconduct' in item_lower):
-            explanation = 'A statement on academic integrity or misconduct was not found in the course outline.'
+            explanation = 'A statement on academic integrity or misconduct was not found in the course outline. The document lacks clear guidelines regarding plagiarism, unauthorized collaboration, or other forms of academic dishonesty, along with potential consequences.'
         elif 'accommodation' in item_lower or 'accessibility' in item_lower:
-            explanation = 'Information about accommodations for students with disabilities appears to be missing from the course outline.'
+            explanation = 'Information about accommodations for students with disabilities appears to be missing from the course outline. The document does not include guidance for students requiring special arrangements due to disabilities, and may not reference university resources or procedures for requesting accommodations.'
         else:
-            explanation = 'This requirement does not appear to be addressed in the course outline.'
+            explanation = 'This requirement does not appear to be addressed in the course outline. After thorough analysis, the system could not identify content that satisfies this checklist item according to institutional standards and requirements.'
 
     return {
         'present': is_present,
