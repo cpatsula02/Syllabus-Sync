@@ -393,9 +393,8 @@ def get_match_details():
 @app.route('/download_pdf', methods=['GET'])
 def download_pdf():
     """Generate a PDF report of the analysis results"""
-    if not analysis_data['checklist_items']:
-        flash('No analysis results available. Please analyze documents first.')
-        return redirect('/')
+    if not analysis_data.get('checklist_items'):
+        return render_template('index.html', error="Please analyze documents first before generating the PDF report.")
 
     import os
     try:
