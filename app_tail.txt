@@ -1,0 +1,50 @@
+        pdf.cell(95, 8, f'Total Items: {total_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Items Present: {present_items}', 1, 1, 'L')
+
+
+
+        # Create temporary file and save
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        temp_filename = temp_file.name
+        temp_file.close()
+
+        # Save PDF to temporary file
+        pdf.output(temp_filename)
+
+        # Read the PDF file into a BytesIO object
+        pdf_buffer = io.BytesIO()
+        with open(temp_filename, 'rb') as f:
+            pdf_buffer.write(f.read())
+
+        # Delete the temporary file
+        os.unlink(temp_filename)
+
+        # Reset the buffer position
+        pdf_buffer.seek(0)
+
+        # Send the PDF to the browser with download option
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name='syllabus_sync_report.pdf'
+        )
+
+    except Exception as e:
+        logger.exception(f"Error generating PDF: {str(e)}")
+        flash(f"Error generating PDF: {str(e)}")
+        return redirect('/')
+
+if __name__ == "__main__":
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("0.0.0.0", 5000))
+        sock.close()
+        print("Port 5000 is available")
+        print("Starting Flask server on port 5000...")
+        app.run(host="0.0.0.0", port=5000, threaded=True)
+    except socket.error:
+        print("Port 5000 is already in use")
+    except Exception as e:
+        print(f"Failed to start server: {str(e)}")
