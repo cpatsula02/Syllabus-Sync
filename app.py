@@ -22,7 +22,7 @@ if OPENAI_API_KEY:
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        
+
         # Do not make an actual API call, just initialize the client
         logger.info("OpenAI client initialized. Testing connection...")
         ENABLE_OPENAI = True  # Tentatively enable if initialization worked
@@ -87,18 +87,18 @@ def validate_links(text):
     if not isinstance(text, str):
         logger.warning(f"validate_links received non-string input: {type(text)}")
         return [], []
-        
+
     url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
     urls = re.findall(url_pattern, text)
     valid_links = []
     invalid_links = []
-    
+
     # Limit to first 5 links to prevent timeouts
     for url in urls[:5]:
         # Make sure URL starts with http:// or https://
         if not url.startswith(('http://', 'https://')):
             url = 'http://' + url
-            
+
         try:
             # Set a short timeout to prevent long waits
             urllib.request.urlopen(url, timeout=3)
@@ -110,7 +110,7 @@ def validate_links(text):
     # If there are more links than we checked, log it
     if len(urls) > 5:
         logger.info(f"Only checked 5 out of {len(urls)} links")
-        
+
     return valid_links, invalid_links
 
 
@@ -129,7 +129,7 @@ def index():
 
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
-            
+
             # Save checklist text to a temporary file
             checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
             try:
@@ -183,7 +183,7 @@ def index():
 
                     # Process using AI with optimized parameters only if OpenAI is enabled
                     results = {}
-                    
+
                     if ENABLE_OPENAI and api_attempts > 0:
                         try:
                             from openai_helper import analyze_checklist_items_batch
@@ -366,7 +366,7 @@ def index():
                 except Exception as e:
                     app.logger.error(f"Error during cleanup: {str(e)}")
 
-    return render_template('index.html')
+        return render_template('index.html')
 
 @app.route('/get-match-details', methods=['GET'])
 def get_match_details():
