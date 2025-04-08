@@ -132,239 +132,239 @@ def index():
             
             # Save checklist text to a temporary file
             checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
-        try:
-            with open(checklist_path, 'w', encoding='utf-8') as f:
-                f.write(checklist_text)
-
-            outline.save(outline_path)
-
-            # Get additional context if provided
-            additional_context = request.form.get('additional_context', '').strip()
-
-            # Add specific guidance for grade table analysis if not already present
-            if additional_context and not any(term in additional_context.lower() for term in 
-                                             ['grade distribution', 'grade table', 'assessment weight']):
-                additional_context += "\n\nPay special attention to the Grade Distribution Table items, " + \
-                                    "including assessment weights, due dates, missed assessment policy, " + \
-                                    "late policy, and class participation details. These are critical " + \
-                                    "components that need precise identification in the document."
-
-            # Get number of API attempts
             try:
-                api_attempts = int(request.form.get('api_attempts', 3))
-            except ValueError:
-                api_attempts = 3  # Default to 3 attempts if invalid value
+                with open(checklist_path, 'w', encoding='utf-8') as f:
+                    f.write(checklist_text)
 
-            try:
-                # Process files with specified API attempts and context
-                logger.info(f"Starting document processing with {api_attempts} API attempts")
-                logger.info(f"Checklist path: {checklist_path}")
-                logger.info(f"Outline path: {outline_path}")
+                outline.save(outline_path)
 
-                # Extract text from the document based on file type
-                if outline.filename.lower().endswith('.pdf'):
-                    outline_text = extract_text(outline_path)
-                else:
-                    with open(outline_path, 'r', encoding='utf-8') as file:
-                        outline_text = file.read()
+                # Get additional context if provided
+                additional_context = request.form.get('additional_context', '').strip()
 
-                checklist_items, analysis_results = process_documents(
-                    checklist_path, 
-                    outline_path, 
-                    api_attempts=api_attempts, 
-                    additional_context=additional_context
-                )
+                # Add specific guidance for grade table analysis if not already present
+                if additional_context and not any(term in additional_context.lower() for term in 
+                                                 ['grade distribution', 'grade table', 'assessment weight']):
+                    additional_context += "\n\nPay special attention to the Grade Distribution Table items, " + \
+                                        "including assessment weights, due dates, missed assessment policy, " + \
+                                        "late policy, and class participation details. These are critical " + \
+                                        "components that need precise identification in the document."
 
-                # Validate links in the document
-                valid_links, invalid_links = validate_links(outline_text)
+                # Get number of API attempts
+                try:
+                    api_attempts = int(request.form.get('api_attempts', 3))
+                except ValueError:
+                    api_attempts = 3  # Default to 3 attempts if invalid value
 
-                # Add link validation results to context
-                additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
+                try:
+                    # Process files with specified API attempts and context
+                    logger.info(f"Starting document processing with {api_attempts} API attempts")
+                    logger.info(f"Checklist path: {checklist_path}")
+                    logger.info(f"Outline path: {outline_path}")
 
-                # Process using AI with optimized parameters only if OpenAI is enabled
-                results = {}
-                
-                if ENABLE_OPENAI and api_attempts > 0:
-                    try:
-                        from openai_helper import analyze_checklist_items_batch
-                        # Reduce verification attempts and enable parallel processing
-                        optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
-                        logger.info("Using OpenAI for enhanced analysis...")
-                        results = analyze_checklist_items_batch(
-                            checklist_items, 
-                            outline_text,
-                            max_attempts=optimized_attempts,
-                            additional_context=additional_context
-                        )
-                    except Exception as ai_error:
-                        # Log the error but continue with rule-based analysis
-                        logger.error(f"Error using OpenAI analysis: {str(ai_error)}")
-                        logger.info("Falling back to rule-based analysis...")
-                        # Use the results from the process_documents function
-                        results = analysis_results
-                else:
-                    # Use the results from the process_documents function if OpenAI is disabled
-                    logger.info("OpenAI analysis is disabled. Using traditional pattern matching...")
-                    results = analysis_results
+                    # Extract text from the document based on file type
+                    if outline.filename.lower().endswith('.pdf'):
+                        outline_text = extract_text(outline_path)
+                    else:
+                        with open(outline_path, 'r', encoding='utf-8') as file:
+                            outline_text = file.read()
 
-                # Update link validation results
-                for item in checklist_items:
-                    if 'link' in item.lower() or 'url' in item.lower():
-                        if invalid_links:
-                            results[item] = {
-                                'present': False,
-                                'confidence': 0.9,
-                                'explanation': f'Found {len(invalid_links)} invalid links in document',
-                                'evidence': "Invalid links found: " + ", ".join(invalid_links[:3]),
-                                'method': 'link_validation'
-                            }
-                        else:
-                            results[item] = {
-                                'present': True,
-                                'confidence': 0.9,
-                                'explanation': 'All links in document are valid',
-                                'evidence': "Valid links found: " + ", ".join(valid_links[:3]),
-                                'method': 'link_validation'
-                            }
-
-                logger.info(f"Document processing complete. Found {len(checklist_items)} checklist items.")
-                if not checklist_items or len(checklist_items) == 0:
-                    logger.error("No checklist items were extracted! This will cause issues.")
-                    flash("Error: No checklist items could be extracted from the document. Please check the file format.")
-                    return redirect(request.url)
-
-            except Exception as api_error:
-                logger.exception(f"API error during document processing: {str(api_error)}")
-                error_message = str(api_error)
-
-                # Check if this is likely an API error
-                if "openai" in error_message.lower() or "api" in error_message.lower():
-                    flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
-                    # Retry with no API calls (force fallback methods)
                     checklist_items, analysis_results = process_documents(
                         checklist_path, 
                         outline_path, 
-                        api_attempts=0,  # Force fallback methods 
+                        api_attempts=api_attempts, 
                         additional_context=additional_context
                     )
-                else:
-                    # Re-raise for other types of errors
-                    raise
 
-            if "error" in analysis_results:
-                flash(analysis_results["error"])
-                return redirect(request.url)
+                    # Validate links in the document
+                    valid_links, invalid_links = validate_links(outline_text)
 
-            # Identify grade table related items for special handling
-            grade_table_items = identify_grade_table_items(checklist_items)
-            logger.info(f"Identified {len(grade_table_items)} grade table related items")
+                    # Add link validation results to context
+                    additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
 
-            # Format results for template with enhanced data and strict duplicate prevention
-            results = []
-            present_count = 0
-            missing_count = 0
-            missing_items = []
-            processed_items = set()  # Track processed items to prevent duplicates
-            seen_normalized_items = set()  # Track normalized item text to catch near-duplicates
+                    # Process using AI with optimized parameters only if OpenAI is enabled
+                    results = {}
+                    
+                    if ENABLE_OPENAI and api_attempts > 0:
+                        try:
+                            from openai_helper import analyze_checklist_items_batch
+                            # Reduce verification attempts and enable parallel processing
+                            optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
+                            logger.info("Using OpenAI for enhanced analysis...")
+                            results = analyze_checklist_items_batch(
+                                checklist_items, 
+                                outline_text,
+                                max_attempts=optimized_attempts,
+                                additional_context=additional_context
+                            )
+                        except Exception as ai_error:
+                            # Log the error but continue with rule-based analysis
+                            logger.error(f"Error using OpenAI analysis: {str(ai_error)}")
+                            logger.info("Falling back to rule-based analysis...")
+                            # Use the results from the process_documents function
+                            results = analysis_results
+                    else:
+                        # Use the results from the process_documents function if OpenAI is disabled
+                        logger.info("OpenAI analysis is disabled. Using traditional pattern matching...")
+                        results = analysis_results
 
-            for item in checklist_items:
-                # Skip if this item has already been processed
-                # Normalize item text for comparison (remove extra spaces, lowercase)
-                normalized_item = ' '.join(item.lower().split())
-                if normalized_item in seen_normalized_items:
-                    continue
-                seen_normalized_items.add(normalized_item)
+                    # Update link validation results
+                    for item in checklist_items:
+                        if 'link' in item.lower() or 'url' in item.lower():
+                            if invalid_links:
+                                results[item] = {
+                                    'present': False,
+                                    'confidence': 0.9,
+                                    'explanation': f'Found {len(invalid_links)} invalid links in document',
+                                    'evidence': "Invalid links found: " + ", ".join(invalid_links[:3]),
+                                    'method': 'link_validation'
+                                }
+                            else:
+                                results[item] = {
+                                    'present': True,
+                                    'confidence': 0.9,
+                                    'explanation': 'All links in document are valid',
+                                    'evidence': "Valid links found: " + ", ".join(valid_links[:3]),
+                                    'method': 'link_validation'
+                                }
 
-                processed_items.add(item)  # Mark as processed
-                result = analysis_results.get(item, {})
-                is_present = result.get("present", False)
-                is_grade_item = item in grade_table_items
+                    logger.info(f"Document processing complete. Found {len(checklist_items)} checklist items.")
+                    if not checklist_items or len(checklist_items) == 0:
+                        logger.error("No checklist items were extracted! This will cause issues.")
+                        flash("Error: No checklist items could be extracted from the document. Please check the file format.")
+                        return redirect(request.url)
 
-                # Set status based on presence
-                status = "present" if is_present else "missing"
-                status = result.get("status", status)  # Allow override from analysis
+                except Exception as api_error:
+                    logger.exception(f"API error during document processing: {str(api_error)}")
+                    error_message = str(api_error)
 
-                result["status"] = status
-                if status == "present":
-                    present_count += 1
-                elif status == "na":
-                    # Don't count N/A items in missing or present
-                    pass
-                else:
-                    missing_count += 1
-                    missing_items.append(item)
+                    # Check if this is likely an API error
+                    if "openai" in error_message.lower() or "api" in error_message.lower():
+                        flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
+                        # Retry with no API calls (force fallback methods)
+                        checklist_items, analysis_results = process_documents(
+                            checklist_path, 
+                            outline_path, 
+                            api_attempts=0,  # Force fallback methods 
+                            additional_context=additional_context
+                        )
+                    else:
+                        # Re-raise for other types of errors
+                        raise
 
-                results.append({
-                    "item": item,
-                    "present": is_present,
-                    "explanation": result.get("explanation", ""),
-                    "evidence": result.get("evidence", ""),
-                    "is_grade_item": is_grade_item,
-                    "method": result.get("method", "pattern_matching"),
-                    "confidence": result.get("confidence", None),
-                    "status": status
-                })
+                if "error" in analysis_results:
+                    flash(analysis_results["error"])
+                    return redirect(request.url)
 
-            # Store data for other routes
-            analysis_data['checklist_items'] = checklist_items
-            analysis_data['analysis_results'] = analysis_results
-            analysis_data['missing_items'] = missing_items
-            analysis_data['grade_table_items'] = grade_table_items
+                # Identify grade table related items for special handling
+                grade_table_items = identify_grade_table_items(checklist_items)
+                logger.info(f"Identified {len(grade_table_items)} grade table related items")
 
-            # Calculate analysis method statistics
-            analysis_methods = {}
-            api_calls_made = 0
-            total_verification_calls = 0
+                # Format results for template with enhanced data and strict duplicate prevention
+                results = []
+                present_count = 0
+                missing_count = 0
+                missing_items = []
+                processed_items = set()  # Track processed items to prevent duplicates
+                seen_normalized_items = set()  # Track normalized item text to catch near-duplicates
 
-            for item in checklist_items:
-                result = analysis_results.get(item, {})
-                method = result.get("method", "pattern_matching")
+                for item in checklist_items:
+                    # Skip if this item has already been processed
+                    # Normalize item text for comparison (remove extra spaces, lowercase)
+                    normalized_item = ' '.join(item.lower().split())
+                    if normalized_item in seen_normalized_items:
+                        continue
+                    seen_normalized_items.add(normalized_item)
 
-                # Count occurrences of each method
-                if method in analysis_methods:
-                    analysis_methods[method] += 1
-                else:
-                    analysis_methods[method] = 1
+                    processed_items.add(item)  # Mark as processed
+                    result = analysis_results.get(item, {})
+                    is_present = result.get("present", False)
+                    is_grade_item = item in grade_table_items
 
-                # Count verification attempts per item
-                verification_attempts = result.get("verification_attempts", 0)
-                total_verification_calls += verification_attempts
+                    # Set status based on presence
+                    status = "present" if is_present else "missing"
+                    status = result.get("status", status)  # Allow override from analysis
 
-                # Count items that used AI (at least one successful call)
-                if verification_attempts > 0:
-                    api_calls_made += 1
+                    result["status"] = status
+                    if status == "present":
+                        present_count += 1
+                    elif status == "na":
+                        # Don't count N/A items in missing or present
+                        pass
+                    else:
+                        missing_count += 1
+                        missing_items.append(item)
 
-            return render_template('results.html', 
-                                results=results,
-                                present_count=present_count,
-                                missing_count=missing_count,
-                                total_count=len(checklist_items),
-                                missing_items=missing_items,
-                                grade_table_items=grade_table_items,
-                                analysis_methods=analysis_methods,
-                                api_calls_made=api_calls_made,
-                                max_attempts=api_attempts)
+                    results.append({
+                        "item": item,
+                        "present": is_present,
+                        "explanation": result.get("explanation", ""),
+                        "evidence": result.get("evidence", ""),
+                        "is_grade_item": is_grade_item,
+                        "method": result.get("method", "pattern_matching"),
+                        "confidence": result.get("confidence", None),
+                        "status": status
+                    })
 
-        except Exception as e:
-            logger.exception(f"Error processing documents: {str(e)}")
-            flash(f'An error occurred: {str(e)}')
-            return redirect(request.url)
-        except TimeoutError:
-            flash("Request timed out. Please try again with a smaller file or fewer items.")
-            return redirect(request.url)
-        except Exception as e:
-            app.logger.error(f"Unexpected error: {str(e)}")
-            flash(f"An error occurred: {str(e)}")
-            return redirect(request.url)
-        finally:
-            # Cleanup
-            try:
-                if os.path.exists(checklist_path):
-                    os.remove(checklist_path)
-                if os.path.exists(outline_path):
-                    os.remove(outline_path)
+                # Store data for other routes
+                analysis_data['checklist_items'] = checklist_items
+                analysis_data['analysis_results'] = analysis_results
+                analysis_data['missing_items'] = missing_items
+                analysis_data['grade_table_items'] = grade_table_items
+
+                # Calculate analysis method statistics
+                analysis_methods = {}
+                api_calls_made = 0
+                total_verification_calls = 0
+
+                for item in checklist_items:
+                    result = analysis_results.get(item, {})
+                    method = result.get("method", "pattern_matching")
+
+                    # Count occurrences of each method
+                    if method in analysis_methods:
+                        analysis_methods[method] += 1
+                    else:
+                        analysis_methods[method] = 1
+
+                    # Count verification attempts per item
+                    verification_attempts = result.get("verification_attempts", 0)
+                    total_verification_calls += verification_attempts
+
+                    # Count items that used AI (at least one successful call)
+                    if verification_attempts > 0:
+                        api_calls_made += 1
+
+                return render_template('results.html', 
+                                    results=results,
+                                    present_count=present_count,
+                                    missing_count=missing_count,
+                                    total_count=len(checklist_items),
+                                    missing_items=missing_items,
+                                    grade_table_items=grade_table_items,
+                                    analysis_methods=analysis_methods,
+                                    api_calls_made=api_calls_made,
+                                    max_attempts=api_attempts)
+
             except Exception as e:
-                app.logger.error(f"Error during cleanup: {str(e)}")
+                logger.exception(f"Error processing documents: {str(e)}")
+                flash(f'An error occurred: {str(e)}')
+                return redirect(request.url)
+            except TimeoutError:
+                flash("Request timed out. Please try again with a smaller file or fewer items.")
+                return redirect(request.url)
+            except Exception as e:
+                app.logger.error(f"Unexpected error: {str(e)}")
+                flash(f"An error occurred: {str(e)}")
+                return redirect(request.url)
+            finally:
+                # Cleanup
+                try:
+                    if os.path.exists(checklist_path):
+                        os.remove(checklist_path)
+                    if os.path.exists(outline_path):
+                        os.remove(outline_path)
+                except Exception as e:
+                    app.logger.error(f"Error during cleanup: {str(e)}")
 
     return render_template('index.html')
 
