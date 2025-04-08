@@ -627,16 +627,12 @@ def download_pdf():
             pdf.set_xy(pdf.get_x() + 140, y_position)
 
             # Color-code status
-            if is_present:
-                pdf.set_text_color(0, 128, 0)  # Green
-            else:
-                pdf.set_text_color(200, 0, 0)  # Red
+            pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
+            pdf.rect(x_pos + 150, y_pos, 30, row_height)
 
-            # Calculate the height that was actually used for the item
-            status_height = pdf.get_y() - y_position
-
-            # Make sure the status cell matches the height of the item cell
-            pdf.cell(50, status_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            # Center status text vertically and horizontally
+            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width('Present')) / 2, y_pos + (row_height - 5) / 2)
+            pdf.cell(30, 5, 'Present' if is_present else 'Missing', 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
 
             # Include evidence if present (max 300 chars)
