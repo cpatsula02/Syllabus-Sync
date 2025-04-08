@@ -125,7 +125,7 @@
                         {% if result.confidence %}
                         <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
                         {% endif %}
-                        
+
                         {% if result.verification_attempts and result.verification_attempts > 0 %}
                         <span class="ms-3">
                             <i class="fas fa-check-circle text-primary"></i>

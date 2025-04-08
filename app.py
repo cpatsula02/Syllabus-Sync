@@ -252,8 +252,12 @@ def index():
                         result["explanation"] = "Not found with sufficient evidence in document"
                         result["confidence"] = 0.2
 
-                if is_present:
+                status = result.get("status", "missing")
+                if status == "present":
                     present_count += 1
+                elif status == "na":
+                    # Don't count N/A items in missing or present
+                    pass
                 else:
                     missing_count += 1
                     missing_items.append(item)
@@ -265,7 +269,8 @@ def index():
                     "evidence": result.get("evidence", ""),
                     "is_grade_item": is_grade_item,
                     "method": result.get("method", "pattern_matching"),
-                    "confidence": result.get("confidence", None)
+                    "confidence": result.get("confidence", None),
+                    "status": status
                 })
 
             # Store data for other routes
@@ -704,7 +709,7 @@ def download_pdf():
             pdf.cell(30, 5, 'Present' if is_present else 'Missing', 0, 1, 'C')
             pdf.set_text_color(0, 0, 0)
 
-            # Add spacing between items
+            #            # Add spacing between items
             pdf.set_xy(x_pos, y_pos + row_height + 2)
 
             # Check for new page
@@ -764,7 +769,7 @@ if __name__ == "__main__":
     WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
     import socket
-    
+
     # Check if port is available
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -773,7 +778,7 @@ if __name__ == "__main__":
         print("Port 5000 is available")
     except socket.error:
         print("Port 5000 is already in use")
-        
+
     try:
         print("Starting Flask server on port 5000...")
         app.run(
