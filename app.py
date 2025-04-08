@@ -760,13 +760,28 @@ def download_pdf():
         return redirect('/')
 
 if __name__ == "__main__":
-    # Configure server timeouts
+    # Configure server timeouts and error handling
     from werkzeug.serving import WSGIRequestHandler
     WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        threaded=True,
-        request_handler=WSGIRequestHandler
-    )
+    import socket
+    
+    # Check if port is available
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("0.0.0.0", 5000))
+        sock.close()
+        print("Port 5000 is available")
+    except socket.error:
+        print("Port 5000 is already in use")
+        
+    try:
+        print("Starting Flask server on port 5000...")
+        app.run(
+            host="0.0.0.0",
+            port=5000,
+            threaded=True,
+            request_handler=WSGIRequestHandler
+        )
+    except Exception as e:
+        print(f"Failed to start server: {str(e)}")
