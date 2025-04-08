@@ -950,8 +950,59 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 enhanced_context += f"\n\nNote: The document appears to contain policies for: {', '.join(policies)}."
 
         # Process using AI if permitted, otherwise use traditional matching
-        from openai_helper import analyze_checklist_items_batch
-        results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts, additional_context=enhanced_context)
+        try:
+            # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
+            from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
+            
+            # Check if OpenAI is enabled in app.py
+            from app import ENABLE_OPENAI
+            
+            results = {}
+            
+            # Use OpenAI if enabled and requested
+            if ENABLE_OPENAI and api_attempts > 0:
+                logging.info("Using OpenAI for analysis with fallback")
+                results = analyze_checklist_items_batch(
+                    checklist_items, 
+                    outline_text, 
+                    max_attempts=api_attempts, 
+                    additional_context=enhanced_context
+                )
+            else:
+                # Use traditional pattern matching for all items
+                logging.info("Using traditional pattern matching for analysis")
+                for item in checklist_items:
+                    is_present = check_item_in_document(item, outline_text, enhanced_context)
+                    explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+                    evidence = ""
+                    
+                    if is_present:
+                        found, excerpt = find_matching_excerpt(item, outline_text)
+                        if found and excerpt:
+                            evidence = excerpt
+                    
+                    results[item] = {
+                        'present': is_present,
+                        'confidence': 0.8 if is_present else 0.2,
+                        'explanation': explanation,
+                        'evidence': evidence,
+                        'method': 'pattern_matching'
+                    }
+        except Exception as e:
+            # Fallback completely to basic pattern matching if any errors
+            logging.exception(f"Error with OpenAI processing, using basic fallback: {str(e)}")
+            
+            results = {}
+            for item in checklist_items:
+                is_present = check_item_in_document(item, outline_text, enhanced_context)
+                explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+                
+                results[item] = {
+                    'present': is_present,
+                    'confidence': 0.7 if is_present else 0.3,
+                    'explanation': explanation,
+                    'method': 'basic_pattern_matching'
+                }
 
         # Post-process grade distribution items with the extracted table if found
         if has_grade_table:

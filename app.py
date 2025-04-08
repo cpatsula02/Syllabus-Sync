@@ -15,8 +15,21 @@ logger = logging.getLogger(__name__)
 
 # Check if OpenAI API key is available
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+ENABLE_OPENAI = False  # Default to disabled
+
 if OPENAI_API_KEY:
-    logger.info("OpenAI API key is configured. Advanced AI analysis is available.")
+    # Test the OpenAI connection with minimal scope
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        # Do not make an actual API call, just initialize the client
+        logger.info("OpenAI client initialized. Testing connection...")
+        ENABLE_OPENAI = True  # Tentatively enable if initialization worked
+    except Exception as e:
+        logger.error(f"Error initializing OpenAI client: {str(e)}")
+        logger.warning("Disabling OpenAI functionality for this session.")
+        ENABLE_OPENAI = False
 else:
     logger.warning("OpenAI API key is not configured. Fallback to traditional analysis only.")
 
@@ -167,16 +180,31 @@ def index():
                 # Add link validation results to context
                 additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
 
-                # Process using AI with optimized parameters
-                from openai_helper import analyze_checklist_items_batch
-                # Reduce verification attempts and enable parallel processing
-                optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
-                results = analyze_checklist_items_batch(
-                    checklist_items, 
-                    outline_text,
-                    max_attempts=optimized_attempts,
-                    additional_context=additional_context
-                )
+                # Process using AI with optimized parameters only if OpenAI is enabled
+                results = {}
+                
+                if ENABLE_OPENAI and api_attempts > 0:
+                    try:
+                        from openai_helper import analyze_checklist_items_batch
+                        # Reduce verification attempts and enable parallel processing
+                        optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
+                        logger.info("Using OpenAI for enhanced analysis...")
+                        results = analyze_checklist_items_batch(
+                            checklist_items, 
+                            outline_text,
+                            max_attempts=optimized_attempts,
+                            additional_context=additional_context
+                        )
+                    except Exception as ai_error:
+                        # Log the error but continue with rule-based analysis
+                        logger.error(f"Error using OpenAI analysis: {str(ai_error)}")
+                        logger.info("Falling back to rule-based analysis...")
+                        # Use the results from the process_documents function
+                        results = analysis_results
+                else:
+                    # Use the results from the process_documents function if OpenAI is disabled
+                    logger.info("OpenAI analysis is disabled. Using traditional pattern matching...")
+                    results = analysis_results
 
                 # Update link validation results
                 for item in checklist_items:
