@@ -371,9 +371,6 @@ def index():
         except Exception as e:
             logger.error(f"Error rendering template: {str(e)}")
             return render_template('index.html', error="An error occurred while loading the page"), 500
-    except Exception as e:
-        logger.error(f"Error rendering template: {str(e)}")
-        return render_template('index.html', error="An error occurred while loading the page"), 500
 
 @app.route('/get-match-details', methods=['GET'])
 def get_match_details():
