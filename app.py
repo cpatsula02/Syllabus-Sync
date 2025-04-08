@@ -129,9 +129,9 @@ def index():
 
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
-
-        # Save checklist text to a temporary file
-        checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
+            
+            # Save checklist text to a temporary file
+            checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
         try:
             with open(checklist_path, 'w', encoding='utf-8') as f:
                 f.write(checklist_text)
