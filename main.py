@@ -224,17 +224,49 @@ def index():
                 
                 flash(f'Analysis complete! {present_items} of {total_items} items found, {missing_count} missing. {verification_strategy}')
                 
+                # Prepare formatted results list for the template
+                formatted_results = []
+                for item in checklist_items:
+                    result_data = results.get(item, {})
+                    formatted_result = {
+                        'item': item,
+                        'status': 'present' if result_data.get('present', False) else 'missing',
+                        'explanation': result_data.get('explanation', 'No explanation available'),
+                        'method': result_data.get('method', 'unknown'),
+                        'confidence': result_data.get('confidence', 0),
+                        'verification_attempts': result_data.get('verification_attempts', 0),
+                        'verification_present_votes': result_data.get('verification_present_votes', 0),
+                        'is_grade_item': item in grade_table_items
+                    }
+                    formatted_results.append(formatted_result)
+                
+                # Prepare analysis methods statistics
+                analysis_methods = {}
+                for item in checklist_items:
+                    result = results.get(item, {})
+                    method = result.get("method", "pattern_matching")
+                    
+                    if method in analysis_methods:
+                        analysis_methods[method] += 1
+                    else:
+                        analysis_methods[method] = 1
+                
                 return render_template(
                     'results.html',
                     checklist_items=checklist_items,
                     missing_items=missing_items,
-                    results=results,
+                    results=formatted_results,
                     grade_table_items=grade_table_items,
                     link_validation=link_validation_results,
                     total_items=total_items,
                     present_items=present_items,
+                    missing_count=len(missing_items),
+                    total_count=total_items,
+                    present_count=present_items,
                     api_calls=api_calls,
+                    api_calls_made=api_calls,
                     api_used=api_used,
+                    analysis_methods=analysis_methods,
                     outline_filename=outline.filename
                 )
                 
@@ -278,16 +310,48 @@ def index():
                     
                     flash(f'Analysis complete using pattern matching only! {present_items} of {total_items} items found, {missing_count} missing.')
                     
+                    # Prepare formatted results list for the template (fallback)
+                    formatted_results = []
+                    for item in checklist_items:
+                        result_data = results.get(item, {})
+                        formatted_result = {
+                            'item': item,
+                            'status': 'present' if result_data.get('present', False) else 'missing',
+                            'explanation': result_data.get('explanation', 'No explanation available'),
+                            'method': result_data.get('method', 'pattern_matching'),
+                            'confidence': result_data.get('confidence', 0),
+                            'verification_attempts': result_data.get('verification_attempts', 0),
+                            'verification_present_votes': result_data.get('verification_present_votes', 0),
+                            'is_grade_item': item in grade_table_items
+                        }
+                        formatted_results.append(formatted_result)
+                    
+                    # Prepare analysis methods statistics (fallback)
+                    analysis_methods = {}
+                    for item in checklist_items:
+                        result = results.get(item, {})
+                        method = result.get("method", "pattern_matching")
+                        
+                        if method in analysis_methods:
+                            analysis_methods[method] += 1
+                        else:
+                            analysis_methods[method] = 1
+                    
                     return render_template(
                         'results.html',
                         checklist_items=checklist_items,
                         missing_items=missing_items,
-                        results=results,
+                        results=formatted_results,
                         grade_table_items=grade_table_items,
                         total_items=total_items,
                         present_items=present_items,
+                        missing_count=len(missing_items),
+                        total_count=total_items,
+                        present_count=present_items,
                         api_calls=0,
+                        api_calls_made=0,
                         api_used=False,
+                        analysis_methods=analysis_methods,
                         outline_filename=outline.filename
                     )
                 else:
@@ -528,12 +592,12 @@ def download_pdf():
             # Already bytes/bytearray
             pdf_bytes = output
         
-        # Create a response with the PDF
+        # Create a response with the PDF - display in browser, not as download
         return send_file(
             io.BytesIO(pdf_bytes),
             mimetype='application/pdf',
             download_name='syllabus_analysis_report.pdf',
-            as_attachment=True
+            as_attachment=False  # Changed to False to open in browser instead of downloading
         )
     
     except Exception as e:

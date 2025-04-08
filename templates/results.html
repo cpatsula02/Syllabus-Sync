@@ -136,12 +136,52 @@
                         </span>
                         {% endif %}
                     </p>
-                        <div class="evidence-box p-3 mt-1 bg-light rounded border-success" style="display: none;" 
-                             id="evidence-{{ loop.index }}">
-                            <div class="spinner-border spinner-border-sm text-secondary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <span>Loading evidence...</span>
+                    
+                    <!-- How the item was found/missing explanation -->
+                    <div class="explanation-detail mb-3 p-2 rounded {% if result.status == 'present' %}bg-success-light border-success{% else %}bg-danger-light border-danger{% endif %} border">
+                        <p class="mb-0">
+                            <strong>{% if result.status == 'present' %}How this item was found:{% else %}Why this item is missing:{% endif %}</strong><br>
+                            {% if result.status == 'present' %}
+                                The system identified this requirement in the document by 
+                                {% if 'ai_' in result.method %}
+                                    analyzing the content with AI and comparing it against the requirement's intent.
+                                    Multiple perspectives were considered to verify that the document genuinely meets this requirement.
+                                {% else %}
+                                    matching patterns and keywords related to this requirement, then checking the context to confirm the requirement is fully addressed.
+                                {% endif %}
+                                {% if result.verification_attempts and result.verification_attempts > 0 %}
+                                    {{ result.verification_present_votes }} out of {{ result.verification_attempts }} verification checks confirmed the presence of this item.
+                                {% endif %}
+                            {% else %}
+                                {% if 'ai_' in result.method %}
+                                    After thorough AI-based analysis from multiple perspectives, this requirement was not found in the document.
+                                    The system searched for various ways this requirement could be expressed but could not locate content that satisfies it.
+                                {% else %}
+                                    The system searched for patterns, keywords, and contextual clues related to this requirement but could not find matching content
+                                    that would satisfy this checklist item.
+                                {% endif %}
+                                {% if result.verification_attempts and result.verification_attempts > 0 %}
+                                    {{ result.verification_present_votes }} out of {{ result.verification_attempts }} verification checks indicated the presence of this item,
+                                    which was insufficient to confirm it exists in the document.
+                                {% endif %}
+                            {% endif %}
+                        </p>
+                    </div>
+                    
+                    <!-- View Evidence Button -->
+                    <button class="btn btn-sm {% if result.status == 'present' %}btn-outline-success{% else %}btn-outline-danger{% endif %} mb-2" 
+                            onclick="loadMatchDetails(this)" 
+                            data-item="{{ result.item }}">
+                        <i class="fas {% if result.status == 'present' %}fa-search-plus{% else %}fa-search-minus{% endif %} me-1"></i>
+                        {% if result.status == 'present' %}View Match Evidence{% else %}Search for Missing Content{% endif %}
+                    </button>
+                    
+                    <div class="evidence-box p-3 mt-1 bg-light rounded {% if result.status == 'present' %}border-success{% else %}border-danger{% endif %}" style="display: none;" 
+                         id="evidence-{{ loop.index }}">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span>Loading evidence...</span>
                     </div>
                 </div>
             {% endfor %}
@@ -192,12 +232,36 @@
     max-height: 200px;
     overflow-y: auto;
     font-size: 0.95em;
-    border-left: 4px solid #198754;
 }
 
-/* Highlight matched terms in green */
+/* Explanation detail boxes for present/missing items */
+.explanation-detail {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.bg-success-light {
+    background-color: rgba(25, 135, 84, 0.1);
+}
+
+.bg-danger-light {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+/* Highlight matched terms */
 .evidence-box span {
     border-radius: 2px;
+}
+
+/* Make sure the present items are clearly marked in green */
+.list-group-item-success {
+    background-color: rgba(25, 135, 84, 0.15);
+    border-color: rgba(25, 135, 84, 0.3);
+}
+
+.list-group-item-danger {
+    background-color: rgba(220, 53, 69, 0.15);
+    border-color: rgba(220, 53, 69, 0.3);
 }
 </style>
 
