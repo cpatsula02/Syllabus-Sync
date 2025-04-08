@@ -520,8 +520,13 @@ def download_pdf():
             
             pdf.ln(5)
         
-        # Generate the PDF
-        pdf_bytes = pdf.output(dest='S').encode('latin1')
+        # Generate the PDF - handle both string and bytes return types
+        output = pdf.output(dest='S')
+        if isinstance(output, str):
+            pdf_bytes = output.encode('latin1')
+        else:
+            # Already bytes/bytearray
+            pdf_bytes = output
         
         # Create a response with the PDF
         return send_file(

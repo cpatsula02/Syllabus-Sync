@@ -129,12 +129,13 @@ def should_use_api(item: str, document_text: str, remaining_quota: int) -> bool:
     # If we have plenty of quota, use API for almost everything
     return True
 
-def api_call_with_backoff(prompt: str) -> Dict:
+def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     """
     Make an API call with exponential backoff for rate limiting.
     
     Args:
         prompt: The prompt to send to the API
+        temperature: The temperature setting for the AI model (0.0-1.0)
         
     Returns:
         API response or error information
@@ -185,7 +186,7 @@ def api_call_with_backoff(prompt: str) -> Dict:
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,  # Lower temperature for more consistent analysis
+                temperature=temperature,  # Use the provided temperature parameter
                 max_tokens=400,   # Limit token output to speed up response
                 timeout=10  # 10 second timeout to prevent hanging
             )
@@ -318,7 +319,7 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
         'method': 'academic_review'
     }
 
-def ai_analyze_item(item: str, document_text: str, additional_context: str = "") -> Dict[str, Any]:
+def ai_analyze_item(item: str, document_text: str, additional_context: str = "", temperature: float = 0.1, analysis_prefix: str = "") -> Dict[str, Any]:
     """
     Use OpenAI to analyze if a checklist item is present in the document.
 
@@ -326,11 +327,14 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
     the requirement in the checklist item is fulfilled in the course outline.
     
     Special handling is provided for grade table items which need more precise analysis.
+    Multiple analysis perspectives are used to ensure thorough verification.
     
     Args:
         item: The checklist item to analyze
         document_text: The full text of the document to check against
         additional_context: Optional context provided by the user about the course
+        temperature: The temperature setting for the AI model (0.0-1.0) - lower means more consistent
+        analysis_prefix: Optional prefix to add to the prompt for varied analysis perspectives
         
     Returns:
         Dictionary with analysis results including presence, confidence and evidence
@@ -539,16 +543,16 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "")
             - "method": should be "ai_general_analysis"
             """
 
-        # Adjust temperature and tokens based on item type
-        # Lower temperature for stricter, more consistent responses
-        temperature = 0.1
-        
         # Use more tokens for complex items
         max_tokens = 1000 if is_grade_item or is_policy_item else 800
         
+        # Apply any analysis_prefix to the prompt to provide different perspectives
+        if analysis_prefix:
+            prompt = f"{analysis_prefix}\n\n{prompt}"
+        
         # Make the API call using our improved rate-limited function
         prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance.\n\n{prompt}"
-        api_response = api_call_with_backoff(prompt_with_sys_msg)
+        api_response = api_call_with_backoff(prompt_with_sys_msg, temperature=temperature)
         
         # Check if we need to fall back to traditional analysis
         if "fallback_required" in api_response and api_response["fallback_required"]:
@@ -752,10 +756,14 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     formatting, or section titles, and uses deep understanding of intent and meaning to
     determine whether the course outline addresses each requirement.
 
+    IMPORTANT: Each checklist item is analyzed three times independently, with different
+    approaches to ensure thorough verification from multiple perspectives. This increases
+    the reliability of the analysis and reduces false negatives.
+
     Args:
         items: List of checklist items to analyze
         document_text: The full text of the document to check against
-        max_attempts: Number of AI analysis attempts PER ITEM for verification
+        max_attempts: Number of AI analysis attempts PER ITEM for verification (at least 3 recommended)
         additional_context: Optional context provided by the user about the course
 
     Returns:
@@ -883,13 +891,36 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             continue
         
         # Make multiple API attempts per item for verification (as specified by max_attempts)
+        # Each attempt uses a slightly different approach to ensure thorough verification
         api_success = False
         verification_results = []
         
-        for attempt in range(max_attempts):
+        # Ensure we analyze each item 3 times with different approaches
+        analyze_approaches = [
+            {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective: "},
+            {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective: "},
+            {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective: "}
+        ]
+        
+        # If max_attempts is less than 3, still ensure we use at least 3 different approaches
+        actual_attempts = max(max_attempts, 3)
+        
+        for attempt in range(actual_attempts):
             try:
-                logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{max_attempts})")
-                result = ai_analyze_item(item, document_text, additional_context)
+                # Select approach based on attempt number
+                approach_idx = attempt % len(analyze_approaches)
+                approach = analyze_approaches[approach_idx]
+                
+                logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
+                
+                # Pass approach parameters to modify the analysis perspective
+                result = ai_analyze_item(
+                    item, 
+                    document_text, 
+                    additional_context,
+                    temperature=approach["temperature"],
+                    analysis_prefix=approach["prefix"]
+                )
                 
                 # Check if API returned an error that requires fallback
                 if result.get('error') and result.get('fallback_required', False):
@@ -903,10 +934,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
                 logger.info(f"Remaining token quota: ~{remaining_quota}")
                 
+                # Add approach metadata to result
+                result["analysis_perspective"] = approach["perspective"]
                 verification_results.append(result)
-                
-                # We could stop after one successful attempt, but we're making multiple attempts
-                # for verification as per the requested functionality
                 
             except Exception as e:
                 api_errors += 1
