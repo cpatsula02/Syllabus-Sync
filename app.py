@@ -5,7 +5,7 @@ import io
 import logging
 import re
 from fpdf import FPDF  # Import FPDF from fpdf2 package
-from document_processor import process_documents
+from document_processor import process_documents, extract_text
 import urllib.request
 
 # Configure logging with more detailed output
