@@ -132,7 +132,10 @@ def index():
                 logger.info(f"Outline path: {outline_path}")
 
                 with open(outline_path, 'r', encoding='utf-8') as file:
-                    outline_text = file.read()
+                    if outline.filename.lower().endswith('.pdf'):
+            outline_text = extract_text(outline_path)
+        else:
+            outline_text = file.read()
 
                 checklist_items, analysis_results = process_documents(
                     checklist_path, 

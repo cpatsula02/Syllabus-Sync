@@ -157,17 +157,17 @@ def extract_checklist_items(text: str) -> List[str]:
         # Check if it starts with a number or bullet
         is_numbered = bool(re.match(r'^\d+[\.\)]', item))
         is_bulleted = bool(re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s', item))
-        
+
         # Only process if it's numbered or bulleted
         if (is_numbered or is_bulleted):
             # Clean up and normalize item text
             clean_item = item.strip()
             if not any(clean_item.endswith(p) for p in ['.', '?', '!']):
                 clean_item = clean_item + '.'
-                
+
             # Use normalized version for duplicate check
             item_normalized = ' '.join(clean_item.lower().split())
-            
+
             if item_normalized not in seen_items:
                 seen_items.add(item_normalized)
                 unique_items.append(clean_item)
@@ -480,10 +480,10 @@ def validate_links(document_text):
     # Find all URLs in the document
     url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
     urls = re.findall(url_pattern, document_text)
-    
+
     valid_links = []
     invalid_links = []
-    
+
     for url in urls:
         try:
             # Clean up URL
@@ -491,7 +491,7 @@ def validate_links(document_text):
             parsed = urlparse(url)
             if not parsed.scheme:
                 url = 'https://' + url
-                
+
             # Try to access URL with timeout
             response = requests.head(url, timeout=5, allow_redirects=True)
             if response.status_code < 400:
@@ -500,7 +500,7 @@ def validate_links(document_text):
                 invalid_links.append(url)
         except:
             invalid_links.append(url)
-            
+
     return valid_links, invalid_links
 
 def check_special_entity_patterns(item, document, additional_context=""):
@@ -520,7 +520,7 @@ def check_special_entity_patterns(item, document, additional_context=""):
             r'(?:email|contact|address|reach)(?:[^@]{0,50})@ucalgary\.ca',
             r'(?:instructor|professor|faculty)(?:[^@]{0,50})@ucalgary\.ca'
         ]
-        
+
         for pattern in email_patterns:
             if re.search(pattern, document_lower):
                 return True
@@ -590,13 +590,13 @@ def check_special_entity_patterns(item, document, additional_context=""):
     if 'instructor' in item_lower and 'email' in item_lower:
         email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
         instructor_pattern = r'(instructor|professor|teacher|faculty)(.{0,30})(email|contact|reach)'
-        
+
         instructor_matches = re.finditer(instructor_pattern, document_lower, re.IGNORECASE)
         for match in instructor_matches:
             context_start = max(0, match.start() - 100)
             context_end = min(len(document_lower), match.end() + 100)
             context = document_lower[context_start:context_end]
-            
+
             if re.search(email_pattern, context):
                 return True
 
@@ -662,6 +662,79 @@ def check_special_entity_patterns(item, document, additional_context=""):
     # Add context-specific checks based on additional_context if provided
     if additional_context:
         context_lower = additional_context.lower()
+        if 'graduate course' in context_lower and 'graduate' in item.lower():
+            grad_patterns = [
+                r'graduate(\s+level|\s+student|\s+program|\s+requirement)',
+                r'master\'?s(\s+program|\s+degree|\s+requirement)',
+                r'ph\.?d\.?(\s+student|\s+program|\s+requirement)',
+            ]
+
+            for pattern in grad_patterns:
+                if re.search(pattern, document, re.IGNORECASE):
+                    return True
+
+    return False
+
+    # Add this item to processed set
+    _processed_pattern_items.add(item_hash)
+    # Check for instructor email requirement
+    if 'instructor' in item and 'email' in item:
+        # Look for email patterns in the document
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
+        instructor_pattern = r'(instructor|professor|teacher|faculty)(.{0,30})(email|contact|reach)'
+
+        # Look for email near instructor context
+        instructor_matches = re.finditer(instructor_pattern, document, re.IGNORECASE)
+        for match in instructor_matches:
+            context_start = max(0, match.start() - 100)
+            context_end = min(len(document), match.end() + 100)
+            context = document[context_start:context_end]
+
+            if re.search(email_pattern, context):
+                return True
+
+    # Check for grade distribution table
+    if ('grade' in item and 'distribution' in item) or 'weight' in item:
+        # Check for table patterns
+        table_patterns = [
+            r'\|\s*Assessment\s*\|\s*Weight\s*\|',  # Markdown table header
+            r'Component\s+Weight',  # Simple table format
+            r'(\w+\s+){1,3}:\s*\d{1,3}\s*%',  # Component: XX% format
+            r'\d{1,3}\s*%\s*-\s*(\w+\s+){1,3}',  # XX% - Component format
+        ]
+
+        for pattern in table_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+
+    # Check for specific formatting requirements
+    if 'formatted' in item or 'format' in item:
+        # Check for page numbering, margins, font specifications
+        format_patterns = [
+            r'(page|margin|font|spacing)(.{0,30})(requirement|specification)',
+            r'(format|formatting)(.{0,30})(guide|requirement|instruction)',
+        ]
+
+        for pattern in format_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+
+    # Check for learning outcomes
+    if 'learning' in item and ('outcome' in item or 'objective' in item):
+        outcome_patterns = [
+            r'learning\s+outcomes?',
+            r'course\s+objectives?',
+            r'students\s+will\s+(be\s+able\s+to|learn|understand|demonstrate)',
+            r'by\s+the\s+end\s+of\s+this\s+course',
+        ]
+
+        for pattern in outcome_patterns:
+            if re.search(pattern, document, re.IGNORECASE):
+                return True
+
+    # Add context-specific checks based on additional_context if provided
+    if additional_context:
+        context_lower = additionalcontext.lower()
         if 'graduate course' in context_lower and 'graduate' in item.lower():
             grad_patterns = [
                 r'graduate(\s+level|\s+student|\s+program|\s+requirement)',
@@ -852,12 +925,12 @@ def extract_checklist_items_strict(text: str) -> List[str]:
     """
     items = []
     lines = text.split('\n')
-    
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
-            
+
         # Match numbered items (1., 1), etc.)
         if re.match(r'^\d+[\.\)]\s+\w+', line):
             items.append(line)
