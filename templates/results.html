@@ -9,8 +9,8 @@
                     <i class="fas fa-arrow-left me-2"></i>Back to Home
                 </a>
                 <div>
-                    <a href="/download_pdf" class="btn btn-success">
-                        <i class="fas fa-file-pdf me-2"></i>Download PDF Report
+                    <a href="/download_pdf" target="_blank" class="btn btn-success">
+                        <i class="fas fa-file-pdf me-2"></i>View PDF Report
                     </a>
                 </div>
             </div>
@@ -105,9 +105,11 @@
                             {% endif %}
                             {{ result.item }}
                         </h5>
-                        <span class="badge {% if result.present %}bg-success{% else %}bg-danger{% endif %}">
-                            {% if result.present %}
+                        <span class="badge {% if result.status == 'present' %}bg-success{% elif result.status == 'na' %}bg-secondary{% else %}bg-danger{% endif %}">
+                            {% if result.status == 'present' %}
                             <i class="fas fa-check me-1"></i>Present
+                            {% elif result.status == 'na' %}
+                            <i class="fas fa-minus me-1"></i>N/A
                             {% else %}
                             <i class="fas fa-times me-1"></i>Missing
                             {% endif %}

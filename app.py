@@ -749,7 +749,7 @@ def download_pdf():
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
-            as_attachment=True,
+            as_attachment=False,
             download_name='syllabus_sync_report.pdf'
         )
 
