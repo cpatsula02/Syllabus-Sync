@@ -1,0 +1,44 @@
+You are reviewing a university course outline to evaluate whether it meets institutional standards based on a checklist of required elements.
+
+For each checklist item provided below, determine if the **course outline contextually satisfies the requirement**, even if the exact wording or heading is not present. Look for alternative phrases, paraphrased sections, embedded tables, or implied meaning.
+
+Return one of the following for each item:
+- **"Yes"** – The requirement is clearly addressed, even with different formatting or phrasing.
+- **"No"** – The requirement is clearly missing or absent from the document.
+- **"N/A"** – The requirement does not apply to this specific course (e.g., no final exam listed).
+
+After each response, provide a **brief justification** (1–2 sentences) explaining your reasoning and referencing the relevant content if possible.
+
+### Checklist Items:
+1. Instructor email is included and contains the domain “ucalgary.ca” (including subdomains like haskayne.ucalgary.ca).
+2. Course objectives or learning outcomes are listed and structured, even if not labeled “objectives.”
+3. Readings, textbooks, or other materials are listed anywhere in the document.
+4. A policy or description is included about tools or platforms that students can or cannot use (including generative AI).
+5. The workload or weekly effort expectations are described, even if the term “workload” is not used.
+6. A grade scale is shown, mapping percentages to letter grades.
+7. Each assessment has a percentage weight toward the final grade.
+8. If group work is listed, it is 40% or less of the total grade; if no group work exists, mark as N/A.
+9. Each assessment links to at least one course objective/outcome, or that mapping is described elsewhere.
+10. Due dates for assessments are included in the table, assignment section, or schedule.
+11. At least 30% of the grade is earned before the last class; this can be confirmed by dates and weights.
+12. No assessments or deliverables are scheduled after the final class or final project date.
+13. A missed assessment policy is included, even if not labeled that way (keywords: deferral, illness, make-up work).
+14. A late policy is described, including penalties or grace conditions.
+15. If participation is graded, the outline explains how it’s evaluated (e.g., discussion, professionalism).
+16. Assignment instructions include how and where to submit (e.g., via D2L, not email).
+17. If there is a group project, the outline includes the first due date and project expectations.
+18. If there is a midterm or quiz, timing, location, tech needs, and allowed items are described.
+19. If a final exam exists, it meets the same conditions as above and counts for no more than 50%.
+20. If a take-home final exam is mentioned, it is flagged for admin review; if not, mark as N/A.
+21. A section describes how to contact the instructor, or contact instructions are clearly presented.
+22. A class schedule or session breakdown is included with dates and topics.
+23. Assessment due dates are listed or referenced in the schedule.
+24. Exam or quiz dates are listed or referenced in the schedule.
+25. All web links included in the outline are functional and lead to valid pages.
+
+### Output Format:
+- **Checklist Item #:** [number]
+- **Status:** Yes / No / N/A
+- **Justification:** [brief reasoning]
+
+Evaluate each item one by one. Begin now.
