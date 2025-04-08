@@ -85,7 +85,7 @@ def index():
         try:
             with open(checklist_path, 'w', encoding='utf-8') as f:
                 f.write(checklist_text)
-            
+
             outline.save(outline_path)
 
             # Get additional context if provided
@@ -609,31 +609,41 @@ def download_pdf():
         for item in unique_checklist_items:
             is_present = item not in analysis_data['missing_items']
 
-            # Calculate height needed for item text with more spacing
+            # Use a very conservative estimate of characters per line to ensure enough space
+            chars_per_line = 60  # Conservative estimate for better readability
             item_length = len(item)
-            chars_per_line = 70  # Reduced chars per line for better readability
             lines_needed = max(1, item_length / chars_per_line)
-            row_height = max(8, lines_needed * 5)  # Increased minimum height and line spacing
 
-            # Add extra padding for multi-line items
-            if lines_needed > 1:
-                row_height += 2
+            # Increase minimum row height and add padding for multi-line items
+            base_height = 8  # Minimum height in mm
+            line_height = 5  # Height per line in mm
+            padding = 2     # Extra padding in mm
+
+            row_height = max(base_height, (lines_needed * line_height) + padding)
 
             # Save position for status cell
             x_pos = pdf.get_x()
             y_pos = pdf.get_y()
 
-            # Print item with padding
-            pdf.multi_cell(150, row_height, item.strip(), 1, 'L')
+            # Add box around item with proper spacing
+            pdf.rect(x_pos, y_pos, 150, row_height)
 
-            # Print status
+            # Print item with padding
+            pdf.set_xy(x_pos + 2, y_pos + 2)  # Add internal padding
+            pdf.multi_cell(146, line_height, item.strip(), 0, 'L')
+
+            # Print status in its own box
             pdf.set_xy(x_pos + 150, y_pos)
             pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
-            pdf.cell(30, row_height, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            pdf.rect(x_pos + 150, y_pos, 30, row_height)
+
+            # Center status text vertically and horizontally
+            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width('Present')) / 2, y_pos + (row_height - 5) / 2)
+            pdf.cell(30, 5, 'Present' if is_present else 'Missing', 0, 1, 'C')
             pdf.set_text_color(0, 0, 0)
 
-            # Add small spacing between rows
-            pdf.ln(1)
+            # Add spacing between items
+            pdf.set_xy(x_pos, y_pos + row_height + 2)
 
             # Check for new page
             if pdf.get_y() > 250:
@@ -651,7 +661,7 @@ def download_pdf():
         pdf.cell(95, 8, f'Total Items: {total_items}', 1, 0, 'L')
         pdf.cell(95, 8, f'Items Present: {present_items}', 1, 1, 'L')
 
-        
+
 
         # Create temporary file and save
         import tempfile

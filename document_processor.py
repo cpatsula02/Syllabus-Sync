@@ -475,7 +475,20 @@ def check_special_entity_patterns(item, document, additional_context=""):
     document_lower = document.lower()
     item_lower = item.lower()
 
-    # Look for semantic equivalents and related concepts
+    # Enhanced email pattern matching
+    if 'email' in item_lower and '@ucalgary.ca' in item_lower:
+        # Look for name followed by @ucalgary.ca pattern
+        email_patterns = [
+            r'[A-Za-z\.-]+\s*@\s*ucalgary\.ca',
+            r'(?:email|contact|address|reach)(?:[^@]{0,50})@ucalgary\.ca',
+            r'(?:instructor|professor|faculty)(?:[^@]{0,50})@ucalgary\.ca'
+        ]
+        
+        for pattern in email_patterns:
+            if re.search(pattern, document_lower):
+                return True
+
+    # Look for semantic equivalents and related concepts with broader context
     if 'textbook' in item_lower:
         # Check for various ways textbooks might be referenced
         patterns = [
