@@ -121,8 +121,8 @@ def index():
             if 'checklist' not in request.form or 'outline' not in request.files:
                 return jsonify({'error': 'Both checklist and outline are required'}), 400
 
-        checklist_text = request.form['checklist']
-        outline = request.files['outline']
+            checklist_text = request.form['checklist']
+            outline = request.files['outline']
 
         if not checklist_text.strip() or outline.filename == '':
             return jsonify({'error': 'Both checklist and outline file are required'}), 400
