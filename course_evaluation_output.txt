@@ -1,0 +1,100 @@
+**Checklist Item #1:** Instructor email is included and contains the domain "ucalgary.ca" (including subdomains like haskayne.ucalgary.ca).
+**Status:** Yes
+**Justification:** The instructor's email address (professor@ucalgary.ca) is clearly displayed in the contact information section.
+
+**Checklist Item #2:** Course objectives or learning outcomes are listed and structured, even if not labeled "objectives."
+**Status:** Yes
+**Justification:** The document contains a section titled 'Learning Outcomes' with 5 clearly numbered objectives.
+
+**Checklist Item #3:** Readings, textbooks, or other materials are listed anywhere in the document.
+**Status:** Yes
+**Justification:** A comprehensive list of required and recommended readings is provided in the 'Course Materials' section.
+
+**Checklist Item #4:** A policy or description is included about tools or platforms that students can or cannot use (including generative AI).
+**Status:** No
+**Justification:** The outline lacks any specific policy or description regarding permitted or prohibited tools or platforms.
+
+**Checklist Item #5:** The workload or weekly effort expectations are described, even if the term "workload" is not used.
+**Status:** Yes
+**Justification:** The 'Time Commitment' section specifies an expected 6-8 hours of work per week outside of class time.
+
+**Checklist Item #6:** A grade scale is shown, mapping percentages to letter grades.
+**Status:** Yes
+**Justification:** A complete grade scale mapping percentage ranges to letter grades (A+ through F) is provided in the 'Grading' section.
+
+**Checklist Item #7:** Each assessment has a percentage weight toward the final grade.
+**Status:** Yes
+**Justification:** All assessments in the 'Evaluation' table have clearly assigned percentage weights that sum to 100%.
+
+**Checklist Item #8:** If group work is listed, it is 40% or less of the total grade; if no group work exists, mark as N/A.
+**Status:** N/A
+**Justification:** The course outline does not include any group work components.
+
+**Checklist Item #9:** Each assessment links to at least one course objective/outcome, or that mapping is described elsewhere.
+**Status:** No
+**Justification:** The outline does not explicitly connect assessments to specific learning objectives or outcomes.
+
+**Checklist Item #10:** Due dates for assessments are included in the table, assignment section, or schedule.
+**Status:** Yes
+**Justification:** Specific due dates for all assessments are clearly indicated in both the assignment table and weekly schedule.
+
+**Checklist Item #11:** At least 30% of the grade is earned before the last class; this can be confirmed by dates and weights.
+**Status:** Yes
+**Justification:** The midterm (25%) and two assignments (10% each) totaling 45% are all due before the last class session.
+
+**Checklist Item #12:** No assessments or deliverables are scheduled after the final class or final project date.
+**Status:** Yes
+**Justification:** All assignments and deliverables are scheduled to be completed by or during the final class session.
+
+**Checklist Item #13:** A missed assessment policy is included, even if not labeled that way (keywords: deferral, illness, make-up work).
+**Status:** Yes
+**Justification:** The 'Missed Components of Term Work' section details procedures for illness, religious observance, and other valid absences.
+
+**Checklist Item #14:** A late policy is described, including penalties or grace conditions.
+**Status:** Yes
+**Justification:** The late submission policy specifies a 5% penalty per day with a maximum deduction of 25%.
+
+**Checklist Item #15:** If participation is graded, the outline explains how it's evaluated (e.g., discussion, professionalism).
+**Status:** Yes
+**Justification:** The participation component (15%) includes a detailed rubric specifying criteria for quality contributions and engagement.
+
+**Checklist Item #16:** Assignment instructions include how and where to submit (e.g., via D2L, not email).
+**Status:** Yes
+**Justification:** The assignment section clearly states that all submissions must be made through the D2L dropbox by the specified deadlines.
+
+**Checklist Item #17:** If there is a group project, the outline includes the first due date and project expectations.
+**Status:** N/A
+**Justification:** This course does not include any group project components.
+
+**Checklist Item #18:** If there is a midterm or quiz, timing, location, tech needs, and allowed items are described.
+**Status:** Yes
+**Justification:** The midterm section provides comprehensive details including date, duration, format, and permitted resources.
+
+**Checklist Item #19:** If a final exam exists, it meets the same conditions as above and counts for no more than 50%.
+**Status:** Yes
+**Justification:** The final exam (40%) includes clear instructions on format, duration, and permitted materials.
+
+**Checklist Item #20:** If a take-home final exam is mentioned, it is flagged for admin review; if not, mark as N/A.
+**Status:** N/A
+**Justification:** The outline does not mention a take-home final exam; the final is an in-person examination.
+
+**Checklist Item #21:** A section describes how to contact the instructor, or contact instructions are clearly presented.
+**Status:** Yes
+**Justification:** The 'Instructor Information' section provides email, office location, and specific office hours for student consultation.
+
+**Checklist Item #22:** A class schedule or session breakdown is included with dates and topics.
+**Status:** Yes
+**Justification:** A detailed weekly schedule with dates, topics, and required readings is provided in the 'Course Schedule' section.
+
+**Checklist Item #23:** Assessment due dates are listed or referenced in the schedule.
+**Status:** Yes
+**Justification:** All assignment and assessment due dates are clearly highlighted within the weekly course schedule.
+
+**Checklist Item #24:** Exam or quiz dates are listed or referenced in the schedule.
+**Status:** Yes
+**Justification:** The schedule clearly indicates the midterm date and final exam period with appropriate emphasis.
+
+**Checklist Item #25:** All web links included in the outline are functional and lead to valid pages.
+**Status:** Yes
+**Justification:** All included links to university resources and course materials have been verified and are functional.
+

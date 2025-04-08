@@ -3,15 +3,43 @@ import os
 import time
 import json
 import re
-import tiktoken
 import random
 from typing import List, Dict, Any, Tuple, Optional
-from openai import OpenAI, RateLimitError, APIError, APITimeoutError
 from datetime import datetime, timedelta
+
+# Try to import tiktoken and openai, but provide fallbacks if not available
+try:
+    import tiktoken
+    tiktoken_available = True
+except ImportError:
+    tiktoken_available = False
+
+try:
+    from openai import OpenAI, RateLimitError, APIError, APITimeoutError
+    openai_available = True
+except ImportError:
+    openai_available = False
+    # Define empty classes for type compatibility
+    class RateLimitError(Exception): pass
+    class APIError(Exception): pass
+    class APITimeoutError(Exception): pass
 
 # Configure OpenAI with API key
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Create client only if API key is available and OpenAI library is available
+client = None
+if openai_available:
+    if OPENAI_API_KEY and OPENAI_API_KEY.strip():
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            logging.info("OpenAI API key is configured. Advanced AI analysis is available.")
+        except Exception as e:
+            logging.error(f"Error initializing OpenAI client: {str(e)}")
+            logging.info("Proceeding with rule-based analysis only.")
+    else:
+        logging.info("No OpenAI API key found. Using rule-based analysis only.")
+else:
+    logging.info("OpenAI library is not available. Using rule-based analysis only.")
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
 # do not change this unless explicitly requested by the user
@@ -31,22 +59,30 @@ MAX_TOKENS_PER_SESSION = 80000  # Estimated threshold for one session
 CURRENT_SESSION_TOKENS = 0  # Track tokens used in current session
 CACHE = {}  # Simple in-memory cache for API responses
 
-# Get tokenizer for the model
-try:
-    encoder = tiktoken.encoding_for_model(MODEL)
-except Exception:
-    # Fallback for handling newer models not yet in tiktoken
-    logger.warning(f"Specific encoding for {MODEL} not found, using cl100k_base instead")
-    encoder = tiktoken.get_encoding("cl100k_base")
+# Get tokenizer for the model if tiktoken is available
+encoder = None
+if tiktoken_available:
+    try:
+        encoder = tiktoken.encoding_for_model(MODEL)
+    except Exception:
+        # Fallback for handling newer models not yet in tiktoken
+        logger.warning(f"Specific encoding for {MODEL} not found, using cl100k_base instead")
+        try:
+            encoder = tiktoken.get_encoding("cl100k_base")
+        except Exception as e:
+            logger.warning(f"Error getting tokenizer: {e}")
+            encoder = None
 
 def count_tokens(text: str) -> int:
     """Count the number of tokens in a text string."""
-    try:
-        return len(encoder.encode(text))
-    except Exception as e:
-        logger.warning(f"Error counting tokens: {e}. Using character-based estimate.")
-        # Fallback estimation: ~4 characters per token as rough estimate
-        return len(text) // 4
+    if tiktoken_available and encoder is not None:
+        try:
+            return len(encoder.encode(text))
+        except Exception as e:
+            logger.warning(f"Error counting tokens: {e}. Using character-based estimate.")
+    
+    # Fallback estimation: ~4 characters per token as rough estimate
+    return len(text) // 4
 
 def get_cache_key(prompt: str) -> str:
     """Generate a cache key for a prompt (simplified hash)."""
@@ -99,6 +135,11 @@ def api_call_with_backoff(prompt: str) -> Dict:
         API response or error information
     """
     global CURRENT_SESSION_TOKENS
+    
+    # If OpenAI client is not available, return fallback immediately
+    if client is None:
+        logger.warning("OpenAI client not available. Using rule-based analysis.")
+        return {"error": "OpenAI client not available", "fallback_required": True}
     
     # Check cache first
     cache_key = get_cache_key(prompt)
@@ -726,7 +767,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     CURRENT_SESSION_TOKENS = 0
 
     # Decide whether AI analysis is available based on API key
-    use_ai = OPENAI_API_KEY is not None and OPENAI_API_KEY.strip() != ""
+    use_ai = client is not None
     
     # Track API status for proper error handling
     ai_analysis_available = False
@@ -735,7 +776,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     logger.info(f'Processing {len(items)} checklist items')
     
     if use_ai:
-        logger.info(f'OpenAI API key is configured. Advanced AI analysis is available.')
+        logger.info(f'OpenAI client is configured. Advanced AI analysis is available.')
         logger.info(f'Using {max_attempts} verification attempts per item')
         ai_analysis_available = True
         
@@ -757,7 +798,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 logger.warning("Will use fallback analysis methods for all items")
                 ai_analysis_available = False
     else:
-        logger.warning(f'OpenAI API key is not set or is invalid. Using fallback analysis methods.')
+        logger.warning(f'OpenAI client is not available. Using fallback analysis methods.')
         ai_analysis_available = False
     
     # If API is not available, use fallback for all items
