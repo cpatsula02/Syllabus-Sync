@@ -22,8 +22,6 @@ if OPENAI_API_KEY:
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-        # Do not make an actual API call, just initialize the client
         logger.info("OpenAI client initialized. Testing connection...")
         ENABLE_OPENAI = True  # Tentatively enable if initialization worked
     except Exception as e:
@@ -145,9 +143,9 @@ def index():
                 if additional_context and not any(term in additional_context.lower() for term in 
                                                  ['grade distribution', 'grade table', 'assessment weight']):
                     additional_context += "\n\nPay special attention to the Grade Distribution Table items, " + \
-                                        "including assessment weights, due dates, missed assessment policy, " + \
-                                        "late policy, and class participation details. These are critical " + \
-                                        "components that need precise identification in the document."
+                                         "including assessment weights, due dates, missed assessment policy, " + \
+                                         "late policy, and class participation details. These are critical " + \
+                                         "components that need precise identification in the document."
 
                 # Get number of API attempts
                 try:
@@ -632,11 +630,11 @@ def download_pdf():
 
             # Color-code status
             pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
-            pdf.rect(x_pos + 150, y_pos, 30, row_height)
+            pdf.rect(pdf.get_x(), y_position, 50, row_height)
 
             # Center status text vertically and horizontally
-            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width('Present')) / 2, y_pos + (row_height - 5) / 2)
-            pdf.cell(30, 5, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            pdf.set_xy(pdf.get_x() + (50 - pdf.get_string_width('Present')) / 2, y_position + (row_height - 5) / 2)
+            pdf.cell(50, 5, 'Present' if is_present else 'Missing', 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
 
             # Include evidence if present (max 300 chars)
@@ -718,7 +716,7 @@ def download_pdf():
         for item in unique_checklist_items:
             is_present = item not in analysis_data['missing_items']
 
-            # Use a very conservative estimate of characters per line to ensure enough space
+            # Use a very conservative estimate ofcharacters per line to ensure enough space
             chars_per_line = 60  # Conservative estimate for better readability
             item_length = len(item)
             lines_needed = max(1, item_length / chars_per_line)
@@ -806,26 +804,13 @@ def download_pdf():
         return redirect('/')
 
 if __name__ == "__main__":
-    # Configure server timeouts and error handling
-    from werkzeug.serving import WSGIRequestHandler
-    WSGIRequestHandler.protocol_version = "HTTP/1.1"
-
-    import socket
-
-    # Check if port is available and start server
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("0.0.0.0", 5000))
         sock.close()
         print("Port 5000 is available")
-        
         print("Starting Flask server on port 5000...")
-        app.run(
-            host="0.0.0.0",
-            port=5000,
-            threaded=True,
-            request_handler=WSGIRequestHandler
-        )
+        app.run(host="0.0.0.0", port=5000, threaded=True)
     except socket.error:
         print("Port 5000 is already in use")
     except Exception as e:
