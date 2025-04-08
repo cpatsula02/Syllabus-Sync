@@ -367,7 +367,10 @@ def index():
                     app.logger.error(f"Error during cleanup: {str(e)}")
 
         try:
-        return render_template('index.html')
+            return render_template('index.html')
+        except Exception as e:
+            logger.error(f"Error rendering template: {str(e)}")
+            return render_template('index.html', error="An error occurred while loading the page"), 500
     except Exception as e:
         logger.error(f"Error rendering template: {str(e)}")
         return render_template('index.html', error="An error occurred while loading the page"), 500
