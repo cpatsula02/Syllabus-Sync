@@ -812,16 +812,13 @@ if __name__ == "__main__":
 
     import socket
 
-    # Check if port is available
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Check if port is available and start server
     try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("0.0.0.0", 5000))
         sock.close()
         print("Port 5000 is available")
-    except socket.error:
-        print("Port 5000 is already in use")
-
-    try:
+        
         print("Starting Flask server on port 5000...")
         app.run(
             host="0.0.0.0",
@@ -829,5 +826,7 @@ if __name__ == "__main__":
             threaded=True,
             request_handler=WSGIRequestHandler
         )
+    except socket.error:
+        print("Port 5000 is already in use")
     except Exception as e:
         print(f"Failed to start server: {str(e)}")
