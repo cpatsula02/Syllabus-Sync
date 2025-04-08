@@ -234,25 +234,11 @@ def index():
                 is_present = result.get("present", False)
                 is_grade_item = item in grade_table_items
 
-                # Set higher minimum confidence threshold for grade table items
-                if is_grade_item and result.get("confidence", 0) < 0.6:
-                    # For borderline grade table items, double-check with more specific criteria
-                    item_lower = item.lower()
+                # Set status based on presence
+                status = "present" if is_present else "missing"
+                status = result.get("status", status)  # Allow override from analysis
 
-                    # This helps catch cases where normal pattern matching might fail
-                    if is_present and (
-                        ('distribution' in item_lower and not 'table' in result.get("evidence", "").lower()) or
-                        ('due date' in item_lower and not any(w in result.get("evidence", "").lower() for w in ['due', 'deadline', 'submit'])) or
-                        ('missed assessment' in item_lower and not any(w in result.get("evidence", "").lower() for w in ['miss', 'absent', 'policy'])) or
-                        ('late policy' in item_lower and not any(w in result.get("evidence", "").lower() for w in ['late', 'policy', 'submission']))
-                    ):
-                        # Override if we suspect a false positive
-                        is_present = False
-                        result["present"] = False
-                        result["explanation"] = "Not found with sufficient evidence in document"
-                        result["confidence"] = 0.2
-
-                status = result.get("status", "missing")
+                result["status"] = status
                 if status == "present":
                     present_count += 1
                 elif status == "na":
