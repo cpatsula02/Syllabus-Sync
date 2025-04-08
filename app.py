@@ -125,9 +125,9 @@ def index():
             outline = request.files['outline']
 
             if not checklist_text.strip() or outline.filename == '':
-            return jsonify({'error': 'Both checklist and outline file are required'}), 400
+                return jsonify({'error': 'Both checklist and outline file are required'}), 400
 
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
 
         # Save checklist text to a temporary file
