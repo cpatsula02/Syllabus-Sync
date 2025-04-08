@@ -105,7 +105,7 @@ def extract_checklist_items(text: str) -> List[str]:
         # Check if line starts with a sequential number or letter
         num_match = re.match(r'^\s*(\d+)[\.\)]', line)
         letter_match = re.match(r'^\s*([a-zA-Z])[\.\)]', line)
-        bullet_match = re.match(r'^\s*([•⚫⚪○●◆◇■□▪▫\*\-\+o⚬])', line)
+        bullet_match = re.match(r'^\s*([•⚫⚪○●◆◇■□▪▫])', line)
 
         if num_match:
             # Check if this is a new item or continuing a list
@@ -121,7 +121,7 @@ def extract_checklist_items(text: str) -> List[str]:
             # It's a new item with a letter or bullet
             if current_item:
                 items.append(current_item)
-            current_item = re.sub(r'^\s*[a-zA-Z•⚫⚪○●◆◇■□▪▫\*\-\+o⚬][\.\)]*\s*', '', line)
+            current_item = re.sub(r'^\s*[a-zA-Z•⚫⚪○●◆◇■□▪▫][\.\)]*\s*', '', line)
             item_num = None  # Reset numerical sequence
 
         elif line and current_item:
@@ -574,17 +574,31 @@ def check_special_entity_patterns(item, document, additional_context=""):
             if re.search(pattern, document_lower):
                 return True
 
-    if 'grade' in item_lower or 'assessment' in item_lower:
-        # Check for various grade-related patterns
-        patterns = [
-            r'(?:grade|mark|assessment)\s+(?:distribution|breakdown|weight)',
-            r'(?:evaluation|grading)\s+(?:criteria|scheme|system)',
-            r'\d{1,3}\s*%',
-            r'(?:assignment|quiz|exam|project)\s+(?:worth|weight)'
+    # Check for grade distribution table with flexible matching
+    if ('grade' in item_lower and 'distribution' in item_lower) or 'weight' in item_lower:
+        # Check for various ways grades might be presented
+        table_patterns = [
+            # Traditional table formats
+            r'\|\s*Assessment\s*\|\s*Weight\s*\|',  # Markdown table
+            r'Component\s+Weight',  # Simple table
+            r'(\w+\s+){1,3}:\s*\d{1,3}\s*%',  # Component: XX%
+            r'\d{1,3}\s*%\s*-\s*(\w+\s+){1,3}',  # XX% - Component
+
+            # Alternate formats
+            r'(?:worth|weighted|counts for)\s+\d{1,3}\s*%',  # "worth 30%"
+            r'grade\s+breakdown',  # Grade breakdown section
+            r'evaluation\s+scheme',  # Evaluation scheme
+            r'assessment\s+structure',  # Assessment structure
+            r'course\s+requirements',  # Course requirements section
+
+            # Embedded formats
+            r'(?:quiz(?:zes)?|exam(?:s)?|assignment(?:s)?|project(?:s)?)\s*(?:\(|\:|\-)\s*\d{1,3}\s*%',
+            r'\d{1,3}\s*%\s*(?:of|for|toward(?:s)?)\s+(?:final|course|total)\s+grade'
         ]
-        for pattern in patterns:
+        for pattern in table_patterns:
             if re.search(pattern, document_lower):
                 return True
+
 
     # Keep the original email validation logic
     if 'instructor' in item_lower and 'email' in item_lower:
@@ -675,79 +689,6 @@ def check_special_entity_patterns(item, document, additional_context=""):
 
     return False
 
-    # Add this item to processed set
-    _processed_pattern_items.add(item_hash)
-    # Check for instructor email requirement
-    if 'instructor' in item and 'email' in item:
-        # Look for email patterns in the document
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
-        instructor_pattern = r'(instructor|professor|teacher|faculty)(.{0,30})(email|contact|reach)'
-
-        # Look for email near instructor context
-        instructor_matches = re.finditer(instructor_pattern, document, re.IGNORECASE)
-        for match in instructor_matches:
-            context_start = max(0, match.start() - 100)
-            context_end = min(len(document), match.end() + 100)
-            context = document[context_start:context_end]
-
-            if re.search(email_pattern, context):
-                return True
-
-    # Check for grade distribution table
-    if ('grade' in item and 'distribution' in item) or 'weight' in item:
-        # Check for table patterns
-        table_patterns = [
-            r'\|\s*Assessment\s*\|\s*Weight\s*\|',  # Markdown table header
-            r'Component\s+Weight',  # Simple table format
-            r'(\w+\s+){1,3}:\s*\d{1,3}\s*%',  # Component: XX% format
-            r'\d{1,3}\s*%\s*-\s*(\w+\s+){1,3}',  # XX% - Component format
-        ]
-
-        for pattern in table_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Check for specific formatting requirements
-    if 'formatted' in item or 'format' in item:
-        # Check for page numbering, margins, font specifications
-        format_patterns = [
-            r'(page|margin|font|spacing)(.{0,30})(requirement|specification)',
-            r'(format|formatting)(.{0,30})(guide|requirement|instruction)',
-        ]
-
-        for pattern in format_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Check for learning outcomes
-    if 'learning' in item and ('outcome' in item or 'objective' in item):
-        outcome_patterns = [
-            r'learning\s+outcomes?',
-            r'course\s+objectives?',
-            r'students\s+will\s+(be\s+able\s+to|learn|understand|demonstrate)',
-            r'by\s+the\s+end\s+of\s+this\s+course',
-        ]
-
-        for pattern in outcome_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Add context-specific checks based on additional_context if provided
-    if additional_context:
-        context_lower = additionalcontext.lower()
-        if 'graduate course' in context_lower and 'graduate' in item.lower():
-            grad_patterns = [
-                r'graduate(\s+level|\s+student|\s+program|\s+requirement)',
-                r'master\'?s(\s+program|\s+degree|\s+requirement)',
-                r'ph\.?d\.?(\s+student|\s+program|\s+requirement)',
-            ]
-
-            for pattern in grad_patterns:
-                if re.search(pattern, document, re.IGNORECASE):
-                    return True
-
-    return False
-
 def find_matching_excerpt(item, document_text):
     """
     Find a relevant excerpt in the document that matches the given checklist item.
@@ -781,7 +722,7 @@ def find_matching_excerpt(item, document_text):
                       'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
                       'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other',
                       'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-                      'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
+                      'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', ''now']
 
     keywords = [word for word in re.findall(r'\b\w+\b', item_lower) 
                if word not in common_stopwords and len(word) > 3]
