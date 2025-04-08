@@ -722,7 +722,7 @@ def find_matching_excerpt(item, document_text):
                       'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
                       'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other',
                       'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-                      'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', ''now']
+                      'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
 
     keywords = [word for word in re.findall(r'\b\w+\b', item_lower) 
                if word not in common_stopwords and len(word) > 3]
