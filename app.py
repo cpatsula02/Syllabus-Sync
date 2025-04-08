@@ -133,9 +133,9 @@ def index():
 
                 with open(outline_path, 'r', encoding='utf-8') as file:
                     if outline.filename.lower().endswith('.pdf'):
-            outline_text = extract_text(outline_path)
-        else:
-            outline_text = file.read()
+                        outline_text = extract_text(outline_path)
+                    else:
+                        outline_text = file.read()
 
                 checklist_items, analysis_results = process_documents(
                     checklist_path, 
