@@ -70,18 +70,34 @@ def validate_links(text):
     """
     Validates links found in the provided text.
     """
+    # Safety check - ensure text is a string
+    if not isinstance(text, str):
+        logger.warning(f"validate_links received non-string input: {type(text)}")
+        return [], []
+        
     url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
     urls = re.findall(url_pattern, text)
     valid_links = []
     invalid_links = []
-
-    for url in urls:
+    
+    # Limit to first 5 links to prevent timeouts
+    for url in urls[:5]:
+        # Make sure URL starts with http:// or https://
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+            
         try:
-            urllib.request.urlopen(url)
+            # Set a short timeout to prevent long waits
+            urllib.request.urlopen(url, timeout=3)
             valid_links.append(url)
         except Exception as e:
+            logger.warning(f"Invalid link {url}: {str(e)}")
             invalid_links.append(url)
 
+    # If there are more links than we checked, log it
+    if len(urls) > 5:
+        logger.info(f"Only checked 5 out of {len(urls)} links")
+        
     return valid_links, invalid_links
 
 
@@ -131,10 +147,11 @@ def index():
                 logger.info(f"Checklist path: {checklist_path}")
                 logger.info(f"Outline path: {outline_path}")
 
-                with open(outline_path, 'r', encoding='utf-8') as file:
-                    if outline.filename.lower().endswith('.pdf'):
-                        outline_text = extract_text(outline_path)
-                    else:
+                # Extract text from the document based on file type
+                if outline.filename.lower().endswith('.pdf'):
+                    outline_text = extract_text(outline_path)
+                else:
+                    with open(outline_path, 'r', encoding='utf-8') as file:
                         outline_text = file.read()
 
                 checklist_items, analysis_results = process_documents(

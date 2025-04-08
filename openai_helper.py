@@ -30,12 +30,17 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 client = None
 if openai_available:
     if OPENAI_API_KEY and OPENAI_API_KEY.strip():
-        try:
-            client = OpenAI(api_key=OPENAI_API_KEY)
-            logging.info("OpenAI API key is configured. Advanced AI analysis is available.")
-        except Exception as e:
-            logging.error(f"Error initializing OpenAI client: {str(e)}")
+        if not OPENAI_API_KEY.startswith(('sk-', 'test-')):
+            logging.warning("Invalid OpenAI API key format. Keys should start with sk-")
             logging.info("Proceeding with rule-based analysis only.")
+        else:
+            try:
+                client = OpenAI(api_key=OPENAI_API_KEY)
+                # Don't make an API call here - just initialize the client
+                logging.info("OpenAI client initialized. Advanced AI analysis is available.")
+            except Exception as e:
+                logging.error(f"Error initializing OpenAI client: {str(e)}")
+                logging.info("Proceeding with rule-based analysis only.")
     else:
         logging.info("No OpenAI API key found. Using rule-based analysis only.")
 else:
@@ -173,6 +178,7 @@ def api_call_with_backoff(prompt: str) -> Dict:
     for attempt in range(MAX_RETRIES):
         try:
             # Use global client with timeout
+            # Add timeout option to prevent hanging
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=[
@@ -181,6 +187,7 @@ def api_call_with_backoff(prompt: str) -> Dict:
                 response_format={"type": "json_object"},
                 temperature=0.2,  # Lower temperature for more consistent analysis
                 max_tokens=400,   # Limit token output to speed up response
+                timeout=10  # 10 second timeout to prevent hanging
             )
             
             # Estimate response tokens
@@ -783,16 +790,30 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
         # Validate API connection with test call
         if max_attempts > 0:  # Only if API analysis is requested by user setting
             try:
-                # Simple test call with minimal tokens
+                # Simple test call with minimal tokens and short timeout
+                logger.info("Validating OpenAI API connection with test call...")
                 test_prompt = "Return valid JSON with key 'status' and value 'ok'"
-                test_response = api_call_with_backoff(test_prompt)
                 
-                if 'error' in test_response:
-                    logger.warning(f"API test call failed: {test_response.get('error')}")
-                    logger.warning("Will use fallback analysis methods for all items")
-                    ai_analysis_available = False
+                # Instead of using api_call_with_backoff, use a simplified direct call with strict timeout
+                if client is not None:
+                    try:
+                        # Short timeout to prevent hanging
+                        response = client.chat.completions.create(
+                            model=MODEL,
+                            messages=[{"role": "user", "content": test_prompt}],
+                            response_format={"type": "json_object"},
+                            temperature=0.1,
+                            max_tokens=20,
+                            timeout=5  # 5 second timeout to fail fast
+                        )
+                        logger.info("API connection verified successfully")
+                    except Exception as api_err:
+                        logger.warning(f"API test call failed with direct request: {str(api_err)}")
+                        logger.warning("Will use fallback analysis methods for all items")
+                        ai_analysis_available = False
                 else:
-                    logger.info("API connection verified successfully")
+                    logger.warning("OpenAI client not available for test")
+                    ai_analysis_available = False
             except Exception as e:
                 logger.exception(f"Error verifying API connection: {str(e)}")
                 logger.warning("Will use fallback analysis methods for all items")
