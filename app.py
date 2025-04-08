@@ -128,7 +128,7 @@ def index():
                 return jsonify({'error': 'Both checklist and outline file are required'}), 400
 
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
+            outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
 
         # Save checklist text to a temporary file
         checklist_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_checklist.txt')
