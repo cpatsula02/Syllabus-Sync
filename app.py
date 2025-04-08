@@ -746,11 +746,11 @@ def download_pdf():
         # Reset the buffer position
         pdf_buffer.seek(0)
 
-        # Send the PDF to the browser for viewing rather than downloading
+        # Send the PDF to the browser with download option
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
-            as_attachment=False,
+            as_attachment=True,
             download_name='syllabus_sync_report.pdf'
         )
 
