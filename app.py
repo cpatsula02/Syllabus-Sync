@@ -711,7 +711,7 @@ def download_pdf():
             # Check for new page
             if pdf.get_y() > 250:
                 pdf.add_page()
-                pdf.set_font('DejaVu', ''B', 10)
+                pdf.set_font('DejaVu', 'B', 10)
                 pdf.cell(160, 8, 'Checklist Item', 1, 0, 'L')
                 pdf.cell(30, 8, 'Status', 1, 1, 'C')
                 pdf.set_font('DejaVu', '', 9)
