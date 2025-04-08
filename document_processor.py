@@ -200,6 +200,10 @@ def extract_checklist_items(text: str) -> List[str]:
 
 def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
     """
+    Check if item requirements are met anywhere in the document, regardless of section.
+    Uses semantic understanding to identify related content in any context.
+    """
+    """
     Advanced semantic matching with strict validation for critical elements.
     Uses multiple strategies including header recognition, semantic equivalence,
     and specific pattern validation for critical items.
@@ -467,10 +471,43 @@ def find_best_keyword_section(document_text, keywords):
 
     return ""
 
+def validate_links(document_text):
+    """Validate links found in the document text."""
+    import re
+    import requests
+    from urllib.parse import urlparse
+
+    # Find all URLs in the document
+    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    urls = re.findall(url_pattern, document_text)
+    
+    valid_links = []
+    invalid_links = []
+    
+    for url in urls:
+        try:
+            # Clean up URL
+            url = url.strip('.,)')
+            parsed = urlparse(url)
+            if not parsed.scheme:
+                url = 'https://' + url
+                
+            # Try to access URL with timeout
+            response = requests.head(url, timeout=5, allow_redirects=True)
+            if response.status_code < 400:
+                valid_links.append(url)
+            else:
+                invalid_links.append(url)
+        except:
+            invalid_links.append(url)
+            
+    return valid_links, invalid_links
+
 def check_special_entity_patterns(item, document, additional_context=""):
     """
     Enhanced pattern matching with improved semantic understanding and context awareness.
     Uses multiple strategies to detect requirements that may be expressed in different ways.
+    Scans entire document for related content regardless of section location.
     """
     document_lower = document.lower()
     item_lower = item.lower()

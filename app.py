@@ -6,6 +6,7 @@ import logging
 import re
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents
+import urllib.request
 
 # Configure logging with more detailed output
 logging.basicConfig(level=logging.DEBUG, 
@@ -65,6 +66,25 @@ def identify_grade_table_items(checklist_items):
             grade_items.append(item)
     return grade_items
 
+def validate_links(text):
+    """
+    Validates links found in the provided text.
+    """
+    url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
+    urls = re.findall(url_pattern, text)
+    valid_links = []
+    invalid_links = []
+
+    for url in urls:
+        try:
+            urllib.request.urlopen(url)
+            valid_links.append(url)
+        except Exception as e:
+            invalid_links.append(url)
+
+    return valid_links, invalid_links
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -111,12 +131,45 @@ def index():
                 logger.info(f"Checklist path: {checklist_path}")
                 logger.info(f"Outline path: {outline_path}")
 
+                with open(outline_path, 'r', encoding='utf-8') as file:
+                    outline_text = file.read()
+
                 checklist_items, analysis_results = process_documents(
                     checklist_path, 
                     outline_path, 
                     api_attempts=api_attempts, 
                     additional_context=additional_context
                 )
+
+                # Validate links in the document
+                valid_links, invalid_links = validate_links(outline_text)
+
+                # Add link validation results to context
+                additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
+
+                # Process using AI if permitted, otherwise use traditional matching
+                from openai_helper import analyze_checklist_items_batch
+                results = analyze_checklist_items_batch(checklist_items, outline_text, max_attempts=api_attempts, additional_context=additional_context)
+
+                # Update link validation results
+                for item in checklist_items:
+                    if 'link' in item.lower() or 'url' in item.lower():
+                        if invalid_links:
+                            results[item] = {
+                                'present': False,
+                                'confidence': 0.9,
+                                'explanation': f'Found {len(invalid_links)} invalid links in document',
+                                'evidence': "Invalid links found: " + ", ".join(invalid_links[:3]),
+                                'method': 'link_validation'
+                            }
+                        else:
+                            results[item] = {
+                                'present': True,
+                                'confidence': 0.9,
+                                'explanation': 'All links in document are valid',
+                                'evidence': "Valid links found: " + ", ".join(valid_links[:3]),
+                                'method': 'link_validation'
+                            }
 
                 logger.info(f"Document processing complete. Found {len(checklist_items)} checklist items.")
                 if not checklist_items or len(checklist_items) == 0:
@@ -653,7 +706,7 @@ def download_pdf():
                 pdf.cell(30, 8, 'Status', 1, 1, 'C')
                 pdf.set_font('DejaVu', '', 9)
 
-        # Add summary at bottom of last page
+                # Add summary at bottom of last page
         pdf.ln(10)
         pdf.set_font('DejaVu', 'B', 10)
         total_items = len(unique_checklist_items)
