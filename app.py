@@ -117,8 +117,9 @@ def validate_links(text):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'checklist' not in request.form or 'outline' not in request.files:
-            return jsonify({'error': 'Both checklist and outline are required'}), 400
+        try:
+            if 'checklist' not in request.form or 'outline' not in request.files:
+                return jsonify({'error': 'Both checklist and outline are required'}), 400
 
         checklist_text = request.form['checklist']
         outline = request.files['outline']
@@ -348,12 +349,22 @@ def index():
             logger.exception(f"Error processing documents: {str(e)}")
             flash(f'An error occurred: {str(e)}')
             return redirect(request.url)
+        except TimeoutError:
+            flash("Request timed out. Please try again with a smaller file or fewer items.")
+            return redirect(request.url)
+        except Exception as e:
+            app.logger.error(f"Unexpected error: {str(e)}")
+            flash(f"An error occurred: {str(e)}")
+            return redirect(request.url)
         finally:
             # Cleanup
-            if os.path.exists(checklist_path):
-                os.remove(checklist_path)
-            if os.path.exists(outline_path):
-                os.remove(outline_path)
+            try:
+                if os.path.exists(checklist_path):
+                    os.remove(checklist_path)
+                if os.path.exists(outline_path):
+                    os.remove(outline_path)
+            except Exception as e:
+                app.logger.error(f"Error during cleanup: {str(e)}")
 
     return render_template('index.html')
 
