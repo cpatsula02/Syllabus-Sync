@@ -392,7 +392,13 @@ def extract_core_concepts(text):
     return [word for word in filtered_words if len(word) > 3]
 
 def extract_document_sections(document_text):
-    """Extract sections with their titles and content from the document."""
+    """
+    Extract sections with their titles and content from the document.
+    Enhanced to handle various document structures and section formats.
+    """
+    # Initialize with a comprehensive dictionary of sections
+    sections = {}
+    
     # Look for potential section headers with improved pattern recognition
     section_patterns = [
         r'([A-Z][A-Z\s]{3,}[A-Z])[\s\n:]+',  # ALL CAPS HEADERS
@@ -403,9 +409,12 @@ def extract_document_sections(document_text):
         r'(\*\*[^*\n]+\*\*)[\s\n]+',  # Markdown bold headers like **Header**
         r'(#+\s+[^\n]+)[\s\n]+',  # Markdown headers like ### Header
         r'(\d+\.\d+(?:\.\d+)*\s+[A-Za-z\s]{3,}[a-zA-Z])[\s\n:]+',  # Multi-level numbering like "1.2.3 Title"
+        r'(•\s+[A-Za-z\s]{3,}[a-zA-Z])[\s\n:]+',  # Bullet point headers like "• Section Title"
+        r'([A-Z][a-z]+\s+(?:&|and)\s+[A-Z][a-z]+)[\s\n:]+',  # Headers with "and" or "&" like "Rules & Policies"
     ]
 
-    sections = {}
+    # Track all header positions for cleaning
+    header_positions = []
     remaining_text = document_text
 
     for pattern in section_patterns:
@@ -413,6 +422,7 @@ def extract_document_sections(document_text):
         for i, match in enumerate(matches):
             section_title = match.group(1).strip()
             start_pos = match.end()
+            header_positions.append((match.start(), start_pos))
 
             # Determine end of section
             if i < len(matches) - 1:
@@ -437,13 +447,45 @@ def extract_document_sections(document_text):
                     sections[current_section] = '\n'.join(current_content)
                 current_section = line.lower()
                 current_content = []
+                header_positions.append((document_text.find(line), document_text.find(line) + len(line)))
             else:
                 current_content.append(line)
 
         # Add the last section
         if current_content:
             sections[current_section] = '\n'.join(current_content)
-
+    
+    # Extract topics for common required sections with targeted extraction
+    common_sections = {
+        "instructor": ["email", "contact", "office hours", "phone"],
+        "policies": ["late", "missed", "academic integrity", "plagiarism"],
+        "textbook": ["reading", "material", "required text", "book"],
+        "assessment": ["grade", "evaluation", "weighting", "distribution"]
+    }
+    
+    # For each important topic, try to find relevant content
+    for topic, keywords in common_sections.items():
+        if not any(topic in section_key for section_key in sections.keys()):
+            # Look for content related to this topic
+            for keyword in keywords:
+                patterns = [
+                    fr'(?i)(?:[^\n]*{keyword}[^\n]*\n){{1,15}}',  # 1-15 lines containing keyword
+                    fr'(?i){keyword}[^.]*\.'  # Single sentence containing keyword
+                ]
+                
+                for pattern in patterns:
+                    matches = re.finditer(pattern, document_text)
+                    for match in matches:
+                        # Check if this content overlaps with any existing header
+                        start = match.start()
+                        end = match.end()
+                        if not any(start < hp[1] and end > hp[0] for hp in header_positions):
+                            section_name = f"{topic.title()} ({keyword})"
+                            sections[section_name] = match.group(0)
+    
+    # Add a full document section for catch-all searching
+    sections["Full Document"] = document_text
+    
     return sections
 
 def sections_are_related(section_title, item_concepts):
@@ -1202,21 +1244,53 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         }
                         continue
                         
+                    # IMPROVED: Multi-stage detection with double-check for critical items
                     is_present = check_item_in_document(item, outline_text, enhanced_context)
-                    explanation = "The item was found in the document." if is_present else "The item was not found in the document."
                     evidence = ""
+                    item_lower = item.lower()
                     
-                    if is_present:
-                        found, excerpt = find_matching_excerpt(item, outline_text)
-                        if found and excerpt:
-                            evidence = excerpt
+                    # First pass: Find matching excerpt for evidence gathering
+                    found, excerpt = find_matching_excerpt(item, outline_text)
+                    if found and excerpt:
+                        evidence = excerpt
+                    
+                    # Second pass verification for critical items that frequently cause false results
+                    crucial_items = {
+                        "instructor email": ["instructor", "email", "contact"],
+                        "late policy": ["late", "policy", "deadline"],
+                        "missed assessment": ["missed", "absence", "unable"],
+                        "textbook": ["textbook", "reading", "material"]
+                    }
+                    
+                    # For crucial items, do a thorough double-check
+                    is_crucial = False
+                    for crucial_type, keywords in crucial_items.items():
+                        if any(keyword in item_lower for keyword in keywords):
+                            is_crucial = True
+                            
+                            # Get the special case check from our improved module
+                            from improved_pattern_matching import enhanced_check_item_in_document
+                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(item, outline_text)
+                            
+                            # If the two detection methods disagree, trust the improved one for crucial items
+                            if is_present != reliable_present and confidence >= 0.75:
+                                print(f"Crucial item '{item[:30]}...' detection corrected: {is_present} -> {reliable_present}")
+                                is_present = reliable_present
+                                if reliable_evidence:
+                                    evidence = reliable_evidence
+                    
+                    # Set explanation based on final detection result
+                    explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+                    
+                    # Use higher confidence for crucial items that got special verification
+                    confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
                     
                     results[item] = {
                         'present': is_present,
-                        'confidence': 0.8 if is_present else 0.2,
+                        'confidence': confidence,
                         'explanation': explanation,
                         'evidence': evidence,
-                        'method': 'pattern_matching'
+                        'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
                     }
         except Exception as e:
             # Fallback completely to basic pattern matching if any errors
@@ -1225,13 +1299,44 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             results = {}
             for item in checklist_items:
                 is_present = check_item_in_document(item, outline_text, enhanced_context)
+                item_lower = item.lower()
+                evidence = ""
+                
+                # Even in fallback mode, apply special handling for crucial items
+                crucial_items = {
+                    "instructor email": ["instructor", "email", "contact"],
+                    "late policy": ["late", "policy", "deadline"],
+                    "missed assessment": ["missed", "absence", "unable"],
+                    "textbook": ["textbook", "reading", "material"]
+                }
+                
+                # For crucial items, use the most reliable detection method
+                is_crucial = False
+                for crucial_type, keywords in crucial_items.items():
+                    if any(keyword in item_lower for keyword in keywords):
+                        is_crucial = True
+                        try:
+                            # Try the enhanced detection
+                            from improved_pattern_matching import enhanced_check_item_in_document
+                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(item, outline_text)
+                            
+                            # Only override if we have high confidence
+                            if confidence >= 0.75:
+                                print(f"Fallback crucial item '{item[:30]}...' using enhanced detection: {is_present} -> {reliable_present}")
+                                is_present = reliable_present
+                                evidence = reliable_evidence
+                        except Exception as ed:
+                            # If enhanced detection fails, continue with basic result
+                            print(f"Enhanced detection failed for crucial item: {str(ed)}")
+                
                 explanation = "The item was found in the document." if is_present else "The item was not found in the document."
                 
                 results[item] = {
                     'present': is_present,
-                    'confidence': 0.7 if is_present else 0.3,
+                    'confidence': 0.8 if is_crucial and is_present else (0.7 if is_present else 0.3),
                     'explanation': explanation,
-                    'method': 'basic_pattern_matching'
+                    'evidence': evidence,
+                    'method': 'enhanced_fallback_detection' if is_crucial else 'basic_pattern_matching'
                 }
 
         # Post-process grade distribution items with the extracted table if found

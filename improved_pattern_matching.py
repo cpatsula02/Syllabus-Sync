@@ -571,6 +571,7 @@ def check_special_cases(item: str, document_text: str) -> Tuple[bool, str, float
 def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool, str, float]:
     """
     Main function to check if a checklist item is satisfied in the document.
+    Enhanced with multi-pass scanning and comprehensive checks.
     
     Args:
         item: Checklist item
@@ -584,5 +585,93 @@ def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool
     if is_present:  # Modified: Check boolean value directly rather than "is not None"
         return is_present, evidence, confidence
     
-    # Otherwise use improved pattern matching
-    return improved_check_item(item, document_text)
+    # Get improved pattern matching results
+    is_present, evidence, confidence = improved_check_item(item, document_text)
+    
+    # Extra verification for crucial items known to have accuracy issues
+    # This adds a second pass of detection for important items
+    item_lower = item.lower()
+    
+    if not is_present and (
+        "instructor email" in item_lower or 
+        "late policy" in item_lower or 
+        "missed assessment" in item_lower or 
+        "textbook" in item_lower or 
+        "reading" in item_lower
+    ):
+        # Do a comprehensive second-pass check with specialized detection
+        
+        # Check for instructor email
+        if "instructor email" in item_lower:
+            # Check if there's an instructor section but no email
+            instructor_section = re.search(r'(?i)instructor[^\n]*\n(?:[^\n]*\n){0,10}', document_text)
+            if instructor_section:
+                section_text = instructor_section.group(0)
+                # If there's an instructor section with contact info but no email
+                if ('@' not in section_text and '.ca' not in section_text) and any(contact in section_text.lower() for contact in ['telephone', 'phone', 'office']):
+                    return False, f"Found instructor section without email: {section_text[:200]}...", 0.9
+        
+        # Check for late policy
+        if "late policy" in item_lower:
+            # Look for sections that might contain late policy without using the word "late"
+            policy_sections = re.findall(r'(?i)(polic(?:y|ies)|rule|guideline|submission)[^\n]*\n(?:[^\n]*\n){0,15}', document_text)
+            for section in policy_sections:
+                if any(word in section.lower() for word in [
+                    "deadline", "due date", "submit", "timely", "punctual", 
+                    "penalty", "deduction", "grade reduction"
+                ]):
+                    # Check if there are percentage deductions or time references
+                    if re.search(r'(?i)(\d+%|\d+\s*point)', section) or \
+                       re.search(r'(?i)(day|hour|time|date)', section):
+                        return True, f"Found potential late policy section: {section[:200]}...", 0.75
+            
+            # If we've thoroughly checked and still haven't found anything
+            assignment_sections = re.findall(r'(?i)(assignment|submission|grading)[^\n]*\n(?:[^\n]*\n){0,15}', document_text)
+            if not any('late' in section.lower() for section in assignment_sections):
+                return False, "No late policy found after thorough examination of policy and assignment sections.", 0.8
+        
+        # Check for missed assessment policy
+        if "missed assessment" in item_lower or "missed assignment" in item_lower:
+            # Look for medical or emergency references in policy sections
+            policy_sections = re.findall(r'(?i)(polic(?:y|ies)|rule|guideline|grading)[^\n]*\n(?:[^\n]*\n){0,15}', document_text)
+            for section in policy_sections:
+                if any(word in section.lower() for word in [
+                    "medical", "doctor", "illness", "emergency", "absence", 
+                    "miss", "unable", "cannot", "accommodation"
+                ]):
+                    return True, f"Found potential missed assessment policy: {section[:200]}...", 0.75
+            
+            # If we've checked all policy sections and found nothing relevant
+            if not any(word in document_text.lower() for word in [
+                "missed assignment", "missed assessment", "unable to submit", 
+                "unable to attend", "absence"
+            ]):
+                return False, "No missed assessment policy found after thorough examination of policy sections.", 0.8
+        
+        # Check for textbooks or readings
+        if "textbook" in item_lower or "reading" in item_lower or "course material" in item_lower:
+            # Check for specific textbook/reading sections
+            material_sections = re.findall(r'(?i)(textbook|reading|course material|material|resource)[^\n]*\n(?:[^\n]*\n){0,20}', document_text)
+            for section in material_sections:
+                # Check for author/title/publisher patterns
+                if re.search(r'(?i)(author|title|publisher|ISBN|edition)', section) or \
+                   re.search(r'(?i)([A-Z][a-z]+,\s+[A-Z]\.)', section) or \
+                   re.search(r'(?i)(recommended|required)\s+(text|book|reading)', section):
+                    return True, f"Found textbook/reading section: {section[:300]}...", 0.8
+                
+                # Check for book listing patterns like "1. Book Title" or "- Book Title"
+                if re.search(r'(?i)(^|\n)[\s\d\-\*•]+[A-Z]', section):
+                    return True, f"Found potential reading list format: {section[:300]}...", 0.75
+            
+            # If no specific textbook section, check if there's a statement about no textbook
+            if re.search(r'(?i)no\s+required\s+textbook', document_text) or \
+               re.search(r'(?i)no\s+textbook\s+is\s+required', document_text):
+                return False, "Document explicitly states no required textbook.", 0.9
+            
+            # Check for D2L or online materials
+            if re.search(r'(?i)(materials|readings)\s+(available|posted|found)\s+on\s+D2L', document_text) or \
+               re.search(r'(?i)(materials|readings)\s+(available|posted|found)\s+online', document_text):
+                return True, "Found reference to online/D2L course materials.", 0.75
+    
+    # Return the original pattern matching results
+    return is_present, evidence, confidence
