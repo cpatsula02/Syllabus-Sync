@@ -224,13 +224,31 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
     Implements a more comprehensive matching algorithm to dramatically reduce 
     false negatives while maintaining reasonable accuracy.
     """
+    # Try to use the improved pattern matching module if available
+    try:
+        from improved_pattern_matching import enhanced_check_item_in_document
+        is_present, evidence, confidence = enhanced_check_item_in_document(item, document_text)
+        if is_present:
+            return True
+        # If confidence is moderate but not enough to consider it present, 
+        # continue with the standard approach as a fallback
+        if confidence >= 0.4:  # Moderate confidence it's actually not present
+            return False
+        # Otherwise continue with standard detection
+    except ImportError:
+        # Enhanced module not available, continue with standard approach
+        logging.info("Enhanced pattern matching module not available, using standard approach")
+    except Exception as e:
+        # Any other error, log and continue with standard approach
+        logging.warning(f"Error using enhanced pattern matching: {str(e)}")
+    
     document_lower = document_text.lower()
     item_lower = item.lower()
 
     # ---- FIRST PASS: DIRECT MATCHING ----
-    # Reduced threshold: Check for substantial direct matches (over 65% of the item text)
-    # This allows more flexibility in wording while still finding core concepts
-    if len(item_lower) > 10 and item_lower in document_lower:
+    # MODIFIED: Reduced threshold for direct matching from 65% to 50% for better recall
+    # Use partial string matching instead of exact substring matching
+    if len(item_lower) > 10 and (item_lower in document_lower or document_lower.find(item_lower[:len(item_lower)//2]) != -1):
         return True
 
     # ---- SECOND PASS: CONCEPT MATCHING WITH EXPANDED VOCABULARY ----
@@ -240,7 +258,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
     if not item_concepts:
         return False
 
-    # Special handling for specific item types with expanded keyword lists
+    # ENHANCED: More comprehensive handling for specific item types
     is_grade_item = any(term in item_lower for term in [
         'grade distribution', 'weight', 'assessment', 'table', 'grade', 'grading', 
         'due date', 'participation', 'group project', 'final exam', 'midterm',
@@ -270,17 +288,24 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         'phone', 'telephone', 'office', 'location', 'availability', 'reach', 'communicate',
         'communication', 'information', 'name', 'staff', 'department', 'faculty'
     ])
+    
+    # ADDED: Special check for instructor email
+    if is_instructor_item and "email" in item_lower:
+        # Look for ucalgary.ca emails with more flexible domain matching
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]*ucalgary\.ca\b'
+        if re.search(email_pattern, document_text):
+            return True
 
     # Get document sections with improved section recognition
     sections = extract_document_sections(document_lower)
 
     # ---- THIRD PASS: SECTION-BASED MATCHING ----
-    # Apply more strict matching criteria for certain item types
-    match_threshold = 0.7 if is_grade_item or is_policy_item else 0.5
+    # MODIFIED: Lower thresholds for better recall
+    match_threshold = 0.6 if is_grade_item or is_policy_item else 0.4  # Was 0.7/0.5
     for section_title, section_content in sections.items():
         # Check if section title is related to the item
         if sections_are_related(section_title, item_concepts):
-            # Apply stricter content matching for grade/policy items
+            # Apply content matching with lower threshold
             if content_contains_concepts(section_content, item_concepts, match_threshold):
                 return True
 
@@ -292,10 +317,53 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         policy_patterns = [
             rf"{policy_type}\s+(policy|policies|guidelines|requirements|procedures)",
             rf"(policy|policies|guidelines|requirements|procedures)\s+on\s+{policy_type}",
-            rf"(policy|policies|guidelines|requirements|procedures)\s+for\s+{policy_type}"
+            rf"(policy|policies|guidelines|requirements|procedures)\s+for\s+{policy_type}",
+            # ADDED: More flexible policy patterns
+            rf"{policy_type}.*?(guidelines|requirements|rules|expectations)",
+            rf"(in case of|if you).*?{policy_type}"
         ]
         for pattern in policy_patterns:
             if re.search(pattern, document_lower):
+                return True
+    
+    # ---- NEW PASS: CHECKLIST ITEM-SPECIFIC PATTERNS ----
+    # Additional special-case handling for common checklist items
+    
+    # Check for class schedule patterns
+    if "class schedule" in item_lower or "topic" in item_lower:
+        schedule_patterns = [
+            r'(?i)(class|course|weekly)\s+(schedule|calendar)',
+            r'(?i)(week|session|class)\s+\d+\s*:',
+            r'(?i)(date|week|session|day)\s+(topic|content|activity)',
+            r'(?i)(schedule of classes)',
+            r'(?i)(lecture|class)\s+(topics|outline|schedule)'
+        ]
+        for pattern in schedule_patterns:
+            if re.search(pattern, document_text):
+                return True
+    
+    # Check for grade distribution table
+    if "grade distribution" in item_lower or "table" in item_lower:
+        table_patterns = [
+            r'(?i)(grade|assessment|assignment|evaluation).*?(distribution|breakdown|weight)',
+            r'(?i)(distribution).*?(grade|mark|assessment)',
+            r'(?i)(component|assessment|assignment).*?(worth|value|percent|weight)'
+        ]
+        for pattern in table_patterns:
+            if re.search(pattern, document_text):
+                return True
+    
+    # Check for permission/prohibition patterns
+    if "prohibited" in item_lower or "allowed" in item_lower:
+        permission_patterns = [
+            r'(?i)(prohibited|not allowed|forbidden|restricted|banned|disallowed)',
+            r'(?i)(cannot|may not|must not|are not to)\s+(use|utilize|employ|access)',
+            r'(?i)(academic integrity|academic misconduct|cheating|plagiarism)',
+            r'(?i)(generative AI|ChatGPT|AI tools|artificial intelligence)',
+            r'(?i)(unauthorized|unapproved|restricted)\s+(resources|materials|tools)'
+        ]
+        for pattern in permission_patterns:
+            if re.search(pattern, document_text):
                 return True
 
     # ---- FIFTH PASS: CONTEXTUAL PATTERN MATCHING ----
