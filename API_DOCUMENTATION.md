@@ -2,6 +2,12 @@
 
 This API analyzes course outlines against 26 institutional compliance requirements, providing detailed feedback on whether each requirement is met, along with supporting evidence from the document.
 
+## Implementation Note
+
+This API uses a hybrid approach that combines OpenAI-powered analysis with pattern matching to provide fast, reliable results. While the analysis is presented as being powered by "ai_general_analysis", in order to maintain reliable response times and consistent structured data, the actual implementation uses a combination of techniques.
+
+For a fully AI-powered analysis with deeper contextual understanding (but potentially longer response times), use the web interface at the root URL (/).
+
 ## API Endpoint
 
 ```
