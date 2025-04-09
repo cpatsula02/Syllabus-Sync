@@ -72,7 +72,7 @@ def load_detailed_checklist():
             "Group Work Weight: If group work is included, verify it doesn't exceed 40% of the overall final grade.",
             "Assessment-Objectives Alignment: Check that assessments indicate which course objectives each assessment measures.",
             "Due Dates in Grade Table: Does the grade distribution table include due dates for all assignments and examinations?",
-            "30% Before Last Class: Will students receive AT LEAST 30% of their final grade before the last day of classes?",
+            "30% Before Last Class: Will students receive at least 30% of their final grade before the last day of classes?",
             "No Post-Term Assignments: Are there any assignments due after the last day of classes?",
             "Missed Assessment Policy: Does the outline have a missed assessment policy section?",
             "Late Submission Policy: Does the outline have a Late Policy section that explains penalties for late submissions?",
@@ -265,18 +265,31 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             logger.info(f"Sending API request for batch {batch_idx+1}")
             start_time = time.time()
             
-            # Make the OpenAI API call
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # Using gpt-3.5-turbo for faster analysis with contextual understanding
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=3000,  # Increased max tokens for detailed descriptions
-                timeout=120  # 120-second timeout for each batch (doubled for detailed checklist items)
-            )
+            # Make the OpenAI API call with proper error handling
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",  # Using gpt-3.5-turbo for faster analysis with contextual understanding
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": user_message}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                    max_tokens=3000  # Increased max tokens for detailed descriptions
+                    # Remove timeout parameter which is causing issues
+                )
+            except Exception as openai_error:
+                logger.error(f"OpenAI API error in batch {batch_idx+1}: {str(openai_error)}")
+                # Create default responses for this batch due to API error
+                batch_results = []
+                for i in range(len(batch_items)):
+                    item_idx = start_idx + i
+                    batch_results.append(create_result_item(
+                        False, 0.5, 
+                        f"API call error for item {item_idx+1}: {str(openai_error)[:30]}...", ""
+                    ))
+                results_array.extend(batch_results)
+                continue  # Skip to the next batch
             
             elapsed = time.time() - start_time
             logger.info(f"Batch {batch_idx+1} OpenAI API call completed in {elapsed:.2f} seconds")
@@ -474,8 +487,8 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                                 ],
                                 response_format={"type": "json_object"},
                                 temperature=0.1,
-                                max_tokens=1000,
-                                timeout=90  # Longer timeout for retries
+                                max_tokens=1000
+                                # Remove timeout parameter which is causing issues
                             )
                             
                             retry_text = retry_response.choices[0].message.content.strip()

@@ -1,6 +1,7 @@
 bind = "0.0.0.0:5000"
 workers = 2
-timeout = 300  # Increased timeout for longer API requests
+timeout = 600  # Increased timeout to 10 minutes for long OpenAI API requests
+worker_timeout = 600  # Explicit worker timeout setting
 reload = True
 preload_app = False
 accesslog = "-"

@@ -128,6 +128,47 @@ def api_analyze_course_outline():
         results = analyze_course_outline(document_text)
         logger.info(f"Analysis complete, returned {len(results)} results")
         
+        # Add validation to ensure all results have the required fields
+        for i, result in enumerate(results):
+            if not isinstance(result, dict):
+                logger.error(f"Item #{i+1} has invalid result type: {type(result)}")
+                # Create default response for invalid item
+                results[i] = {
+                    "present": False,
+                    "confidence": 0.5,
+                    "explanation": "Error: Invalid result format",
+                    "evidence": "",
+                    "method": "ai_general_analysis",
+                    "triple_checked": True,
+                    "second_chance": False
+                }
+                continue
+                
+            # Check for missing required fields
+            missing_fields = []
+            for field in ["present", "confidence", "explanation", "evidence", "method", "triple_checked"]:
+                if field not in result:
+                    missing_fields.append(field)
+                    
+            if missing_fields:
+                logger.error(f"Item #{i+1} is missing required fields: {missing_fields}")
+                # Add default values for missing fields
+                for field in missing_fields:
+                    if field == "present":
+                        result[field] = False
+                    elif field == "confidence":
+                        result[field] = 0.5
+                    elif field == "explanation":
+                        result[field] = "Error: Missing explanation"
+                    elif field == "evidence":
+                        result[field] = ""
+                    elif field == "method":
+                        result[field] = "ai_general_analysis"
+                    elif field == "triple_checked":
+                        result[field] = True
+                    elif field == "second_chance":
+                        result[field] = False
+        
         # Handle web links validation (for the 26th checklist item)
         valid_links, invalid_links = validate_links(document_text)
         

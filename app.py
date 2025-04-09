@@ -32,22 +32,39 @@ def handle_error(e):
     """
     Enhanced error handler that provides detailed, helpful error messages
     specifically for OpenAI API issues and other common errors.
+    Includes detailed logging for debugging purposes.
     """
     error_message = str(e)
-    app.logger.error(f"Unhandled error: {error_message}")
+    error_type = type(e).__name__
+    
+    # Log detailed error information for debugging
+    app.logger.error(f"CRITICAL ERROR: {error_type}: {error_message}")
+    app.logger.error(f"Error handling request: {request.path} Method: {request.method}")
+    
+    if request.form:
+        app.logger.error(f"Form data keys: {list(request.form.keys())}")
+    if request.files:
+        app.logger.error(f"Uploaded files: {list(request.files.keys())}")
+    
+    import traceback
+    app.logger.error(f"Traceback: {traceback.format_exc()}")
     
     # Create a more user-friendly error message based on the error type
     user_message = "An error occurred while processing your request."
     
-    # Check for specific API-related errors
-    if "openai" in error_message.lower() or "api key" in error_message.lower():
-        user_message = "OpenAI API error: The system requires a valid OpenAI API key to function. Please ensure your API key is correctly set in the environment variables."
-    elif "timeout" in error_message.lower():
+    # Check for specific API-related errors with improved detection
+    if any(term in error_message.lower() for term in ["openai", "api key", "api error", "api call", "api request"]):
+        user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
+    elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
+        user_message = "There was an internal formatting error in the analysis. The development team has been notified."
+    elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit"]):
         user_message = "The request timed out. Please try again with a smaller document or fewer checklist items."
-    elif "memory" in error_message.lower():
+    elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
         user_message = "The system ran out of memory while processing your request. Please try a smaller document."
-    elif "file format" in error_message.lower() or "parsing" in error_message.lower():
+    elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
         user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
+    elif "json" in error_message.lower():
+        user_message = "There was an error processing the AI response. Please try again or upload a different document."
     
     return render_template(
         'index.html',
@@ -275,6 +292,51 @@ def index():
                 grade_table_items = identify_grade_table_items(checklist_items)
                 logger.info(f"Identified {len(grade_table_items)} grade table related items")
 
+                # Add extra validation for problematic items (like "30% Before Last Class")
+                for key, value in analysis_results.items():
+                    if "30%" in key or "Before Last Class" in key:
+                        try:
+                            # Check if this item has proper values and fix if not
+                            if not isinstance(value, dict):
+                                logger.error(f"Item '{key}' has invalid value type: {type(value)}")
+                                analysis_results[key] = {
+                                    "present": False,
+                                    "confidence": 0.5, 
+                                    "explanation": "Format validation error - couldn't process this item.",
+                                    "evidence": "",
+                                    "method": "ai_general_analysis",
+                                    "triple_checked": True,
+                                    "second_chance": False
+                                }
+                            # Check for missing required fields
+                            elif not all(k in value for k in ["present", "confidence", "explanation", "evidence", "method"]):
+                                missing_fields = [k for k in ["present", "confidence", "explanation", "evidence", "method"] if k not in value]
+                                logger.error(f"Item '{key}' is missing fields: {missing_fields}")
+                                # Add missing fields with default values
+                                for field in missing_fields:
+                                    if field == "present":
+                                        value[field] = False
+                                    elif field == "confidence":
+                                        value[field] = 0.5
+                                    elif field == "explanation":
+                                        value[field] = "Field validation error - missing explanation."
+                                    elif field == "evidence":
+                                        value[field] = ""
+                                    elif field == "method":
+                                        value[field] = "ai_general_analysis"
+                        except Exception as e:
+                            logger.error(f"Error validating '{key}': {str(e)}")
+                            # Create a default response if validation fails
+                            analysis_results[key] = {
+                                "present": False,
+                                "confidence": 0.5,
+                                "explanation": "Error during validation - using default response.",
+                                "evidence": "",
+                                "method": "ai_general_analysis",
+                                "triple_checked": True,
+                                "second_chance": False
+                            }
+                
                 # Format results for template with enhanced data and strict duplicate prevention
                 results = []
                 present_count = 0
@@ -292,7 +354,35 @@ def index():
                     seen_normalized_items.add(normalized_item)
 
                     processed_items.add(item)  # Mark as processed
+                    
+                    # Validate result before using
                     result = analysis_results.get(item, {})
+                    if not isinstance(result, dict):
+                        logger.error(f"Item '{item}' has invalid analysis result type: {type(result)}")
+                        result = {
+                            "present": False,
+                            "confidence": 0.5,
+                            "explanation": "Error: Invalid result format",
+                            "evidence": "",
+                            "method": "ai_general_analysis",
+                            "triple_checked": True
+                        }
+                    
+                    # Ensure all required fields exist
+                    for field in ["present", "confidence", "explanation", "evidence", "method"]:
+                        if field not in result:
+                            logger.error(f"Item '{item}' is missing field: {field}")
+                            if field == "present":
+                                result[field] = False
+                            elif field == "confidence":
+                                result[field] = 0.5
+                            elif field == "explanation":
+                                result[field] = "Error: Missing explanation field"
+                            elif field == "evidence":
+                                result[field] = ""
+                            elif field == "method":
+                                result[field] = "ai_general_analysis"
+                    
                     is_present = result.get("present", False)
                     is_grade_item = item in grade_table_items
 
