@@ -227,16 +227,20 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             try:
                 # Use only the client timeout parameter and avoid socket timeout manipulation
                 # This prevents conflicts between different timeout mechanisms
-                # Create a simpler API call with safer parameters
+                # Create API call with optimized parameters
+                # Print the raw prompt for debugging purposes
+                print(f"Raw prompt: {json_prompt[:200]}...")
+                
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant that responds in JSON format."},
+                        {"role": "system", "content": "You are a helpful assistant that responds in valid JSON format only, without markdown formatting."},
                         {"role": "user", "content": json_prompt}
                     ],
-                    temperature=temperature,  # Use the provided temperature parameter
-                    max_tokens=150,   # Further reduced token output to speed up response
-                    timeout=20  # Even shorter timeout to prevent worker termination
+                    response_format={"type": "json_object"},  # Force JSON format
+                    temperature=temperature,
+                    max_tokens=150,   # Keep responses short
+                    timeout=30  # Increased timeout to allow for completion
                 )
             except Exception as api_error:
                 # Log the error more clearly
@@ -608,12 +612,18 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_policy_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only. 
+            Do not include any markdown formatting, backticks, code blocks, or explanations outside the JSON.
+            Keep explanations short, concise, and clear.
+            
+            The JSON must include these fields exactly:
+            {
+              "present": boolean (true/false, must be lowercase),
+              "confidence": number (between 0.0 and 1.0),
+              "explanation": string (keep brief, under 150 characters),
+              "evidence": string (exact quote from document if present, empty string if not present),
+              "method": "ai_policy_analysis"
+            }
             """
         elif is_instructor_item:
             prompt = f"""
@@ -652,12 +662,18 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_instructor_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only. 
+            Do not include any markdown formatting, backticks, code blocks, or explanations outside the JSON.
+            Keep explanations short, concise, and clear.
+            
+            The JSON must include these fields exactly:
+            {
+              "present": boolean (true/false, must be lowercase),
+              "confidence": number (between 0.0 and 1.0),
+              "explanation": string (keep brief, under 150 characters),
+              "evidence": string (exact quote from document if present, empty string if not present),
+              "method": "ai_instructor_analysis"
+            }
             """
         else:
             # Standard prompt for general items
@@ -680,12 +696,18 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_general_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only. 
+            Do not include any markdown formatting, backticks, code blocks, or explanations outside the JSON.
+            Keep explanations short, concise, and clear.
+            
+            The JSON must include these fields exactly:
+            {
+              "present": boolean (true/false, must be lowercase),
+              "confidence": number (between 0.0 and 1.0),
+              "explanation": string (keep brief, under 150 characters),
+              "evidence": string (exact quote from document if present, empty string if not present),
+              "method": "ai_general_analysis"
+            }
             """
 
         # Use more tokens for complex items
