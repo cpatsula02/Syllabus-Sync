@@ -1090,6 +1090,15 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     # Ensure we have the OS module imported
     import os
     
+    # Initialize empty variables that will be filled later
+    # This ensures these variables always exist even if an exception occurs
+    checklist_items = []
+    checklist_text = ""
+    outline_text = ""
+    
+    # Add debugging log
+    logging.error(f"DEBUG: Starting process_documents with api_attempts={api_attempts}")
+    
     try:
         # Validate file paths
         if not os.path.exists(checklist_path):
@@ -1270,9 +1279,21 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     )
                     # Check if we received a proper dictionary result
                     if isinstance(ai_results, dict):
-                        results = ai_results
+                        logging.info(f"Successfully received AI results with {len(ai_results)} items")
+                        # Extra validation to make sure all results are proper dictionaries
+                        valid_results = True
+                        for key, value in ai_results.items():
+                            if not isinstance(value, dict):
+                                logging.error(f"AI results contain invalid value type: {type(value)} for key {key}")
+                                valid_results = False
+                                break
+                        
+                        if valid_results:
+                            results = ai_results
+                        else:
+                            logging.error("Invalid results structure detected, falling back to pattern matching")
                     else:
-                        logging.warning("OpenAI analysis returned invalid results, falling back to traditional pattern matching")
+                        logging.warning(f"OpenAI analysis returned invalid results type: {type(ai_results)}, falling back to traditional pattern matching")
                 except Exception as e:
                     logging.exception(f"Error in OpenAI processing: {str(e)}")
                     logging.info("OpenAI API integration is disabled to prevent server timeouts")
@@ -1436,14 +1457,35 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
     except Exception as e:
         logging.exception(f"Error processing documents: {str(e)}")
-        # Create a properly structured empty results dictionary that will work with .get() calls
+        
+        # Create a properly structured empty results dictionary
         empty_results = {}
-        for item in checklist_items if 'checklist_items' in locals() else []:
-            empty_results[item] = {
-                'present': False,
-                'confidence': 0,
-                'explanation': f"Error during processing: {str(e)}",
-                'evidence': "",
-                'method': 'error_fallback'
-            }
-        return [], empty_results
+        
+        # Make sure checklist_items is a valid list
+        if not checklist_items or not isinstance(checklist_items, list):
+            # Create a default single-item list if we don't have valid checklist items
+            logging.error("DEBUG: No valid checklist items found during error handling")
+            default_items = ["Error processing checklist"]
+            
+            # Create a default result
+            for item in default_items:
+                empty_results[item] = {
+                    'present': False,
+                    'confidence': 0,
+                    'explanation': f"Error during processing: {str(e)}",
+                    'evidence': "",
+                    'method': 'error_fallback'
+                }
+            return default_items, empty_results
+        else:
+            # If we do have valid items, create results for each
+            logging.error(f"DEBUG: Creating error fallback for {len(checklist_items)} items")
+            for item in checklist_items:
+                empty_results[item] = {
+                    'present': False,
+                    'confidence': 0,
+                    'explanation': f"Error during processing: {str(e)}",
+                    'evidence': "",
+                    'method': 'error_fallback'
+                }
+            return checklist_items, empty_results

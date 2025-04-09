@@ -1031,4 +1031,34 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
     logger.info(f"Total items analyzed: {len(results)}/{len(items)}")
     
-    return results
+    # Final validation: make sure all keys are strings and all values are dictionaries
+    # This prevents any possibility of returning something that will cause "'str' object has no attribute 'get'"
+    validated_results = {}
+    
+    for key, value in results.items():
+        if not isinstance(key, str):
+            # Convert non-string keys to strings
+            logger.warning(f"Converting non-string key {type(key)} to string")
+            str_key = str(key)
+        else:
+            str_key = key
+            
+        if not isinstance(value, dict):
+            # If value is not a dict, create a proper dict
+            logger.warning(f"Converting non-dict value of type {type(value)} to dict")
+            validated_results[str_key] = {
+                'present': False,
+                'confidence': 0,
+                'explanation': f"Error: expected dictionary but got {type(value).__name__}",
+                'evidence': str(value)[:100] if value else "",
+                'method': 'error_recovery'
+            }
+        else:
+            # Value is already a dict
+            validated_results[str_key] = value
+    
+    # Log any corrections made
+    if len(validated_results) != len(results):
+        logger.warning(f"Results validation corrected {len(results) - len(validated_results)} items")
+    
+    return validated_results

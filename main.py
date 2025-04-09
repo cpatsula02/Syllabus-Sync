@@ -199,17 +199,27 @@ def index():
                 present_items = total_items - len(missing_items)
                 missing_count = len(missing_items)
                 
+                # DEBUGGING: Print the type of results
+                logger.error(f"DEBUG INFO: Type of results is: {type(results)}")
+                if not isinstance(results, dict):
+                    logger.error(f"ERROR: results is not a dict! Value: {str(results)[:100]}")
+                else:
+                    logger.error(f"DEBUG INFO: results dict contains {len(results)} items")
+                    
                 # Calculate API usage statistics - with defensive error handling
                 api_calls = 0
                 api_used = False
                 
                 if isinstance(results, dict):
                     # Check all results and ensure we only access dictionary values
-                    for result in results.values():
+                    for key, result in results.items():
+                        logger.error(f"DEBUG: Processing key {key}, value type: {type(result)}")
                         if isinstance(result, dict):
                             api_calls += result.get('verification_attempts', 0)
                             if result.get('verification_attempts', 0) > 0:
                                 api_used = True
+                        else:
+                            logger.error(f"ERROR: Value for key '{key}' is not a dict! Value: {str(result)[:50]}")
                 
                 # Build verification strategy message - always emphasize AI verification
                 verification_strategy = (
