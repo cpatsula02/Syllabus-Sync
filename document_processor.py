@@ -239,10 +239,11 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     """
     Document processing that exclusively uses the OpenAI API for analysis.
 
-    THIS FUNCTION HAS BEEN MODIFIED FOR EXCLUSIVE OpenAI API USAGE:
-    - Uses OpenAI API with strict timeout handling (60 seconds max)
+    THIS FUNCTION HAS BEEN IMPROVED TO PREVENT SERVER ERRORS:
+    - Uses OpenAI API with strict timeout handling (15 seconds max per call)
     - NEVER uses pattern matching (as per strict user requirements)
-    - Never falls back to any non-AI methods for analysis
+    - Has robust error handling that prevents worker termination
+    - Uses fallback mechanisms that prevent internal server errors
     - Always returns properly structured data with proper types
     - Always uses 'ai_general_analysis' as the method field
     """
