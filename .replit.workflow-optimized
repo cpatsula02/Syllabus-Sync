@@ -1,0 +1,5 @@
+run = [
+  "bash", 
+  "-c", 
+  "gunicorn --worker-class=gthread --timeout=300 --workers=1 --threads=4 --bind=0.0.0.0:5000 main:app"
+]

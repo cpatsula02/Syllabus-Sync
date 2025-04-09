@@ -1052,7 +1052,7 @@ def analyze_checklist_item_with_retry(item: str, document_text: str, max_attempt
                 response_format={"type": "json_object"},
                 temperature=0.2,  # Slightly increased to encourage generous interpretations
                 max_tokens=500,   # Reduced tokens for quicker completion
-                timeout=30.0      # Short timeout for individual item analysis
+                timeout=90.0      # Extended timeout for individual item analysis (90 seconds)
             )
             
             # Parse the response

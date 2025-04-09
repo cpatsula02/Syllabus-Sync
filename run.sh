@@ -1,5 +1,6 @@
 #!/bin/bash
 
-# Run Gunicorn with our optimized configuration
+# Ensure we're using the threaded worker and proper timeouts
 echo "Starting application with optimized Gunicorn configuration..."
-exec gunicorn -c gunicorn_config.py main:app
+echo "Using worker_class=gthread and timeout=300 seconds..."
+exec gunicorn --worker-class=gthread --timeout=300 --workers=1 --threads=4 --bind=0.0.0.0:5000 main:app

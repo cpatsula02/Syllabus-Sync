@@ -256,7 +256,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     - Always uses 'ai_general_analysis' as the method field
     """
     # Maximum API timeout in seconds to ensure we don't hang indefinitely
-    MAX_API_TIMEOUT = 90  # Increased to 90 seconds to allow sufficient time for GPT-3.5-turbo-16k analysis 
+    MAX_API_TIMEOUT = 300  # Increased to 300 seconds (5 minutes) to prevent timeout errors
     # This longer timeout accommodates more in-depth analysis while preventing worker termination
     # Ensure we have the OS module imported
     import os
@@ -437,7 +437,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 # Set a timeout for OpenAI requests (longer timeout as requested by user)
                 logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
                 signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (90 seconds)
+                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (300 seconds)
                 
                 try:
                     # Try the OpenAI API with timeout protection
