@@ -1,5 +1,4 @@
 import os
-import os
 import re
 import logging
 import pdfplumber
@@ -210,10 +209,10 @@ def extract_checklist_items(text: str) -> List[str]:
 def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
     """
     Enhanced pattern matching with more flexible detection and semantic understanding.
-    
+
     Check if item requirements are met anywhere in the document, regardless of section.
     Uses improved semantic understanding to identify related content in any context.
-    
+
     This enhanced function uses multiple detection strategies:
     1. Multi-pass scanning for semantic equivalence (3-5 verification checks)
     2. Header recognition for section-based requirements
@@ -221,7 +220,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
     4. Pattern validation for critical elements with lower confidence threshold
     5. Multiple detection passes with varying sensitivity levels
     6. Deep analysis of embedded or indirect language
-    
+
     Implements a more comprehensive matching algorithm to dramatically reduce 
     false negatives while maintaining reasonable accuracy.
     """
@@ -242,7 +241,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
     except Exception as e:
         # Any other error, log and continue with standard approach
         logging.warning(f"Error using enhanced pattern matching: {str(e)}")
-    
+
     document_lower = document_text.lower()
     item_lower = item.lower()
 
@@ -289,7 +288,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         'phone', 'telephone', 'office', 'location', 'availability', 'reach', 'communicate',
         'communication', 'information', 'name', 'staff', 'department', 'faculty'
     ])
-    
+
     # ADDED: Special check for instructor email
     if is_instructor_item and "email" in item_lower:
         # Look for ucalgary.ca emails with more flexible domain matching
@@ -326,10 +325,10 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         for pattern in policy_patterns:
             if re.search(pattern, document_lower):
                 return True
-    
+
     # ---- NEW PASS: CHECKLIST ITEM-SPECIFIC PATTERNS ----
     # Additional special-case handling for common checklist items
-    
+
     # Check for class schedule patterns
     if "class schedule" in item_lower or "topic" in item_lower:
         schedule_patterns = [
@@ -342,7 +341,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         for pattern in schedule_patterns:
             if re.search(pattern, document_text):
                 return True
-    
+
     # Check for grade distribution table
     if "grade distribution" in item_lower or "table" in item_lower:
         table_patterns = [
@@ -353,7 +352,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
         for pattern in table_patterns:
             if re.search(pattern, document_text):
                 return True
-    
+
     # Check for permission/prohibition patterns
     if "prohibited" in item_lower or "allowed" in item_lower:
         permission_patterns = [
@@ -364,7 +363,7 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
             r'(?i)(unauthorized|unapproved|restricted)\s+(resources|materials|tools)'
         ]
         for pattern in permission_patterns:
-            if re.search(pattern, document_text):
+            if re.search(pattern, document_lower):
                 return True
 
     # ---- FIFTH PASS: CONTEXTUAL PATTERN MATCHING ----
@@ -399,7 +398,7 @@ def extract_document_sections(document_text):
     """
     # Initialize with a comprehensive dictionary of sections
     sections = {}
-    
+
     # Look for potential section headers with improved pattern recognition
     section_patterns = [
         r'([A-Z][A-Z\s]{3,}[A-Z])[\s\n:]+',  # ALL CAPS HEADERS
@@ -455,7 +454,7 @@ def extract_document_sections(document_text):
         # Add the last section
         if current_content:
             sections[current_section] = '\n'.join(current_content)
-    
+
     # Extract topics for common required sections with targeted extraction
     common_sections = {
         "instructor": ["email", "contact", "office hours", "phone"],
@@ -463,7 +462,7 @@ def extract_document_sections(document_text):
         "textbook": ["reading", "material", "required text", "book"],
         "assessment": ["grade", "evaluation", "weighting", "distribution"]
     }
-    
+
     # For each important topic, try to find relevant content
     for topic, keywords in common_sections.items():
         if not any(topic in section_key for section_key in sections.keys()):
@@ -473,7 +472,7 @@ def extract_document_sections(document_text):
                     fr'(?i)(?:[^\n]*{keyword}[^\n]*\n){{1,15}}',  # 1-15 lines containing keyword
                     fr'(?i){keyword}[^.]*\.'  # Single sentence containing keyword
                 ]
-                
+
                 for pattern in patterns:
                     matches = re.finditer(pattern, document_text)
                     for match in matches:
@@ -483,10 +482,10 @@ def extract_document_sections(document_text):
                         if not any(start < hp[1] and end > hp[0] for hp in header_positions):
                             section_name = f"{topic.title()} ({keyword})"
                             sections[section_name] = match.group(0)
-    
+
     # Add a full document section for catch-all searching
     sections["Full Document"] = document_text
-    
+
     return sections
 
 def sections_are_related(section_title, item_concepts):
@@ -630,33 +629,33 @@ def validate_links(document_text):
     url_patterns = [
         # Standard URLs (http/https)
         r'https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)',
-        
+
         # URLs in HTML href tags
         r'href=[\'"]([^\'"]+)[\'"]',
-        
+
         # URLs in markdown format [text](url)
         r'\[(?:[^\]]*)\]\(([^)]+)\)',
-        
+
         # Plain www URLs that might not have http/https
         r'www\.[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)'
     ]
-    
+
     all_urls = []
     # Find all URLs using the patterns
     for pattern in url_patterns:
         matches = re.findall(pattern, document_text)
         all_urls.extend(matches)
-    
+
     # Clean and deduplicate URLs
     unique_urls = set()
     for url in all_urls:
         # Clean up URL (remove trailing punctuation, quotes, etc.)
         url = url.strip('.,)\'"\r\n\t ')
-        
+
         # If URL is from markdown or HTML, it might have additional attributes - clean those up
         if ' ' in url:
             url = url.split(' ')[0]  # Take only the URL part before any space
-            
+
         # Handle URLs without scheme
         parsed = urlparse(url)
         if not parsed.scheme and not url.startswith('www.'):
@@ -666,11 +665,11 @@ def validate_links(document_text):
             url = 'https://' + url
         elif not parsed.scheme and url.startswith('www.'):
             url = 'https://' + url
-            
+
         # Add cleaned URL if it's not empty and seems valid
         if url and len(url) > 7:  # Minimum valid URL length (https://a.b)
             unique_urls.add(url)
-    
+
     valid_links = []
     invalid_links = []
 
@@ -694,14 +693,14 @@ def validate_links(document_text):
                         continue
                 except:
                     pass  # If GET also fails, mark as invalid
-            
+
             # If we got here, the link is invalid
             invalid_links.append(url)
-            
+
         except Exception as e:
             # Any exception means the link is invalid
             invalid_links.append(url)
-    
+
     return valid_links, invalid_links
 
 def check_special_entity_patterns(item, document, additional_context=""):
@@ -1006,7 +1005,7 @@ def extract_checklist_items_strict(text: str) -> List[str]:
     """
     items = []
     lines = text.split('\n')
-    
+
     # Mode detection - check if list appears to use bullets, numbers, or plain text
     has_numbered_items = False
     has_bulleted_items = False
@@ -1015,7 +1014,7 @@ def extract_checklist_items_strict(text: str) -> List[str]:
         line = line.strip()
         if not line:
             continue
-        
+
         if re.match(r'^\d+[\.\)]\s+\w+', line):
             has_numbered_items = True
         elif re.match(r'^[a-zA-Z][\.\)]\s+\w+', line):
@@ -1056,7 +1055,7 @@ def load_enhanced_checklist() -> Dict[str, str]:
     """
     Load the detailed checklist that contains specific requirements for each item.
     This ensures pattern matching follows the exact requirements provided in the checklist.
-    
+
     Returns:
         Dictionary mapping checklist item numbers to their detailed descriptions
     """
@@ -1067,10 +1066,10 @@ def load_enhanced_checklist() -> Dict[str, str]:
             # Extract numbered items with their descriptions
             pattern = r'(\d+)\.\s+(.*?)(?=\n\n\d+\.|\Z)'
             matches = re.findall(pattern, content, re.DOTALL)
-            
+
             for num, description in matches:
                 enhanced_checklist[int(num)] = description.strip()
-                
+
         logging.info(f"Enhanced checklist loaded with {len(enhanced_checklist)} detailed items")
         return enhanced_checklist
     except Exception as e:
@@ -1133,7 +1132,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
             if policies and enhanced_context:
                 enhanced_context += f"\n\nNote: The document appears to contain policies for: {', '.join(policies)}."
-        
+
         # Parse the additional context to identify "not applicable" items with enhanced detection
         not_applicable_items = {}
         if additional_context:
@@ -1145,7 +1144,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 "exempt from", "waived", "excluded", "not relevant", "not part of",
                 "ignored", "skipped", "omitted"
             ]
-            
+
             # Define specific item keywords that might be mentioned in additional context
             item_specific_keywords = {
                 "final exam": ["final", "exam", "examination", "culminating assessment"],
@@ -1161,13 +1160,13 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 "link": ["link", "url", "website", "web"],
                 "grade distribution": ["grade distribution", "grade table", "assessment weight"]
             }
-            
+
             context_lower = additional_context.lower()
-            
+
             # First pass: Check each checklist item against the additional context
             for item in checklist_items:
                 item_lower = item.lower()
-                
+
                 # Check if the item is explicitly mentioned as not applicable
                 for phrase in na_phrases:
                     # Look for patterns like "no final exam" or "final exam: not applicable"
@@ -1176,7 +1175,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                            for keyword in item_lower.split() if len(keyword) > 3):
                         not_applicable_items[item] = True
                         break
-                
+
                 # If not already marked as N/A, check for specific item patterns
                 if item not in not_applicable_items:
                     # Check each category of item
@@ -1187,18 +1186,18 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                                 for keyword in keywords:
                                     pattern1 = f"{phrase}.*{keyword}"
                                     pattern2 = f"{keyword}.*{phrase}"
-                                    
+
                                     if (re.search(pattern1, context_lower) or re.search(pattern2, context_lower)):
                                         not_applicable_items[item] = True
                                         break
-                
+
             # Second pass: Additional special cases based on context phrasing
             for item in checklist_items:
                 if item in not_applicable_items:
                     continue  # Already marked as N/A
-                    
+
                 item_lower = item.lower()
-                
+
                 # Special case 1: Final Exam-related items
                 if any(term in item_lower for term in ["final exam", "final", "exam weight"]):
                     if any(phrase in context_lower for phrase in [
@@ -1208,7 +1207,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         "course does not have final", "not having a final"
                     ]):
                         not_applicable_items[item] = True
-                
+
                 # Special case 2: Group Work-related items
                 if any(term in item_lower for term in ["group", "team", "collaborative"]):
                     if any(phrase in context_lower for phrase in [
@@ -1218,7 +1217,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         "course has no group", "course doesn't have group"
                     ]):
                         not_applicable_items[item] = True
-                
+
                 # Special case 3: Participation-related items
                 if "participation" in item_lower:
                     if any(phrase in context_lower for phrase in [
@@ -1226,7 +1225,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         "participation is not", "participation isn't", "no participation component"
                     ]):
                         not_applicable_items[item] = True
-                        
+
                 # Special case 4: Textbook-related items
                 if any(term in item_lower for term in ["textbook", "course material", "reading"]):
                     if any(phrase in context_lower for phrase in [
@@ -1239,14 +1238,24 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         try:
             # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
-            
+
             # Use OpenAI if available
             import os
             OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
             ENABLE_OPENAI = bool(OPENAI_API_KEY)
-            
+
             results = {}
-            
+
+            # Initialize results dictionary with proper structure
+            for item in checklist_items:
+                results[item] = {
+                    'present': False,
+                    'confidence': 0,
+                    'explanation': '',
+                    'evidence': '',
+                    'method': 'initialization'
+                }
+
             if ENABLE_OPENAI:
                 logging.info("Using OpenAI for analysis with fallback")
                 results = analyze_checklist_items_batch(
@@ -1270,12 +1279,12 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             'status': 'na'  # Special status for not applicable items
                         }
                         continue
-                        
+
                     # ENHANCED: Multi-stage detection with detailed checklist reference
                     # First, load the detailed checklist to use exact requirements
                     detailed_checklist = load_enhanced_checklist()
                     item_lower = item.lower()
-                    
+
                     # Determine which detailed checklist item to reference
                     detailed_requirement = ""
                     for item_num, description in detailed_checklist.items():
@@ -1288,20 +1297,20 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                                                           for key in ["email", "late policy", "missed", "grade distribution"]):
                                 detailed_requirement = description
                                 break
-                    
+
                     # Log what detailed requirement we're using
                     if detailed_requirement:
                         print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
-                    
+
                     # Basic preliminary check
                     is_present = check_item_in_document(item, outline_text, enhanced_context)
                     evidence = ""
-                    
+
                     # First pass: Find matching excerpt for evidence gathering
                     found, excerpt = find_matching_excerpt(item, outline_text)
                     if found and excerpt:
                         evidence = excerpt
-                    
+
                     # Define crucial items that need special validation based on detailed requirements
                     crucial_items = {
                         "instructor email": ["instructor", "email", "ucalgary.ca"],
@@ -1309,34 +1318,34 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         "missed assessment": ["missed", "absence", "unable", "policy"],
                         "textbook": ["textbook", "reading", "material", "required"]
                     }
-                    
+
                     # For crucial items, do a thorough multi-pass validation against detailed requirements
                     is_crucial = False
                     for crucial_type, keywords in crucial_items.items():
                         if any(keyword in item_lower for keyword in keywords):
                             is_crucial = True
-                            
+
                             # Get the enhanced check from our improved module, passing in the detailed requirement if available
                             from improved_pattern_matching import enhanced_check_item_in_document
                             reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
                                 item, outline_text, detailed_requirement
                             )
-                            
+
                             # For crucial items, always trust the enhanced detection with detailed requirements
                             if is_present != reliable_present and confidence >= 0.75:
                                 print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
                                 is_present = reliable_present
-                                
+
                             # Always use the detailed evidence for crucial items
                             if reliable_evidence:
                                 evidence = reliable_evidence
-                    
+
                     # Set explanation based on final detection result
                     explanation = "The item was found in the document." if is_present else "The item was not found in the document."
-                    
+
                     # Use higher confidence for crucial items that got special verification
                     confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
-                    
+
                     results[item] = {
                         'present': is_present,
                         'confidence': confidence,
@@ -1347,13 +1356,13 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         except Exception as e:
             # Fallback completely to basic pattern matching if any errors
             logging.exception(f"Error with OpenAI processing, using basic fallback: {str(e)}")
-            
+
             results = {}
             for item in checklist_items:
                 is_present = check_item_in_document(item, outline_text, enhanced_context)
                 item_lower = item.lower()
                 evidence = ""
-                
+
                 # Even in fallback mode, apply special handling for crucial items
                 crucial_items = {
                     "instructor email": ["instructor", "email", "contact"],
@@ -1361,7 +1370,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     "missed assessment": ["missed", "absence", "unable"],
                     "textbook": ["textbook", "reading", "material"]
                 }
-                
+
                 # For crucial items, use the most reliable detection method
                 is_crucial = False
                 for crucial_type, keywords in crucial_items.items():
@@ -1371,7 +1380,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             # Try the enhanced detection
                             from improved_pattern_matching import enhanced_check_item_in_document
                             reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(item, outline_text)
-                            
+
                             # Only override if we have high confidence
                             if confidence >= 0.75:
                                 print(f"Fallback crucial item '{item[:30]}...' using enhanced detection: {is_present} -> {reliable_present}")
@@ -1380,12 +1389,12 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         except Exception as ed:
                             # If enhanced detection fails, continue with basic result
                             print(f"Enhanced detection failed for crucial item: {str(ed)}")
-                
+
                 explanation = "The item was found in the document." if is_present else "The item was not found in the document."
-                
+
                 results[item] = {
                     'present': is_present,
-                    'confidence': 0.8 if is_crucial and is_present else (0.7 if is_present else 0.3),
+                    'confidence': 0.8 ifis_crucial and is_present else (0.7 if is_present else 0.3),
                     'explanation': explanation,
                     'evidence': evidence,
                     'method': 'enhanced_fallback_detection' if is_crucial else 'basic_pattern_matching'
