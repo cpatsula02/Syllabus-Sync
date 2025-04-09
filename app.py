@@ -35,6 +35,7 @@ def handle_error(e):
     specifically for OpenAI API issues and other common errors.
     Includes detailed logging for debugging purposes.
     CRITICAL: Updated with improved handling that prevents internal server errors
+    and gracefully handles API connection failures
     """
     error_message = str(e)
     error_type = type(e).__name__

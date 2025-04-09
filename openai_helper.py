@@ -65,8 +65,30 @@ if openai_available:
                 # Force update the environment variable to ensure it's available
                 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
                 
-                # Reduce the timeout value for initialization only (5 seconds is often too tight)
-                client = OpenAI(api_key=OPENAI_API_KEY, timeout=60.0)
+                # More detailed logging for connection diagnostics
+                logging.info(f"Initializing OpenAI client with timeout=60.0 seconds")
+                
+                try:
+                    # First try with socket module timeout as backup layer
+                    socket.setdefaulttimeout(60.0)  # Set socket timeout as a safety measure
+                    
+                    # Reduce the timeout value for initialization to improve user experience
+                    client = OpenAI(api_key=OPENAI_API_KEY, timeout=60.0)
+                    logging.info("OpenAI client initialized successfully")
+                except Exception as client_init_error:
+                    # Log the specific initialization error
+                    logging.error(f"Failed to initialize OpenAI client: {str(client_init_error)}")
+                    
+                    # Critical error but try once more with more conservative settings
+                    logging.warning("Trying alternate initialization with lower timeout")
+                    try:
+                        # Try with a more conservative timeout that might help in some network conditions
+                        client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
+                        logging.info("OpenAI client initialized with fallback settings")
+                    except Exception as retry_error:
+                        # This is a true critical error now
+                        logging.critical(f"All OpenAI client initialization attempts failed: {str(retry_error)}")
+                        raise
                 
                 # Make a tiny API call to validate the key works
                 logging.info("Validating OpenAI API key with a simple model call...")

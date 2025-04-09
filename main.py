@@ -1196,4 +1196,24 @@ def api_analyze_course_outline():
 
 
 if __name__ == '__main__':
+    # Configure standard logging
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.info("Starting application with enhanced error handling")
+    
+    # Check if OpenAI API key exists and log its status (without exposing it)
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    if OPENAI_API_KEY:
+        logger.info(f"OPENAI_API_KEY found in environment, starts with: {OPENAI_API_KEY[:5]}...")
+        
+        # Validate basic key format
+        if OPENAI_API_KEY.startswith(('sk-', 'test-')):
+            logger.info("OpenAI API key validated with correct format")
+        else:
+            logger.warning("OpenAI API key does not start with 'sk-' or 'test-'")
+    else:
+        logger.critical("OPENAI_API_KEY not found in environment!")
+        
+    # Start the Flask application with Socket.IO
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
