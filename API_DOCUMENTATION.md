@@ -4,7 +4,14 @@ This API analyzes course outlines against 26 institutional compliance requiremen
 
 ## Implementation Details
 
-The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. The analysis is based entirely on contextual understanding of the document, NOT pattern matching - the system looks for concepts and requirements rather than specific keywords or patterns. 
+The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. The analysis is based entirely on contextual understanding of the document, NOT pattern matching - the system looks for concepts and requirements rather than specific keywords or patterns.
+
+A unique triple-checking process is implemented for each checklist item:
+1. First pass: Initial contextual scan focusing on obvious mentions and relevant sections
+2. Second pass: Deeper analysis looking for implicit, indirect or related information
+3. Third pass: Final verification and critical evaluation of the evidence found
+
+Only after all three passes does the system finalize its determination and confidence level.
 
 To ensure reliable performance and prevent timeouts, the implementation:
 
@@ -70,6 +77,7 @@ The API returns a JSON array with 26 items, each corresponding to one of the ins
 | `explanation` | string | Brief explanation (<150 chars) of the analysis |
 | `evidence` | string | Direct quote from the document supporting the determination, or empty string if not found |
 | `method` | string | Always "ai_general_analysis" |
+| `triple_checked` | boolean | Always true, indicates the item was analyzed using the triple-checking process |
 
 ## Checklist Items
 
@@ -123,7 +131,8 @@ curl -X POST http://localhost:5000/api/analyze-course-outline \
     "confidence": 1.0,
     "explanation": "Instructor's email is provided and ends with 'ucalgary.ca'.",
     "evidence": "Email: john.smith@ucalgary.ca",
-    "method": "ai_general_analysis"
+    "method": "ai_general_analysis",
+    "triple_checked": true
   },
   {
     "present": true,

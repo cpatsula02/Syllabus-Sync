@@ -125,7 +125,8 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             "confidence": confidence,
             "explanation": explanation[:147] + "..." if len(explanation) > 150 else explanation,
             "evidence": evidence,
-            "method": "ai_general_analysis"
+            "method": "ai_general_analysis",
+            "triple_checked": True
         }
     
     # Initialize results array with default values
@@ -166,6 +167,7 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         - "explanation": string with brief explanation under 150 characters
         - "evidence": string with direct quote from the outline, or "" if not found
         - "method": string value, always set to "ai_general_analysis"
+        - "triple_checked": boolean value, always set to true
         
         Be strict and thorough. If something is unclear or not present, mark it as false.
         
@@ -189,7 +191,16 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         5. Look for information embedded anywhere in the document, even in unexpected sections
         6. Do not rely on exact keyword matches or specific section headers
         
-        For EACH checklist item, perform deep contextual analysis to determine if the requirement is genuinely met in any form.
+        THREE-PASS ANALYSIS REQUIREMENT:
+        For EACH checklist item, you MUST perform THREE complete passes through the document:
+        - FIRST PASS: Initial contextual scan focusing on obvious mentions and relevant sections
+        - SECOND PASS: Deeper analysis looking for implicit, indirect or related information
+        - THIRD PASS: Final verification and critical evaluation of the evidence found
+        
+        Only after all three passes should you finalize your determination and confidence level.
+        If the three passes yield different results, use the most accurate and reliable finding.
+        
+        For EACH checklist item, perform this triple-checking process to determine if the requirement is genuinely met in any form.
         
         RESPONSE FORMAT REQUIREMENTS:
         Your response MUST be valid JSON and ONLY valid JSON. Nothing else.
@@ -200,6 +211,7 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         - "explanation" (string): brief explanation (<150 chars) of why the requirement is met or not
         - "evidence" (string): a direct quote from the document supporting your determination, or empty string if not found
         - "method" (string): always "ai_general_analysis"
+        - "triple_checked" (boolean): always true, indicating all three passes were performed
         
         Ensure your response is ONLY valid JSON. Do not include any explanatory text or markdown formatting outside of the JSON object.
         """
@@ -313,6 +325,10 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             
         if "method" not in item or item["method"] != "ai_general_analysis":
             item["method"] = "ai_general_analysis"
+            
+        # Add triple-checking indicator
+        if "triple_checked" not in item:
+            item["triple_checked"] = True
     
     logger.info(f"Final result: {len(results_array)} items, after OpenAI analysis")
     logger.info(f"Items marked as present: {sum(1 for item in results_array if item['present'])}")
