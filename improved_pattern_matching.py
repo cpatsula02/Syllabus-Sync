@@ -568,24 +568,30 @@ def check_special_cases(item: str, document_text: str) -> Tuple[bool, str, float
     # Indicate no special handling - return False instead of None to fix type error
     return False, "", 0.0
 
-def extract_email_addresses(text: str) -> List[str]:
+def extract_ucalgary_emails(text: str) -> List[str]:
     """
-    Extract all email addresses from the given text.
-    Uses a comprehensive regex pattern to detect various email formats.
+    Extract ONLY @ucalgary.ca email addresses from the given text.
+    This function is strict and only returns emails with ucalgary.ca domain.
     
     Args:
         text: The text to search for email addresses
         
     Returns:
-        List of found email addresses
+        List of found ucalgary.ca email addresses
     """
-    # Comprehensive email pattern that catches a wide variety of valid emails
+    # Specific pattern for UCalgary emails - this is a strict requirement
+    # Matches name@ucalgary.ca or name@something.ucalgary.ca
+    ucalgary_email_pattern = r'\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9.-]+\.)?ucalgary\.ca\b'
+    return re.findall(ucalgary_email_pattern, text, re.IGNORECASE)
+
+def extract_all_emails(text: str) -> List[str]:
+    """Extract all emails regardless of domain for detection purposes"""
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
     return re.findall(email_pattern, text)
 
 def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
     """
-    Enhanced instructor email detection with multiple approaches.
+    STRICT instructor email detection that enforces @ucalgary.ca domain.
     
     Args:
         document_text: The document text to search
@@ -593,22 +599,22 @@ def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
     Returns:
         Tuple of (has_email, evidence, confidence)
     """
-    # First approach: Find all emails in the document
-    all_emails = extract_email_addresses(document_text)
+    # FIRST VERIFICATION: Find all ucalgary.ca emails in the document
+    ucalgary_emails = extract_ucalgary_emails(document_text)
     
-    # Look for instructor context near emails
-    if all_emails:
-        for email in all_emails:
+    # If we found ucalgary emails, check if they appear in instructor context
+    if ucalgary_emails:
+        for email in ucalgary_emails:
             # Get context around the email
             email_pos = document_text.find(email)
             if email_pos > -1:
-                context_start = max(0, email_pos - 300)
-                context_end = min(len(document_text), email_pos + 300)
+                context_start = max(0, email_pos - 200)
+                context_end = min(len(document_text), email_pos + 200)
                 context = document_text[context_start:context_end]
                 
                 # Check if this email appears in an instructor context
                 instructor_terms = ['instructor', 'professor', 'faculty', 'lecturer', 
-                                   'teacher', 'coordinator', 'dr.', 'ph.d', 'contact']
+                                   'teacher', 'coordinator', 'dr.', 'contact']
                 
                 if any(term in context.lower() for term in instructor_terms):
                     highlighted_context = context.replace(
@@ -623,13 +629,31 @@ def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
                                 count=1
                             )
                     
-                    # Check if it's a ucalgary.ca email (higher confidence if it is)
-                    confidence = 0.95 if "ucalgary.ca" in email.lower() else 0.85
-                    return True, f"Found instructor email in context: {highlighted_context}", confidence
+                    # Found a valid ucalgary.ca email in instructor context - strong match
+                    return True, f"Found instructor ucalgary.ca email: {highlighted_context}", 0.95
     
-    # Second approach: Look for instructor sections without emails
+    # SECOND VERIFICATION: Check if there are other emails but none from ucalgary.ca
+    all_emails = extract_all_emails(document_text)
+    
+    # Do we have some emails, but none from ucalgary.ca?
+    if all_emails and not ucalgary_emails:
+        # Find an email with context to show as evidence of incorrect email domain
+        for email in all_emails:
+            email_pos = document_text.find(email)
+            if email_pos > -1:
+                context_start = max(0, email_pos - 200)
+                context_end = min(len(document_text), email_pos + 200)
+                context = document_text[context_start:context_end]
+                
+                if any(term in context.lower() for term in ['instructor', 'professor', 'contact']):
+                    highlighted_context = context.replace(
+                        email, f"<span style='background-color: #ffcccc;'>{email}</span>"
+                    )
+                    return False, f"Found instructor email but NOT with ucalgary.ca domain: {highlighted_context}", 0.9
+    
+    # THIRD VERIFICATION: Explicitly look for instructor sections
     instructor_sections = re.findall(
-        r'(?i)(?:instructor|professor|contact|office hours)[^\n]*(?:\n[^\n]*){0,15}', 
+        r'(?i)(?:instructor|professor|contact|office hours)[^\n]*(?:\n[^\n]*){0,10}', 
         document_text
     )
     
@@ -637,28 +661,31 @@ def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
         # Join all instructor-related sections
         combined_sections = '\n'.join(instructor_sections)
         
-        # Check if emails exist in any instructor section
-        section_emails = extract_email_addresses(combined_sections)
+        # Check again for ucalgary.ca emails in these specific sections
+        section_ucalgary_emails = extract_ucalgary_emails(combined_sections)
         
-        if section_emails:
-            # We found emails in instructor sections, but they weren't caught by the first approach
-            # This is a backup verification for complex formatting cases
-            email = section_emails[0]
+        if section_ucalgary_emails:
+            # Found ucalgary.ca email in an instructor section
+            email = section_ucalgary_emails[0]
             highlighted_section = combined_sections.replace(
                 email, f"<span style='background-color: #c2f0c2;'>{email}</span>"
             )
-            confidence = 0.9 if "ucalgary.ca" in email.lower() else 0.8
-            return True, f"Found instructor email in section: {highlighted_section[:300]}...", confidence
+            return True, f"Found valid ucalgary.ca email in instructor section: {highlighted_section[:300]}...", 0.95
         
-        # If we found instructor sections but no emails in them
-        if any(contact in combined_sections.lower() for contact in 
-              ['telephone', 'phone', 'office', 'contact', 'hours', 'appointment']):
-            # There are contact details but no email
-            return False, f"Found instructor contact section but no email: {combined_sections[:300]}...", 0.9
+        # Check if there are other non-ucalgary emails in instructor sections
+        section_emails = extract_all_emails(combined_sections)
+        if section_emails:
+            email = section_emails[0]
+            highlighted_section = combined_sections.replace(
+                email, f"<span style='background-color: #ffcccc;'>{email}</span>"
+            )
+            return False, f"Found email in instructor section but NOT with required ucalgary.ca domain: {highlighted_section[:300]}...", 0.95
+        
+        # If we found instructor sections but no emails at all
+        return False, f"Found instructor section but no ucalgary.ca email: {combined_sections[:300]}...", 0.9
     
-    # If we've checked everything and can't make a definitive determination
-    # We'll report not found with high confidence
-    return False, "No instructor email found after extensive search of contact sections.", 0.85
+    # If we've checked everything thoroughly and found nothing
+    return False, "No instructor ucalgary.ca email found after thorough triple-verification process.", 0.95
 
 def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool, str, float]:
     """
@@ -698,24 +725,127 @@ def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool
             has_email, evidence, confidence = check_instructor_email(document_text)
             return has_email, evidence, confidence
         
-        # Check for late policy
+        # ENHANCED STRICT LATE POLICY DETECTION
         if "late policy" in item_lower:
-            # Look for sections that might contain late policy without using the word "late"
-            policy_sections = re.findall(r'(?i)(polic(?:y|ies)|rule|guideline|submission)[^\n]*\n(?:[^\n]*\n){0,15}', document_text)
-            for section in policy_sections:
-                if any(word in section.lower() for word in [
-                    "deadline", "due date", "submit", "timely", "punctual", 
-                    "penalty", "deduction", "grade reduction"
-                ]):
-                    # Check if there are percentage deductions or time references
-                    if re.search(r'(?i)(\d+%|\d+\s*point)', section) or \
-                       re.search(r'(?i)(day|hour|time|date)', section):
-                        return True, f"Found potential late policy section: {section[:200]}...", 0.75
+            # First pass: Look for explicit "late" mentions in policy context
+            explicit_late_policy = False
+            direct_evidence = ""
             
-            # If we've thoroughly checked and still haven't found anything
-            assignment_sections = re.findall(r'(?i)(assignment|submission|grading)[^\n]*\n(?:[^\n]*\n){0,15}', document_text)
-            if not any('late' in section.lower() for section in assignment_sections):
-                return False, "No late policy found after thorough examination of policy and assignment sections.", 0.8
+            # Look for explicit late policy sections
+            explicit_patterns = [
+                r'(?i)late\s*(?:policy|penalties|submission|work)',
+                r'(?i)policy\s*(?:on|for|regarding)\s*late',
+                r'(?i)penalt(?:y|ies)\s*for\s*late',
+                r'(?i)consequences\s*(?:of|for)\s*late'
+            ]
+            
+            for pattern in explicit_patterns:
+                match = re.search(pattern, document_text)
+                if match:
+                    # Get the surrounding context
+                    context_start = max(0, match.start() - 100)
+                    context_end = min(len(document_text), match.end() + 300)
+                    context = document_text[context_start:context_end]
+                    
+                    # Check if this context also mentions penalties or consequences
+                    penalty_terms = ['penalty', 'deduction', 'reduce', 'mark', 'grade', 'point', 'percent', '%']
+                    if any(term in context.lower() for term in penalty_terms):
+                        # Highlight the match in the context
+                        matched_text = match.group(0)
+                        highlighted_context = context.replace(
+                            matched_text, 
+                            f"<span style='background-color: #c2f0c2;'>{matched_text}</span>"
+                        )
+                        
+                        # Also highlight penalty terms
+                        for term in penalty_terms:
+                            if term in context.lower():
+                                pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
+                                highlighted_context = pattern.sub(
+                                    f"<span style='background-color: #c2f0c2;'>{term}</span>", 
+                                    highlighted_context,
+                                    count=1
+                                )
+                        
+                        explicit_late_policy = True
+                        direct_evidence = highlighted_context
+                        break
+            
+            if explicit_late_policy:
+                return True, f"Found explicit late policy: {direct_evidence}", 0.95
+            
+            # Second pass: Look for late-related concepts in policy sections
+            policy_sections = re.findall(
+                r'(?i)(?:polic(?:y|ies)|rule|guideline|submission|grading)[^\n]*(?:\n[^\n]*){0,15}', 
+                document_text
+            )
+            
+            late_related_terms = [
+                "deadline", "due date", "submit", "timely", "punctual", 
+                "penalty", "deduction", "grade reduction", "late", "tardy",
+                "overdue", "past due", "after deadline", "not on time"
+            ]
+            
+            penalty_indicators = [
+                r'\d+\s*%', r'\d+\s*percent', r'grade\s*reduc', r'mark\s*down',
+                r'point\s*(?:deduction|penalty|loss)', r'zero', r'no credit'
+            ]
+            
+            for section in policy_sections:
+                section_lower = section.lower()
+                # Count how many late-related terms appear
+                term_count = sum(1 for term in late_related_terms if term in section_lower)
+                
+                # Must have at least 2 late-related terms AND a specific penalty mentioned
+                if term_count >= 2 and any(re.search(pattern, section_lower) for pattern in penalty_indicators):
+                    # Highlight the relevant terms
+                    highlighted_section = section
+                    
+                    # Highlight late-related terms
+                    for term in late_related_terms:
+                        if term in section_lower:
+                            pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
+                            highlighted_section = pattern.sub(
+                                f"<span style='background-color: #c2f0c2;'>{term}</span>", 
+                                highlighted_section,
+                                count=1
+                            )
+                    
+                    # Also highlight penalty indicators
+                    for pattern in penalty_indicators:
+                        match = re.search(pattern, section_lower)
+                        if match:
+                            matched_text = match.group(0)
+                            highlighted_section = highlighted_section.replace(
+                                matched_text,
+                                f"<span style='background-color: #c2f0c2;'>{matched_text}</span>"
+                            )
+                            break
+                    
+                    return True, f"Found late policy with penalties: {highlighted_section[:300]}...", 0.85
+            
+            # Third pass: Look for specific late mentions in assignment contexts
+            assignment_sections = re.findall(
+                r'(?i)(?:assignment|submission|assessment|project|homework)[^\n]*(?:\n[^\n]*){0,15}', 
+                document_text
+            )
+            
+            for section in assignment_sections:
+                section_lower = section.lower()
+                if 'late' in section_lower and any(term in section_lower for term in ['penalty', 'deduction', 'reduce', '%']):
+                    highlighted_section = section
+                    # Highlight "late" mentions
+                    pattern = re.compile(r'\b(late)\b', re.IGNORECASE)
+                    highlighted_section = pattern.sub(
+                        r"<span style='background-color: #c2f0c2;'>\1</span>", 
+                        highlighted_section
+                    )
+                    
+                    return True, f"Found late submission policy in assignment section: {highlighted_section[:300]}...", 0.8
+            
+            # Final determination: If we've searched thoroughly with multiple passes and found nothing
+            # With very high confidence, there is no late policy in the document
+            return False, "No late policy found after comprehensive tri-level examination of the document.", 0.95
         
         # Enhanced missed assessment policy detection with multi-pass checks
         if "missed assessment" in item_lower or "missed assignment" in item_lower or "missed midterm" in item_lower:
@@ -739,7 +869,7 @@ def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool
                 # Count how many relevant terms appear in this section
                 term_count = sum(1 for term in missed_terms if term in section_lower)
                 
-                if term_count >= 2:  # Need at least 2 relevant terms to increase confidence
+                if term_count >= 3:  # Need at least 3 relevant terms for strict confidence
                     # Highlight the relevant terms in the section
                     highlighted_section = section
                     for term in missed_terms:
@@ -787,7 +917,11 @@ def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool
                                     highlighted_context
                                 )
                             
-                            return True, f"Found medical/absence terms near assessment references: {highlighted_context}", 0.8
+                            # Only consider it a match if there's some explicit policy language 
+                            if any(policy_term in context.lower() for policy_term in 
+                                  ['policy', 'procedure', 'document', 'note', 'process', 'require', 'must']):
+                                return True, f"Found medical/absence terms near assessment references with policy language: {highlighted_context}", 0.85
+                            # Otherwise continue searching - this is not explicit enough
             
             # Third approach: Look for explicit statements about missing assessments
             explicit_patterns = [
@@ -802,7 +936,12 @@ def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool
                     context_start = max(0, match.start() - 100)
                     context_end = min(len(document_text), match.end() + 200)  # Capture more of what follows
                     context = document_text[context_start:context_end]
-                    return True, f"Found explicit statement about missing assessments: {context}", 0.85
+                    # Make sure there's also some procedural language indicating what to do
+                    if any(proc_term in context.lower() for proc_term in 
+                          ['contact', 'email', 'notify', 'inform', 'tell', 'procedure', 
+                           'documentation', 'doctor', 'note', 'certificate', 'proof']):
+                        return True, f"Found explicit policy about missing assessments: {context}", 0.9
+                    # Otherwise keep searching - just mentioning missing something isn't enough
             
             # Final check: If we've thoroughly checked and found nothing relevant
             # This check is more comprehensive
