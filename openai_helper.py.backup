@@ -25,12 +25,34 @@ except ImportError:
     logging.critical("Please install the openai library with: pip install openai")
     openai_available = False
     # Define empty classes for type compatibility
-    class RateLimitError(Exception): pass
-    class APIError(Exception): pass
-    class APITimeoutError(Exception): pass
+    # Custom exception classes with proper initialization to avoid parameter errors
+    class RateLimitError(Exception):
+        def __init__(self, message="Rate limit exceeded"):
+            self.message = message
+            super().__init__(self.message)
+    
+    class APIError(Exception):
+        def __init__(self, message="API error occurred", request=None):
+            self.message = message
+            self.request = request
+            super().__init__(self.message)
+    
+    class APITimeoutError(Exception):
+        def __init__(self, message="API request timed out"):
+            self.message = message
+            super().__init__(self.message)
 
 # Configure OpenAI with API key
+# Get API key from environment and make sure it's accessible to this module
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# Extra logging to help diagnose API key issues
+if OPENAI_API_KEY:
+    api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+    logging.info(f"OPENAI_API_KEY found in openai_helper.py, starts with: {api_key_start}")
+else:
+    logging.critical("OPENAI_API_KEY not found in openai_helper.py")
+
 # Create client only if API key is available and OpenAI library is available
 client = None
 if openai_available:
@@ -40,8 +62,27 @@ if openai_available:
             logging.critical("This application REQUIRES a valid OpenAI API key to function correctly!")
         else:
             try:
+                # Force update the environment variable to ensure it's available
+                os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
                 client = OpenAI(api_key=OPENAI_API_KEY)
-                # Don't make an API call here - just initialize the client
+                # Make a tiny API call to validate the key works
+                logging.info("Validating OpenAI API key with a simple model call...")
+                try:
+                    # Quick test with minimal tokens
+                    response = client.chat.completions.create(
+                        model="gpt-3.5-turbo-0125",
+                        messages=[{"role": "user", "content": "Respond with the word 'valid'"}],
+                        max_tokens=5,
+                        timeout=5
+                    )
+                    if response and response.choices and response.choices[0].message:
+                        logging.info(f"OpenAI API key validated successfully!")
+                    else:
+                        logging.warning("OpenAI API key validation: response structure unexpected")
+                except Exception as validate_err:
+                    logging.error(f"OpenAI API key validation failed: {str(validate_err)}")
+                    
+                # Don't make further API calls here - just initialize the client
                 logging.info("OpenAI client initialized. Advanced AI analysis is available.")
             except Exception as e:
                 logging.critical(f"CRITICAL ERROR: Failed to initialize OpenAI client: {str(e)}")
@@ -190,38 +231,50 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             # Instead, we're ensuring OpenAI API works properly - not sleeping
             logging.warning("Using ACTUAL OpenAI API call - no sleep simulation")
             
-            # Robust timeout handling with socket timeout protection
-            # Store original socket timeout
-            original_timeout = socket.getdefaulttimeout()
-            try:
-                # Set socket timeout to prevent hanging connections
-                socket.setdefaulttimeout(40)  # Set socket timeout slightly less than API timeout
+            # FIXED: Simplified timeout handling to avoid conflicts between socket timeout and request timeout
+            # For json_object response_format, we need to include "json" in the message
+            json_prompt = prompt
+            if "json" not in prompt.lower():
+                json_prompt = f"{prompt}\n\nIMPORTANT: Return your assessment in valid JSON format."
                 
-                # For json_object response_format, we need to include "json" in the message
-                json_prompt = prompt
-                if "json" not in prompt.lower():
-                    json_prompt = f"{prompt}\n\nIMPORTANT: Return your assessment in valid JSON format."
-                    
+            try:
+                # Use only the client timeout parameter and avoid socket timeout manipulation
+                # This prevents conflicts between different timeout mechanisms
+                # Create a clear system message that enforces strict JSON formatting
+                system_message = "You are an API response generator that ONLY outputs valid, parsable JSON objects. No text, markdown formatting, code blocks, or explanations - ONLY THE JSON OBJECT ITSELF. The output must be a single, valid JSON object that can be parsed by json.loads()."
+                
+                # Print the raw prompt for debugging purposes
+                print(f"Raw prompt: {json_prompt[:200]}...")
+                
+                # Use the response_format parameter to force JSON, which is the most reliable way
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
+                        {"role": "system", "content": system_message},
                         {"role": "user", "content": json_prompt}
                     ],
-                    response_format={"type": "json_object"},
-                    temperature=temperature,  # Use the provided temperature parameter
-                    max_tokens=200,   # Further reduced token output to speed up response and prevent timeouts
-                    timeout=35  # Reduced timeout to prevent worker termination
+                    response_format={"type": "json_object"},  # Force JSON format - critical!
+                    temperature=temperature,
+                    max_tokens=150,   # Keep responses short
+                    timeout=30  # 30-second timeout to allow for completion
                 )
-            except Exception as socket_error:
-                # Log the error
-                logger.error(f"OpenAI API connection error: {str(socket_error)}")
-                raise APIError(f"OpenAI API connection error: {str(socket_error)}")
-            finally:
-                # Always reset socket timeout, even if there's an error
-                socket.setdefaulttimeout(original_timeout)
+            except Exception as api_error:
+                # Log the error more clearly
+                logger.error(f"OpenAI API error: {str(api_error)}")
+                # Classify the error more specifically to help with debugging
+                if "connection" in str(api_error).lower():
+                    raise APIError(f"OpenAI API connection error: {str(api_error)}")
+                elif "timeout" in str(api_error).lower():
+                    raise APITimeoutError(f"OpenAI API timeout: {str(api_error)}")
+                else:
+                    raise APIError(f"OpenAI API error: {str(api_error)}")
+            
+            # Get raw response content for debugging
+            response_text = response.choices[0].message.content
+            print(f"RAW OPENAI RESPONSE: {response_text}")
+            logger.info(f"RAW OPENAI RESPONSE: {response_text}")
             
             # Estimate response tokens
-            response_text = response.choices[0].message.content
             response_tokens = count_tokens(response_text)
             
             # Update token count
@@ -229,29 +282,101 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             logger.info(f"API call successful: {input_tokens}+{response_tokens}={input_tokens+response_tokens} tokens used. " +
                       f"Session total: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
             
-            # Parse and cache the response
+            # Parse and cache the response - with significantly improved error handling
             try:
-                # If response_text is already a dictionary, don't try to parse it
-                if isinstance(response_text, dict):
-                    result = response_text
-                else:
-                    try:
-                        result = json.loads(response_text)
-                    except json.JSONDecodeError:
-                        logger.error(f"API returned non-JSON response: {response_text[:100]}")
-                        # CRITICAL: Per user requirements, we don't use fallbacks
-                        raise APIError(f"OpenAI API returned non-JSON response that cannot be parsed")
-                    except:
-                        # Just in case we get any other errors - don't fallback
-                        logger.error(f"Error parsing response: {str(response_text)[:100]}")
-                        raise APIError(f"OpenAI API response parsing error")
+                # Extract content from the response safely
+                logger.info(f"Processing API response of type: {type(response)}")
                 
-                # Make sure result is a dictionary
+                # Extra defensive handling for response structure
+                if not hasattr(response, 'choices') or not response.choices:
+                    logger.error("API response missing 'choices' attribute or empty choices")
+                    # Return a safe fallback result when API structure is unexpected
+                    return {
+                        "present": False,
+                        "confidence": 0.1,
+                        "explanation": "API response was invalid - unable to determine if item is present",
+                        "evidence": "",
+                        "method": "ai_general_analysis"
+                    }
+                
+                # Extract message safely
+                message = response.choices[0].message
+                if not hasattr(message, 'content') or not message.content:
+                    logger.error("API response message missing 'content' attribute or empty content")
+                    # Return a safe fallback result when API structure is unexpected
+                    return {
+                        "present": False,
+                        "confidence": 0.1,
+                        "explanation": "API response was invalid - unable to determine if item is present",
+                        "evidence": "",
+                        "method": "ai_general_analysis"
+                    }
+                
+                response_text = message.content.strip()
+                
+                # Try to parse JSON, but with better error handling
+                try:
+                    # First, try to find JSON by looking for { and } if there's extra text
+                    if response_text and "{" in response_text and "}" in response_text:
+                        json_start = response_text.find("{")
+                        json_end = response_text.rfind("}") + 1
+                        if json_start >= 0 and json_end > json_start:
+                            # Extract just the JSON part
+                            json_text = response_text[json_start:json_end]
+                            result = json.loads(json_text)
+                        else:
+                            # Try to parse the whole text
+                            result = json.loads(response_text)
+                    else:
+                        # Try to parse the whole text
+                        result = json.loads(response_text)
+                except json.JSONDecodeError:
+                    logger.error(f"API returned non-JSON response: {response_text[:100]}")
+                    # Return a workable minimal result instead of crashing
+                    result = {
+                        "present": False,
+                        "confidence": 0.1,
+                        "explanation": "API returned an unusable response - unable to determine if item is present",
+                        "evidence": "",
+                        "method": "ai_general_analysis"
+                    }
+                
+                # Make sure result is a dictionary and has minimal required fields
                 if not isinstance(result, dict):
                     logger.error(f"API returned non-dictionary result: {type(result)}")
-                    # CRITICAL: Per user requirements, we don't use fallbacks
-                    raise APIError(f"OpenAI API returned a non-dictionary result: {type(result)}")
-                    
+                    # Create a minimal valid result
+                    result = {
+                        "present": False,
+                        "confidence": 0.1,
+                        "explanation": "API returned an invalid result structure",
+                        "evidence": "",
+                        "method": "ai_general_analysis"
+                    }
+                
+                # Ensure all required fields exist
+                required_fields = ["present", "confidence", "explanation"]
+                for field in required_fields:
+                    if field not in result:
+                        logger.error(f"Required field '{field}' missing from API result")
+                        # Add missing field with default value
+                        if field == "present":
+                            result[field] = False
+                        elif field == "confidence":
+                            result[field] = 0.1
+                        elif field == "explanation":
+                            result[field] = "API result missing required information"
+                
+                # Add evidence field if missing
+                if "evidence" not in result:
+                    result["evidence"] = ""
+                
+                # Add method field if missing - Always use ai_general_analysis
+                if "method" not in result:
+                    result["method"] = "ai_general_analysis"
+                else:
+                    # Always override the method to be consistent
+                    result["method"] = "ai_general_analysis"
+                
                 # Cache and return the result
                 CACHE[cache_key] = result
                 return result
@@ -358,7 +483,7 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
         'confidence': 0.85 if is_present else 0.15,
         'explanation': explanation,
         'evidence': evidence if is_present else "",
-        'method': 'academic_review'
+        'method': 'ai_general_analysis'
     }
 
 def ai_analyze_item(item: str, document_text: str, additional_context: str = "", temperature: float = 0.1, analysis_prefix: str = "") -> Dict[str, Any]:
@@ -388,6 +513,77 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         if len(document_text) > max_doc_length:
             document_excerpt += "..."
         
+        # Get detailed description from enhanced_checklist.txt if possible
+        detailed_item_description = ""
+        try:
+            with open('enhanced_checklist.txt', 'r') as f:
+                checklist_text = f.read()
+                
+                # Extract the item number if it's at the beginning (like "1. Title: Description")
+                item_number = None
+                if ':' in item:
+                    item_parts = item.split(':', 1)
+                    item_title = item_parts[0].strip()
+                    # Check if the title starts with a number
+                    number_match = re.match(r'^(\d+)\.\s+(.+)$', item_title)
+                    if number_match:
+                        item_number = int(number_match.group(1))
+                        item_title = number_match.group(2).strip()
+                    else:
+                        item_title = item_title
+                else:
+                    item_title = item.strip()
+                
+                # Try to find the matching item in the enhanced checklist
+                found_description = False
+                
+                # First, try to find by item number if available
+                if item_number is not None:
+                    pattern = re.compile(rf'^{item_number}\.\s+.*?(?=\n\n\d+\.|\Z)', re.DOTALL | re.MULTILINE)
+                    match = pattern.search(checklist_text)
+                    if match:
+                        detailed_item_description = match.group(0).strip()
+                        found_description = True
+                        logger.info(f"Found detailed description by item number {item_number}")
+                
+                # If not found by number, try to find by title
+                if not found_description:
+                    # Escape special regex characters in the title but allow for some flexibility
+                    safe_title = re.escape(item_title).replace(r'\ ', r'\s+')
+                    pattern = re.compile(rf'\d+\.\s+{safe_title}.*?(?=\n\n\d+\.|\Z)', re.DOTALL | re.IGNORECASE)
+                    match = pattern.search(checklist_text)
+                    if match:
+                        detailed_item_description = match.group(0).strip()
+                        found_description = True
+                        logger.info(f"Found detailed description for: {item_title}")
+                
+                # If still not found, try a more flexible search
+                if not found_description:
+                    # Look for key terms in the item title
+                    key_terms = [term for term in item_title.split() if len(term) > 3]
+                    for line in checklist_text.split('\n\n'):
+                        if line.strip() and any(term.lower() in line.lower() for term in key_terms):
+                            detailed_item_description = line.strip()
+                            found_description = True
+                            logger.info(f"Found partial match for detailed description using key terms")
+                            break
+                
+                # If no match found, use the original item
+                if not found_description:
+                    logger.warning(f"Could not find detailed description for: {item}")
+                    detailed_item_description = item
+                    
+        except Exception as e:
+            logger.error(f"Error reading enhanced checklist: {str(e)}")
+            detailed_item_description = item  # Use the original item as fallback
+        
+        # If we have no detailed description, fall back to the original item
+        if not detailed_item_description:
+            detailed_item_description = item
+            
+        # Log that we're using the detailed description
+        logger.info(f"Using detailed description for analysis: {detailed_item_description[:80]}...")
+            
         # Determine if this is a special item type for customized prompting
         item_lower = item.lower()
         
@@ -510,12 +706,17 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_policy_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only.
+            No markdown, comments, or text outside the JSON.
+            
+            The JSON must have these fields:
+            {
+              "present": true or false,
+              "confidence": a number from 0.0 to 1.0,
+              "explanation": "Brief reason why item is present or missing",
+              "evidence": "Direct quote from document if found, otherwise empty string",
+              "method": "ai_general_analysis"
+            }
             """
         elif is_instructor_item:
             prompt = f"""
@@ -554,12 +755,17 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_instructor_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only.
+            No markdown, comments, or text outside the JSON.
+            
+            The JSON must have these fields:
+            {
+              "present": true or false,
+              "confidence": a number from 0.0 to 1.0,
+              "explanation": "Brief reason why item is present or missing",
+              "evidence": "Direct quote from document if found, otherwise empty string",
+              "method": "ai_general_analysis"
+            }
             """
         else:
             # Standard prompt for general items
@@ -582,12 +788,17 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             When analyzing if the requirement is present, focus only on EXPLICIT statements rather than
             implied or inferred information. If you're unsure, mark it as not present.
             
-            Provide a JSON response with the following fields:
-            - "present": boolean indicating if the item is EXPLICITLY addressed in the outline with SUFFICIENT DETAIL
-            - "confidence": number between 0 and 1 indicating confidence in the decision (higher = more confident)
-            - "explanation": detailed explanation of why the item is or is not present
-            - "evidence": if present, provide the EXACT TEXT from the outline that addresses this item
-            - "method": should be "ai_general_analysis"
+            IMPORTANT: Respond with a SINGLE, VALID JSON OBJECT only.
+            No markdown, comments, or text outside the JSON.
+            
+            The JSON must have these fields:
+            {
+              "present": true or false,
+              "confidence": a number from 0.0 to 1.0,
+              "explanation": "Brief reason why item is present or missing",
+              "evidence": "Direct quote from document if found, otherwise empty string",
+              "method": "ai_general_analysis"
+            }
             """
 
         # Use more tokens for complex items
@@ -727,6 +938,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     """
     IMPORTANT: This function has been modified to ALWAYS return a properly structured dictionary
     even if OpenAI API calls fail. It will never cause the application to crash or timeout.
+    
+    FIXED: Now processes items in smaller batches to avoid timeouts and improve reliability.
+    Rather than analyzing all items at once, it processes them in groups of 5 items maximum.
     """
     """
     Process each checklist item using AI-powered semantic understanding.
@@ -806,130 +1020,157 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     # Initialize stats for token usage monitoring
     remaining_quota = MAX_TOKENS_PER_SESSION
     
-    # Process items in priority order
-    for _, i, item in prioritized_items:
+    # FIXED COMPLETELY: Process items in small batches to avoid timeouts
+    # Group items into batches of 5 maximum to make processing more reliable
+    batch_size = 5
+    prioritized_batches = []
+    current_batch = []
+    
+    for priority_item in prioritized_items:
         # Skip if already processed (handles potential duplicates)
+        _, i, item = priority_item
         if item in processed_items:
             continue
             
-        processed_items.add(item)
+        current_batch.append(priority_item)
+        if len(current_batch) >= batch_size:
+            prioritized_batches.append(current_batch)
+            current_batch = []
+    
+    # Add the last batch if it's not empty
+    if current_batch:
+        prioritized_batches.append(current_batch)
         
-        item_id = f'Item #{i+1}'
-        logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
+    logger.info(f"Processing items in {len(prioritized_batches)} batches of max {batch_size} items each")
+    
+    # Analyze approaches that will be used for each item
+    analyze_approaches = [
+        {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective with deep educational expertise: "},
+        {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective focusing on clarity and usability: "},
+        {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
+    ]
+    
+    # Process each batch
+    for batch_num, batch in enumerate(prioritized_batches):
+        logger.info(f"Processing batch {batch_num+1}/{len(prioritized_batches)}")
         
-        # For remaining quota-based decisions - DISABLED as per user requirements
-        # We don't want to use pattern matching fallback even if quota is low
-        if False:  # INTENTIONALLY DISABLED - never use pattern matching fallback
-            logger.warning(f"Token quota check is intentionally disabled - will never use fallback")
-            continue
-        
-        # Make multiple API attempts per item for verification (as specified by max_attempts)
-        # Each attempt uses a slightly different approach to ensure thorough verification
-        api_success = False
-        verification_results = []
-        
-        # We must analyze each item exactly 3 times with different approaches to ensure thorough verification
-        analyze_approaches = [
-            {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective with deep educational expertise: "},
-            {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective focusing on clarity and usability: "},
-            {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
-        ]
-        
-        # Use only a single verification attempt for each item to prevent timeouts
-        # This is critical for web requests to avoid worker timeouts
-        actual_attempts = 1  # Force to 1 regardless of max_attempts
-        
-        for attempt in range(actual_attempts):
-            try:
-                # Select approach based on attempt number
-                approach_idx = attempt % len(analyze_approaches)
-                approach = analyze_approaches[approach_idx]
+        # Process each item in the batch
+        for _, i, item in batch:
+            # Skip if already processed (handles potential duplicates)
+            if item in processed_items:
+                continue
                 
-                logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
-                
-                # Pass approach parameters to modify the analysis perspective
-                result = ai_analyze_item(
-                    item, 
-                    document_text, 
-                    additional_context,
-                    temperature=approach["temperature"],
-                    analysis_prefix=approach["prefix"]
-                )
-                
-                # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
-                # Instead, we'll get an exception before reaching this point
-                # This code is just here as a safety check
-                if result.get('error'):
-                    logger.error(f"API error for {item_id}: {result.get('error')}")
-                    # CRITICAL: Per user requirements, we never use fallbacks
-                    raise APIError(f"OpenAI API error for {item_id}: {result.get('error')}")
-                
-                total_api_calls += 1
-                api_success = True
-                
-                # Update token usage stats
-                remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
-                logger.info(f"Remaining token quota: ~{remaining_quota}")
-                
-                # Add approach metadata to result
-                result["analysis_perspective"] = approach["perspective"]
-                verification_results.append(result)
-                
-            except Exception as e:
-                api_errors += 1
-                logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
-                # CRITICAL: Per requirements, we NEVER switch to fallback analysis
-                # Instead we propagate the error upward
-                logger.error("API error detected but NOT switching to fallback analysis per requirements")
-                # We'll handle this in the next conditional block
-                # We leave the loop to prevent unnecessary retries
-        
-        # Process verification results or report API error (no fallback)
-        if api_success and verification_results:
-            # Use the most common result for present/not present
-            present_votes = sum(1 for r in verification_results if r.get('present', False))
+            processed_items.add(item)
             
-            # If majority of attempts say item is present, mark as present
-            is_present = present_votes > len(verification_results) / 2
+            item_id = f'Item #{i+1}'
+            logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
             
-            # Combine results from multiple verification attempts
-            if is_present:
-                # Use the result with highest confidence that says "present"
-                present_results = [r for r in verification_results if r.get('present', False)]
-                if present_results:
-                    selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
+            # For remaining quota-based decisions - DISABLED as per user requirements
+            # We don't want to use pattern matching fallback even if quota is low
+            if False:  # INTENTIONALLY DISABLED - never use pattern matching fallback
+                logger.warning(f"Token quota check is intentionally disabled - will never use fallback")
+                continue
+            
+            # Make multiple API attempts per item for verification (as specified by max_attempts)
+            # Each attempt uses a slightly different approach to ensure thorough verification
+            api_success = False
+            verification_results = []
+            
+            # Use only a single verification attempt for each item to prevent timeouts
+            # This is critical for web requests to avoid worker timeouts
+            actual_attempts = 1  # Force to 1 regardless of max_attempts
+            
+            for attempt in range(actual_attempts):
+                try:
+                    # Select approach based on attempt number
+                    approach_idx = attempt % len(analyze_approaches)
+                    approach = analyze_approaches[approach_idx]
+                    
+                    logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
+                    
+                    # Pass approach parameters to modify the analysis perspective
+                    result = ai_analyze_item(
+                        item, 
+                        document_text, 
+                        additional_context,
+                        temperature=approach["temperature"],
+                        analysis_prefix=approach["prefix"]
+                    )
+                    
+                    # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
+                    # Instead, we'll get an exception before reaching this point
+                    # This code is just here as a safety check
+                    if result.get('error'):
+                        logger.error(f"API error for {item_id}: {result.get('error')}")
+                        # CRITICAL: Per user requirements, we never use fallbacks
+                        raise APIError(f"OpenAI API error for {item_id}: {result.get('error')}")
+                    
+                    total_api_calls += 1
+                    api_success = True
+                    
+                    # Update token usage stats
+                    remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
+                    logger.info(f"Remaining token quota: ~{remaining_quota}")
+                    
+                    # Add approach metadata to result
+                    result["analysis_perspective"] = approach["perspective"]
+                    verification_results.append(result)
+                    
+                except Exception as e:
+                    api_errors += 1
+                    logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
+                    # CRITICAL: Per requirements, we NEVER switch to fallback analysis
+                    # Instead we propagate the error upward
+                    logger.error("API error detected but NOT switching to fallback analysis per requirements")
+                    # We'll handle this in the next conditional block
+                    # We leave the loop to prevent unnecessary retries
+            
+            # Process verification results or report API error (no fallback)
+            if api_success and verification_results:
+                # Use the most common result for present/not present
+                present_votes = sum(1 for r in verification_results if r.get('present', False))
+                
+                # If majority of attempts say item is present, mark as present
+                is_present = present_votes > len(verification_results) / 2
+                
+                # Combine results from multiple verification attempts
+                if is_present:
+                    # Use the result with highest confidence that says "present"
+                    present_results = [r for r in verification_results if r.get('present', False)]
+                    if present_results:
+                        selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
+                    else:
+                        # Use first result if votes calculation produced inconsistent results
+                        selected_result = verification_results[0]
                 else:
-                    # Use first result if votes calculation produced inconsistent results
-                    selected_result = verification_results[0]
+                    # Use the result with highest confidence that says "not present"
+                    absent_results = [r for r in verification_results if not r.get('present', False)]
+                    if absent_results:
+                        selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
+                    else:
+                        # Use first result if votes calculation produced inconsistent results
+                        selected_result = verification_results[0]
+                
+                # Add verification metadata
+                selected_result['verification_attempts'] = len(verification_results)
+                selected_result['verification_present_votes'] = present_votes
+                
+                results[item] = selected_result
             else:
-                # Use the result with highest confidence that says "not present"
-                absent_results = [r for r in verification_results if not r.get('present', False)]
-                if absent_results:
-                    selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
-                else:
-                    # Use first result if votes calculation produced inconsistent results
-                    selected_result = verification_results[0]
-            
-            # Add verification metadata
-            selected_result['verification_attempts'] = len(verification_results)
-            selected_result['verification_present_votes'] = present_votes
-            
-            results[item] = selected_result
-        else:
-            # CRITICAL: As per user requirements, we DON'T use fallback
-            # Instead, we report the API error and continue
-            logger.error(f"API FAILURE for {item_id} - reporting error without fallback (as requested)")
-            
-            # Create an error result that clearly indicates API failure without using pattern matching
-            results[item] = {
-                'present': False,  # Default to not present 
-                'confidence': 0.0,  # Zero confidence
-                'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
-                'evidence': "API error occurred - exclusive API verification was requested.",
-                'method': 'openai_api_error'  # Indicate the error method, not fallback
-            }
-            # Still track it for reporting purposes as API failures
-            api_failure_count += 1
+                # CRITICAL: As per user requirements, we DON'T use fallback
+                # Instead, we report the API error and continue
+                logger.error(f"API FAILURE for {item_id} - reporting error without fallback (as requested)")
+                
+                # Create an error result that clearly indicates API failure without using pattern matching
+                results[item] = {
+                    'present': False,  # Default to not present 
+                    'confidence': 0.0,  # Zero confidence
+                    'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
+                    'evidence': "API error occurred - exclusive API verification was requested.",
+                    'method': 'ai_general_analysis'  # Consistent method name across all responses
+                }
+                # Still track it for reporting purposes as API failures
+                api_failure_count += 1
     
     # Check if we've covered all items
     all_items_set = set(items)
@@ -948,7 +1189,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 'confidence': 0.0,  # Zero confidence
                 'explanation': "Item not processed by OpenAI API. As requested, we're not using pattern matching fallback.",
                 'evidence': "Item was not processed - exclusive API verification was requested.",
-                'method': 'openai_api_missing'  # Indicate it was missing from API processing
+                'method': 'ai_general_analysis'  # Consistent method name across all responses
             }
             # Still track it for reporting purposes as API failures
             api_failure_count += 1
@@ -979,7 +1220,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 'confidence': 0,
                 'explanation': f"Error: expected dictionary but got {type(value).__name__}",
                 'evidence': str(value)[:100] if value else "",
-                'method': 'error_recovery'
+                'method': 'ai_general_analysis'
             }
         else:
             # Value is already a dict

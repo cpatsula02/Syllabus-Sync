@@ -513,6 +513,77 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         if len(document_text) > max_doc_length:
             document_excerpt += "..."
         
+        # Get detailed description from enhanced_checklist.txt if possible
+        detailed_item_description = ""
+        try:
+            with open('enhanced_checklist.txt', 'r') as f:
+                checklist_text = f.read()
+                
+                # Extract the item number if it's at the beginning (like "1. Title: Description")
+                item_number = None
+                if ':' in item:
+                    item_parts = item.split(':', 1)
+                    item_title = item_parts[0].strip()
+                    # Check if the title starts with a number
+                    number_match = re.match(r'^(\d+)\.\s+(.+)$', item_title)
+                    if number_match:
+                        item_number = int(number_match.group(1))
+                        item_title = number_match.group(2).strip()
+                    else:
+                        item_title = item_title
+                else:
+                    item_title = item.strip()
+                
+                # Try to find the matching item in the enhanced checklist
+                found_description = False
+                
+                # First, try to find by item number if available
+                if item_number is not None:
+                    pattern = re.compile(rf'^{item_number}\.\s+.*?(?=\n\n\d+\.|\Z)', re.DOTALL | re.MULTILINE)
+                    match = pattern.search(checklist_text)
+                    if match:
+                        detailed_item_description = match.group(0).strip()
+                        found_description = True
+                        logger.info(f"Found detailed description by item number {item_number}")
+                
+                # If not found by number, try to find by title
+                if not found_description:
+                    # Escape special regex characters in the title but allow for some flexibility
+                    safe_title = re.escape(item_title).replace(r'\ ', r'\s+')
+                    pattern = re.compile(rf'\d+\.\s+{safe_title}.*?(?=\n\n\d+\.|\Z)', re.DOTALL | re.IGNORECASE)
+                    match = pattern.search(checklist_text)
+                    if match:
+                        detailed_item_description = match.group(0).strip()
+                        found_description = True
+                        logger.info(f"Found detailed description for: {item_title}")
+                
+                # If still not found, try a more flexible search
+                if not found_description:
+                    # Look for key terms in the item title
+                    key_terms = [term for term in item_title.split() if len(term) > 3]
+                    for line in checklist_text.split('\n\n'):
+                        if line.strip() and any(term.lower() in line.lower() for term in key_terms):
+                            detailed_item_description = line.strip()
+                            found_description = True
+                            logger.info(f"Found partial match for detailed description using key terms")
+                            break
+                
+                # If no match found, use the original item
+                if not found_description:
+                    logger.warning(f"Could not find detailed description for: {item}")
+                    detailed_item_description = item
+                    
+        except Exception as e:
+            logger.error(f"Error reading enhanced checklist: {str(e)}")
+            detailed_item_description = item  # Use the original item as fallback
+        
+        # If we have no detailed description, fall back to the original item
+        if not detailed_item_description:
+            detailed_item_description = item
+            
+        # Log that we're using the detailed description
+        logger.info(f"Using detailed description for analysis: {detailed_item_description[:80]}...")
+            
         # Determine if this is a special item type for customized prompting
         item_lower = item.lower()
         
@@ -550,7 +621,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This item requires precise identification of specific details or tables in the document.
             
-            CHECKLIST ITEM: "{item}"
+            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -602,7 +673,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This requires identification of specific policy details in the document.
             
-            CHECKLIST ITEM: "{item}"
+            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -654,7 +725,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This requires identification of specific instructor contact details in the document.
             
-            CHECKLIST ITEM: "{item}"
+            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -702,7 +773,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
             is adequately addressed in the course outline.
             
-            CHECKLIST ITEM: "{item}"
+            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
