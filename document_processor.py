@@ -1240,7 +1240,9 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
             
             # Use OpenAI if available
-            ENABLE_OPENAI = bool(OPENAI_API_KEY)
+            import os
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    ENABLE_OPENAI = bool(OPENAI_API_KEY)
             
             results = {}
             
