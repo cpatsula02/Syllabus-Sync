@@ -422,7 +422,10 @@ def download_pdf():
         pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
         pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
         pdf.add_font('DejaVu', 'I', os.path.join(font_path, 'DejaVuSansCondensed-Oblique.ttf'), uni=True)
-        pdf.add_font('DejaVu', 'BI', os.path.join(font_path, 'DejaVuSansCondensed-BoldOblique.ttf'), uni=True)
+        try:
+            pdf.add_font('DejaVu', 'BI', os.path.join(font_path, 'DejaVuSansCondensed-BoldOblique.ttf'), uni=True)
+        except Exception as e:
+            logger.warning(f"Could not add bold-italic font: {str(e)}")
 
         # Set up document
         pdf.set_font('DejaVu', 'B', 16)
@@ -436,9 +439,18 @@ def download_pdf():
         pdf.cell(190, 10, 'Summary', 0, 1, 'L')
         pdf.set_font('DejaVu', '', 10)
 
+        # Count the different statuses (present, missing, not applicable)
         total_items = len(analysis_data['checklist_items'])
         missing_items = len(analysis_data['missing_items'])
-        present_items = total_items - missing_items
+        
+        # Count not applicable items
+        na_items = 0
+        for item in analysis_data['checklist_items']:
+            result = analysis_data['analysis_results'].get(item, {})
+            if result.get('status', '') == 'na':
+                na_items += 1
+                
+        present_items = total_items - missing_items - na_items
 
         # Calculate API usage statistics for the PDF report
         analysis_methods = {}
@@ -463,10 +475,11 @@ def download_pdf():
             if verification_attempts > 0:
                 ai_analyzed_items += 1
 
+        # Quick summary statistics table
         pdf.cell(95, 8, f'Total checklist items: {total_items}', 1, 0, 'L')
         pdf.cell(95, 8, f'Items present: {present_items}', 1, 1, 'L')
         pdf.cell(95, 8, f'Items missing: {missing_items}', 1, 0, 'L')
-        pdf.cell(95, 8, f'AI verifications: {total_verification_calls}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Items not applicable: {na_items}', 1, 1, 'L')
         pdf.ln(5)
 
         # Add analysis method statistics
@@ -557,6 +570,7 @@ def download_pdf():
             result = analysis_data['analysis_results'].get(item, {})
             is_present = result.get('present', False)
             is_grade_item = item in analysis_data['grade_table_items']
+            status = result.get('status', 'present' if is_present else 'missing')
 
             # Improved cell height calculation for checklist items with better text wrapping
             y_position = pdf.get_y()
@@ -592,16 +606,25 @@ def download_pdf():
             pdf.set_xy(pdf.get_x() + 140, y_position)
 
             # Color-code status
-            pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
+            if status == 'na':
+                pdf.set_text_color(100, 100, 100)  # Gray for N/A
+                status_text = 'N/A'
+            elif status == 'present':
+                pdf.set_text_color(0, 128, 0)  # Green for present
+                status_text = 'Present'
+            else:
+                pdf.set_text_color(255, 0, 0)  # Red for missing
+                status_text = 'Missing'
+                
             pdf.rect(pdf.get_x(), y_position, 50, row_height)
 
             # Center status text vertically and horizontally
-            pdf.set_xy(pdf.get_x() + (50 - pdf.get_string_width('Present')) / 2, y_position + (row_height - 5) / 2)
-            pdf.cell(50, 5, 'Present' if is_present else 'Missing', 1, 1, 'C')
+            pdf.set_xy(pdf.get_x() + (50 - pdf.get_string_width(status_text)) / 2, y_position + (row_height - 5) / 2)
+            pdf.cell(50, 5, status_text, 1, 1, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
 
             # Include evidence if present (max 300 chars)
-            if is_present:
+            if is_present or status == 'na':
                 evidence = result.get('evidence', '')
                 if evidence:
                     # Strip HTML tags for clean PDF text
@@ -640,25 +663,10 @@ def download_pdf():
             # Add space between items
             pdf.ln(2)
 
-        # Create PDF with just checklist items status
-        pdf = FPDF(orientation='P', unit='mm', format='A4')
-        pdf.set_auto_page_break(auto=True, margin=15)
+        # Add a new page for the Quick Overview
         pdf.add_page()
-
-        # Add fonts
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(base_path, 'static', 'fonts')
-        pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
-        pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
-
-        # Set margins
-        pdf.set_left_margin(15)
-        pdf.set_right_margin(15)
-        pdf.set_top_margin(15)
-
-        # Title
         pdf.set_font('DejaVu', 'B', 16)
-        pdf.cell(180, 10, 'Syllabus Sync Analysis Summary', 0, 1, 'C')
+        pdf.cell(190, 10, 'Course Outline Compliance - Quick Overview', 0, 1, 'C')
         pdf.ln(5)
 
         # Header for items table
@@ -677,7 +685,9 @@ def download_pdf():
         # List items with status
         pdf.set_font('DejaVu', '', 9)
         for item in unique_checklist_items:
-            is_present = item not in analysis_data['missing_items']
+            # Get the status from results
+            result = analysis_data['analysis_results'].get(item, {})
+            status = result.get('status', 'present' if item not in analysis_data['missing_items'] else 'missing')
 
             # Use a very conservative estimate ofcharacters per line to ensure enough space
             chars_per_line = 60  # Conservative estimate for better readability
@@ -704,34 +714,105 @@ def download_pdf():
 
             # Print status in its own box
             pdf.set_xy(x_pos + 150, y_pos)
-            pdf.set_text_color(0, 128, 0) if is_present else pdf.set_text_color(255, 0, 0)
+            
+            # Set color based on status
+            if status == 'na':
+                pdf.set_text_color(100, 100, 100)  # Gray for N/A
+                status_text = 'N/A'
+            elif status == 'present':
+                pdf.set_text_color(0, 128, 0)  # Green for present
+                status_text = 'Present'
+            else:
+                pdf.set_text_color(255, 0, 0)  # Red for missing
+                status_text = 'Missing'
+                
             pdf.rect(x_pos + 150, y_pos, 30, row_height)
 
             # Center status text vertically and horizontally
-            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width('Present')) / 2, y_pos + (row_height - 5) / 2)
-            pdf.cell(30, 5, 'Present' if is_present else 'Missing', 0, 1, 'C')
+            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width(status_text)) / 2, y_pos + (row_height - 5) / 2)
+            pdf.cell(30, 5, status_text, 0, 1, 'C')
             pdf.set_text_color(0, 0, 0)
 
-            #            # Add spacing between items
+            # Add spacing between items
             pdf.set_xy(x_pos, y_pos + row_height + 2)
 
             # Check for new page
             if pdf.get_y() > 250:
                 pdf.add_page()
                 pdf.set_font('DejaVu', 'B', 10)
-                pdf.cell(160, 8, 'Checklist Item', 1, 0, 'L')
+                pdf.cell(150, 8, 'Checklist Item', 1, 0, 'L')
                 pdf.cell(30, 8, 'Status', 1, 1, 'C')
                 pdf.set_font('DejaVu', '', 9)
 
-                # Add summary at bottom of last page
+        # Add summary at bottom of last page
         pdf.ln(10)
         pdf.set_font('DejaVu', 'B', 10)
         total_items = len(unique_checklist_items)
-        present_items = sum(1 for item in unique_checklist_items if item not in analysis_data['missing_items'])
-        pdf.cell(95, 8, f'Total Items: {total_items}', 1, 0, 'L')
-        pdf.cell(95, 8, f'Items Present: {present_items}', 1, 1, 'L')
-
-
+        present_items = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
+                           (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
+        na_items = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
+        missing_items = total_items - present_items - na_items
+        
+        pdf.cell(63, 8, f'Total Items: {total_items}', 1, 0, 'L')
+        pdf.cell(63, 8, f'Present: {present_items}', 1, 0, 'L')
+        pdf.cell(64, 8, f'Missing: {missing_items} / N/A: {na_items}', 1, 1, 'L')
+        
+        # Add a new page for the detailed checklist descriptions
+        pdf.add_page()
+        pdf.set_font('DejaVu', 'B', 16)
+        pdf.cell(190, 10, 'Detailed Checklist Descriptions', 0, 1, 'C')
+        pdf.ln(5)
+        
+        # Load the enhanced checklist descriptions
+        enhanced_checklist = []
+        try:
+            with open('enhanced_checklist.txt', 'r') as file:
+                enhanced_checklist = file.read().strip().split('\n\n')
+        except Exception as e:
+            logger.error(f"Error loading enhanced checklist: {str(e)}")
+            # Create a placeholder if the file can't be loaded
+            enhanced_checklist = [f"{i+1}. {item}" for i, item in enumerate(unique_checklist_items)]
+        
+        # Add each detailed description
+        pdf.set_font('DejaVu', '', 10)
+        for item_desc in enhanced_checklist:
+            # Get item number
+            match = re.match(r'^(\d+)\.\s+(.+?):', item_desc)
+            if match:
+                num = match.group(1)
+                name = match.group(2)
+                description = item_desc[len(match.group(0)):]
+                
+                # Add the item name with number
+                pdf.set_font('DejaVu', 'B', 10)
+                pdf.cell(190, 8, f"{num}. {name}", 0, 1, 'L')
+                
+                # Add the description
+                pdf.set_font('DejaVu', '', 9)
+                
+                # Calculate required height for the description
+                description_length = len(description)
+                chars_per_line = 50  # Very conservative estimate
+                description_lines = max(1, description_length / chars_per_line)
+                description_height = max(5, description_lines * 4)  # Minimum 5mm, 4mm per line
+                
+                # Add extra padding for longer descriptions
+                if description_lines > 3:
+                    description_height += 2
+                
+                pdf.multi_cell(180, description_height, description, 0, 'L')
+                pdf.ln(4)
+            else:
+                # If not in expected format, just add as-is
+                pdf.multi_cell(180, 8, item_desc, 0, 'L')
+                pdf.ln(4)
+            
+            # Check for page break if needed
+            if pdf.get_y() > 270:
+                pdf.add_page()
+                pdf.set_font('DejaVu', 'B', 12)
+                pdf.cell(190, 8, 'Detailed Checklist Descriptions (Continued)', 0, 1, 'L')
+                pdf.ln(3)
 
         # Create temporary file and save
         import tempfile

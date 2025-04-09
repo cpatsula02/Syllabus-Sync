@@ -1065,6 +1065,42 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
             if policies and enhanced_context:
                 enhanced_context += f"\n\nNote: The document appears to contain policies for: {', '.join(policies)}."
+        
+        # Parse the additional context to identify "not applicable" items
+        not_applicable_items = {}
+        if additional_context:
+            # List of keywords and phrases that indicate an item is not applicable
+            na_phrases = [
+                "not applicable", "n/a", "na ", "doesn't apply", "does not apply", 
+                "not included", "not required", "no final", "no exam", "no midterm",
+                "no group", "no participation", "no textbook", "not needed"
+            ]
+            
+            # Check each checklist item against the additional context
+            for item in checklist_items:
+                item_lower = item.lower()
+                context_lower = additional_context.lower()
+                
+                # Check if the item is mentioned along with a phrase indicating it's not applicable
+                for phrase in na_phrases:
+                    # Look for patterns like "no final exam" or "final exam: not applicable"
+                    for keyword in item_lower.split():
+                        if len(keyword) > 3:  # Only consider meaningful keywords
+                            if f"{keyword}.*{phrase}" in context_lower or f"{phrase}.*{keyword}" in context_lower:
+                                not_applicable_items[item] = True
+                                break
+                
+                # Special case checks for specific items
+                if "final exam" in item_lower and any(phrase in context_lower for phrase in 
+                                                    ["no final", "no exam", "without final", "exempt from final"]):
+                    not_applicable_items[item] = True
+                
+                if "group" in item_lower and any(phrase in context_lower for phrase in 
+                                               ["no group work", "not a group", "individual only"]):
+                    not_applicable_items[item] = True
+                    
+                if "participation" in item_lower and "no participation" in context_lower:
+                    not_applicable_items[item] = True
 
         # Process using AI if permitted, otherwise use traditional matching
         try:
@@ -1089,6 +1125,18 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 # Use traditional pattern matching for all items
                 logging.info("Using traditional pattern matching for analysis")
                 for item in checklist_items:
+                    # Check if this item is marked as not applicable
+                    if item in not_applicable_items:
+                        results[item] = {
+                            'present': True,  # Mark as present since it's intentionally excluded
+                            'confidence': 0.9,
+                            'explanation': "This item is not applicable to this course.",
+                            'evidence': "Marked as not applicable in the additional context.",
+                            'method': 'context_analysis',
+                            'status': 'na'  # Special status for not applicable items
+                        }
+                        continue
+                        
                     is_present = check_item_in_document(item, outline_text, enhanced_context)
                     explanation = "The item was found in the document." if is_present else "The item was not found in the document."
                     evidence = ""
