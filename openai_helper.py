@@ -188,7 +188,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 response_format={"type": "json_object"},
                 temperature=temperature,  # Use the provided temperature parameter
                 max_tokens=400,   # Limit token output to speed up response
-                timeout=10  # 10 second timeout to prevent hanging
+                timeout=5  # 5 second timeout to prevent hanging
             )
             
             # Estimate response tokens
@@ -749,7 +749,7 @@ def fallback_analyze_item(item: str, document_text: str, additional_context: str
         'method': 'fallback_analysis'
     }
 
-def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
+def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 2, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
     Process each checklist item using AI-powered semantic understanding.
     If AI analysis fails, try a fallback method to ensure all items are analyzed.
@@ -761,14 +761,14 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     formatting, or section titles, and uses deep understanding of intent and meaning to
     determine whether the course outline addresses each requirement.
 
-    IMPORTANT: Each checklist item is analyzed three times independently, with different
-    approaches to ensure thorough verification from multiple perspectives. This increases
-    the reliability of the analysis and reduces false negatives.
+    IMPORTANT: Each checklist item is analyzed with different approaches to ensure 
+    thorough verification from multiple perspectives. This increases the reliability 
+    of the analysis and reduces false negatives, while being mindful of timeouts.
 
     Args:
         items: List of checklist items to analyze
         document_text: The full text of the document to check against
-        max_attempts: Number of AI analysis attempts PER ITEM for verification (at least 3 recommended)
+        max_attempts: Number of AI analysis attempts PER ITEM for verification (1 or 2 recommended for web requests)
         additional_context: Optional context provided by the user about the course
 
     Returns:
@@ -907,8 +907,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
         ]
         
-        # Force exactly 3 verification attempts for every item to ensure thorough analysis
-        actual_attempts = 3
+        # We'll use 1-2 verification attempts per item to avoid timeouts
+        # Use fewer attempts than specified if we're using a web request (max_attempts is usually 2)
+        actual_attempts = min(2, max_attempts)
         
         for attempt in range(actual_attempts):
             try:

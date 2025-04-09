@@ -185,8 +185,8 @@ def index():
                     if ENABLE_OPENAI and api_attempts > 0:
                         try:
                             from openai_helper import analyze_checklist_items_batch
-                            # Reduce verification attempts and enable parallel processing
-                            optimized_attempts = min(2, api_attempts)  # Cap at 2 attempts for faster processing
+                            # Reduce verification attempts to avoid timeout
+                            optimized_attempts = min(1, api_attempts)  # Cap at 1 attempt for web requests
                             logger.info("Using OpenAI for enhanced analysis...")
                             results = analyze_checklist_items_batch(
                                 checklist_items, 
