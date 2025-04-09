@@ -148,16 +148,28 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         # Create system message for OpenAI
         system_message = """
         You are an expert academic policy compliance checker for the University of Calgary.
-        You'll analyze course outlines against specific checklist items contextually - don't look for exact phrasing.
         
-        For each checklist item, provide a structured JSON object with these keys:
-        - "present": true or false (must be lowercase booleans)
+        IMPORTANT: You must analyze course outlines entirely through contextual understanding, not pattern matching. 
+        Look for the underlying concepts and requirements described in each checklist item, even if the exact 
+        phrasing differs in the document. Your analysis MUST be based solely on AI comprehension of the document's content.
+        
+        For each checklist item, carefully read its detailed description and then deeply analyze the document to 
+        determine if the requirement is present in any form. Consider synonyms, related phrases, and contextual 
+        indicators that fulfill the requirement's intent, even when exact keywords are absent.
+        
+        You MUST provide your response as a valid JSON object. Structure your JSON response with these exact keys:
+        - "results": an array of JSON objects, one for each checklist item analyzed
+        
+        Each object in the results array MUST have these exact keys:
+        - "present": boolean value (true or false, lowercase)
         - "confidence": number between 0.0 and 1.0 
-        - "explanation": a brief explanation under 150 characters
-        - "evidence": a direct quote from the outline, or "" if not found
-        - "method": always set to "ai_general_analysis"
+        - "explanation": string with brief explanation under 150 characters
+        - "evidence": string with direct quote from the outline, or "" if not found
+        - "method": string value, always set to "ai_general_analysis"
         
         Be strict and thorough. If something is unclear or not present, mark it as false.
+        
+        Your entire response MUST be pure JSON. Do not include any text, explanations, or markdown outside of the JSON object.
         """
         
         user_message = f"""
@@ -169,15 +181,27 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         CHECKLIST ITEMS TO ANALYZE:
         {json.dumps(batch_items, indent=2)}
         
-        For EACH checklist item, analyze the document to determine if the requirement is met.
+        CRITICAL INSTRUCTIONS:
+        1. Use contextual understanding NOT pattern matching - look for concepts not exact words
+        2. For each item, carefully read its full detailed description before analyzing
+        3. Search for information in the document that meets the requirement's intent
+        4. Consider related concepts, synonyms, and implicit information in the document
+        5. Look for information embedded anywhere in the document, even in unexpected sections
+        6. Do not rely on exact keyword matches or specific section headers
         
-        Return a JSON object with a "results" array containing exactly {len(batch_items)} objects - one for each checklist item in the order provided.
+        For EACH checklist item, perform deep contextual analysis to determine if the requirement is genuinely met in any form.
+        
+        RESPONSE FORMAT REQUIREMENTS:
+        Your response MUST be valid JSON and ONLY valid JSON. Nothing else.
+        Format your response as a JSON object with a "results" array containing exactly {len(batch_items)} objects - one for each checklist item in the order provided.
         Each object in the array must have all required fields:
         - "present" (boolean): true if the requirement is met, false if not
         - "confidence" (float): a number between 0.0 and 1.0 indicating your confidence
         - "explanation" (string): brief explanation (<150 chars) of why the requirement is met or not
         - "evidence" (string): a direct quote from the document supporting your determination, or empty string if not found
         - "method" (string): always "ai_general_analysis"
+        
+        Ensure your response is ONLY valid JSON. Do not include any explanatory text or markdown formatting outside of the JSON object.
         """
         
         # Process this batch using OpenAI
@@ -189,7 +213,7 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             
             # Make the OpenAI API call
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # Using 3.5-turbo for faster analysis
+                model="gpt-3.5-turbo",  # Using gpt-3.5-turbo for faster analysis with contextual understanding
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}

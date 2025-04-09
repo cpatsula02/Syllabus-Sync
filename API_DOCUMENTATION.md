@@ -4,10 +4,12 @@ This API analyzes course outlines against 26 institutional compliance requiremen
 
 ## Implementation Details
 
-The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. To ensure reliable performance and prevent timeouts, the implementation:
+The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. The analysis is based entirely on contextual understanding of the document, NOT pattern matching - the system looks for concepts and requirements rather than specific keywords or patterns. 
+
+To ensure reliable performance and prevent timeouts, the implementation:
 
 1. Processes checklist items in small batches (3 items at a time) to optimize API response times
-2. Uses gpt-3.5-turbo for efficient and cost-effective analysis of each batch
+2. Uses GPT-3.5-Turbo with enhanced prompts for contextual understanding and efficient analysis of each batch
 3. Implements robust error handling to ensure the API always returns properly formatted responses
 4. Has extended timeouts (120 seconds per batch, 600 seconds total) and enhanced retry logic (3 attempts) to handle API stability issues
 5. Supports both plain text input and document file uploads (PDF, DOCX)
