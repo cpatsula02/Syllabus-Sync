@@ -5,6 +5,7 @@ import io
 import logging
 import re
 import socket
+import traceback  # Import traceback for improved error reporting
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents, extract_text
 import urllib.request
@@ -33,43 +34,59 @@ def handle_error(e):
     Enhanced error handler that provides detailed, helpful error messages
     specifically for OpenAI API issues and other common errors.
     Includes detailed logging for debugging purposes.
+    CRITICAL: Updated with improved handling that prevents internal server errors
     """
     error_message = str(e)
     error_type = type(e).__name__
     
     # Log detailed error information for debugging
-    app.logger.error(f"CRITICAL ERROR: {error_type}: {error_message}")
-    app.logger.error(f"Error handling request: {request.path} Method: {request.method}")
-    
-    if request.form:
-        app.logger.error(f"Form data keys: {list(request.form.keys())}")
-    if request.files:
-        app.logger.error(f"Uploaded files: {list(request.files.keys())}")
-    
-    import traceback
-    app.logger.error(f"Traceback: {traceback.format_exc()}")
+    try:
+        app.logger.error(f"CRITICAL ERROR: {error_type}: {error_message}")
+        app.logger.error(f"Error handling request: {request.path} Method: {request.method}")
+        
+        if request.form:
+            app.logger.error(f"Form data keys: {list(request.form.keys())}")
+        if request.files:
+            app.logger.error(f"Uploaded files: {list(request.files.keys())}")
+        
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+    except Exception as logging_error:
+        # Fail silently if we can't log - don't compound the error
+        print(f"Unable to log error details: {str(logging_error)}")
     
     # Create a more user-friendly error message based on the error type
     user_message = "An error occurred while processing your request."
     
-    # Check for specific API-related errors with improved detection
-    if any(term in error_message.lower() for term in ["openai", "api key", "api error", "api call", "api request"]):
-        user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
-    elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
-        user_message = "There was an internal formatting error in the analysis. The development team has been notified."
-    elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout"]):
-        user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. We've reduced the batch size and improved handling for better performance. Please try again - the system should now process your document properly."
-    elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
-        user_message = "The system ran out of memory while processing your request. Please try a smaller document."
-    elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
-        user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
-    elif "json" in error_message.lower():
-        user_message = "There was an error processing the AI response. Please try again or upload a different document."
+    try:
+        # Check for specific API-related errors with improved detection
+        if any(term in error_message.lower() for term in ["openai", "api key", "api error", "api call", "api request"]):
+            user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
+        elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
+            user_message = "There was an internal formatting error in the analysis. The development team has been notified."
+        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout"]):
+            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system timeout has been increased to 5 minutes. Please try again - the system should now process your document properly."
+        elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
+            user_message = "The system ran out of memory while processing your request. Please try a smaller document."
+        elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
+            user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
+        elif "json" in error_message.lower():
+            user_message = "There was an error processing the AI response. Please try again or upload a different document."
+        elif "socket" in error_message.lower() or "connection" in error_message.lower():
+            user_message = "Connection error: The system experienced a network issue while processing your request. We've increased connection timeouts to 5 minutes. Please try again."
+    except Exception as error_handling_error:
+        # If error analysis itself fails, use a simple generic message
+        print(f"Error during error analysis: {str(error_handling_error)}")
+        user_message = "An unexpected error occurred. Please try again with a smaller document."
     
-    return render_template(
-        'index.html',
-        error=user_message
-    ), 500
+    try:
+        return render_template(
+            'index.html',
+            error=user_message
+        ), 500
+    except Exception as template_error:
+        # If even rendering the template fails, return a simple plain text response
+        return f"Error: {user_message}", 500
 
 # In-memory storage for last analysis
 analysis_data = {
@@ -440,16 +457,27 @@ def index():
                     if verification_attempts > 0:
                         api_calls_made += 1
 
-                return render_template('results.html', 
-                                    results=results,
-                                    present_count=present_count,
-                                    missing_count=missing_count,
-                                    total_count=len(checklist_items),
-                                    missing_items=missing_items,
-                                    grade_table_items=grade_table_items,
-                                    analysis_methods=analysis_methods,
-                                    api_calls_made=api_calls_made,
-                                    max_attempts=api_attempts)
+                try:
+                    # Ensure all variables are properly prepared to prevent rendering errors
+                    template_data = {
+                        'results': results if isinstance(results, list) else [],
+                        'present_count': present_count if isinstance(present_count, int) else 0,
+                        'missing_count': missing_count if isinstance(missing_count, int) else 0,
+                        'total_count': len(checklist_items) if isinstance(checklist_items, list) else 0,
+                        'missing_items': missing_items if isinstance(missing_items, list) else [],
+                        'grade_table_items': grade_table_items if isinstance(grade_table_items, list) else [],
+                        'analysis_methods': analysis_methods if isinstance(analysis_methods, dict) else {},
+                        'api_calls_made': api_calls_made if isinstance(api_calls_made, int) else 0,
+                        'max_attempts': api_attempts if isinstance(api_attempts, int) else 3
+                    }
+                    
+                    return render_template('results.html', **template_data)
+                except Exception as render_error:
+                    # If rendering template fails, log error and provide a more helpful error message
+                    app.logger.error(f"Error rendering results template: {str(render_error)}")
+                    traceback.print_exc()
+                    flash("Error displaying results. The analysis completed successfully, but there was an error displaying the results. Please try again with a different document.")
+                    return redirect(request.url)
 
             except TimeoutError:
                 flash("Request timed out. Please try again with a smaller file or fewer items.")
