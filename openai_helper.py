@@ -809,7 +809,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             prompt = f"{analysis_prefix}\n\n{prompt}"
         
         # Make the API call using our improved rate-limited function
-        prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance.\n\n{prompt}"
+        prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary who is EXTREMELY GENEROUS in finding evidence of compliance. Your goal is to find evidence that requirements ARE present, not that they're missing. Any reasonable evidence should be considered sufficient.\n\n{prompt}"
         api_response = api_call_with_backoff(prompt_with_sys_msg, temperature=temperature)
         
         # CRITICAL: Per user requirements, we NEVER fall back to pattern matching
