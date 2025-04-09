@@ -761,6 +761,11 @@ def download_pdf():
         pdf.add_page()
         pdf.set_font('DejaVu', 'B', 16)
         pdf.cell(190, 10, 'Complete Checklist Evaluation', 0, 1, 'C')
+        pdf.ln(3)
+        
+        # Add explanation text
+        pdf.set_font('DejaVu', '', 10)
+        pdf.multi_cell(190, 5, 'This table provides a detailed evaluation of the course outline against all required checklist items. Each item shows the complete requirement description and current compliance status.', 0, 'L')
         pdf.ln(5)
         
         # Load the enhanced checklist descriptions
@@ -786,66 +791,98 @@ def download_pdf():
                         item_to_desc_map[checklist_item] = item_desc
                         break
         
-        # Table header
-        pdf.set_font('DejaVu', 'B', 10)
-        pdf.cell(20, 8, 'Item #', 1, 0, 'C')
-        pdf.cell(40, 8, 'Status', 1, 0, 'C')
-        pdf.cell(130, 8, 'Detailed Requirement', 1, 1, 'L')
+        # Create a professional table design
+        # Set up the table header with blue background
+        pdf.set_fill_color(220, 230, 241)  # Light blue background
+        pdf.set_font('DejaVu', 'B', 9)
+        pdf.cell(12, 10, '#', 1, 0, 'C', True)
+        pdf.cell(40, 10, 'Status', 1, 0, 'C', True)
+        pdf.cell(138, 10, 'Detailed Requirement Description', 1, 1, 'C', True)
         
         # Add each detailed description with status
         item_number = 1
-        for item in unique_checklist_items:
-            # Get the status from results
-            result = analysis_data['analysis_results'].get(item, {})
-            status = result.get('status', 'present' if item not in analysis_data['missing_items'] else 'missing')
-            
-            # Find the detailed description for this item
-            detailed_desc = ""
-            if item in item_to_desc_map:
-                detailed_desc = item_to_desc_map[item]
-            else:
-                # If no match found, use the item text itself
-                detailed_desc = f"{item_number}. {item}"
-            
-            # Get item number and name from description
-            match = re.match(r'^(\d+)\.\s+(.+?):', detailed_desc)
+        alternate_row = False
+        
+        # First, process the items to ensure all 26 from enhanced_checklist are included
+        processed_items = set()
+        enhanced_items = []
+        
+        # First pass to match existing items
+        for item_desc in enhanced_checklist:
+            match = re.match(r'^(\d+)\.\s+(.+?):', item_desc)
             if match:
                 num = match.group(1)
                 name = match.group(2)
-                description = detailed_desc[len(match.group(0)):]
-            else:
-                num = str(item_number)
-                name = item
-                description = ""
+                found_match = False
                 
-            # Set position for item row
-            y_position = pdf.get_y()
-            
-            # Calculate heights for multiline cells
-            item_height = 10  # Base height
-            
+                # Try to find this item in the user's checklist
+                for checklist_item in unique_checklist_items:
+                    if name.lower() in checklist_item.lower():
+                        result = analysis_data['analysis_results'].get(checklist_item, {})
+                        status = result.get('status', 'present' if checklist_item not in analysis_data['missing_items'] else 'missing')
+                        enhanced_items.append((num, name, item_desc[len(match.group(0)):], status, checklist_item))
+                        processed_items.add(checklist_item)
+                        found_match = True
+                        break
+                
+                # If no match found, add it as a default item
+                if not found_match:
+                    enhanced_items.append((num, name, item_desc[len(match.group(0)):], 'missing', None))
+        
+        # Second pass to add any remaining items from user's checklist
+        for checklist_item in unique_checklist_items:
+            if checklist_item not in processed_items:
+                result = analysis_data['analysis_results'].get(checklist_item, {})
+                status = result.get('status', 'present' if checklist_item not in analysis_data['missing_items'] else 'missing')
+                enhanced_items.append((str(len(enhanced_items) + 1), checklist_item, "", status, checklist_item))
+        
+        # Sort by item number
+        enhanced_items.sort(key=lambda x: int(x[0]))
+        
+        # Now render the table with all items
+        for num, name, description, status, original_item in enhanced_items:
+            # Set alternating row background
+            alternate_row = not alternate_row
+            if alternate_row:
+                pdf.set_fill_color(245, 245, 245)  # Light gray for alternating rows
+            else:
+                pdf.set_fill_color(255, 255, 255)  # White
+                
+            # Calculate row height based on content
             # For description, calculate based on text length
-            description_text = f"{name}: {description}"
-            description_length = len(description_text)
-            chars_per_line = 45  # Characters per line estimate
+            full_description = f"{name}: {description}"
+            description_length = len(full_description)
+            chars_per_line = 40  # Characters per line estimate (conservative)
             desc_lines = max(1, description_length / chars_per_line)
-            description_height = max(item_height, desc_lines * 5)  # At least 10mm, 5mm per line
+            row_height = max(12, desc_lines * 5)  # At least 12mm, 5mm per line
             
             # Add extra padding for longer descriptions
-            if desc_lines > 3:
-                description_height += 5
-            if desc_lines > 6:
-                description_height += 5
+            if desc_lines > 4:
+                row_height += 5
+            if desc_lines > 8:
+                row_height += 5
+            
+            # Save current position for drawing cells of equal height
+            y_position = pdf.get_y()
                 
             # Draw item number cell
             pdf.set_font('DejaVu', 'B', 9)
-            pdf.rect(pdf.get_x(), y_position, 20, description_height)
-            # Center item number text
-            pdf.set_xy(pdf.get_x() + (20 - pdf.get_string_width(num)) / 2, y_position + 2)
-            pdf.cell(20, 5, num, 0, 0, 'C')
             
-            # Draw status cell with color coding
-            pdf.set_xy(pdf.get_x() + 20 - pdf.get_string_width(num) / 2, y_position)
+            # Draw the rectangle for item number with fill
+            x_pos = pdf.get_x()
+            # Set fill color based on alternating rows
+            if alternate_row:
+                pdf.set_fill_color(245, 245, 245)  # Light gray
+            else:
+                pdf.set_fill_color(255, 255, 255)  # White
+            pdf.rect(x_pos, y_position, 12, row_height, 'F')  # 'F' means filled rectangle
+            
+            # Center item number text
+            pdf.set_xy(x_pos + (12 - pdf.get_string_width(num)) / 2, y_position + 2)
+            pdf.cell(12, 5, num, 0, 0, 'C')
+            
+            # Move to status cell position
+            pdf.set_xy(x_pos + 12, y_position)
             
             # Set color based on status
             if status == 'na':
@@ -857,61 +894,91 @@ def download_pdf():
             else:
                 pdf.set_text_color(255, 0, 0)  # Red for missing
                 status_text = 'MISSING'
-                
-            pdf.rect(pdf.get_x(), y_position, 40, description_height)
+            
+            # Draw the status cell rectangle with fill
+            status_x = pdf.get_x()
+            # Set fill color based on alternating rows
+            if alternate_row:
+                pdf.set_fill_color(245, 245, 245)  # Light gray
+            else:
+                pdf.set_fill_color(255, 255, 255)  # White
+            pdf.rect(status_x, y_position, 40, row_height, 'F')  # 'F' means filled rectangle
+            
+            # Draw status cell border
+            pdf.rect(status_x, y_position, 40, row_height)
+            
             # Center status text vertically
-            pdf.set_xy(pdf.get_x() + (40 - pdf.get_string_width(status_text)) / 2, y_position + description_height/2 - 2)
+            pdf.set_xy(status_x + (40 - pdf.get_string_width(status_text)) / 2, y_position + row_height/2 - 2)
+            pdf.set_font('DejaVu', 'B', 9)
             pdf.cell(40, 5, status_text, 0, 0, 'C')
             pdf.set_text_color(0, 0, 0)  # Reset to black
             
-            # Draw description cell
-            pdf.set_xy(pdf.get_x() + 40 - (40 - pdf.get_string_width(status_text)) / 2, y_position)
-            pdf.rect(pdf.get_x(), y_position, 130, description_height)
+            # Move to description cell position
+            pdf.set_xy(status_x + 40, y_position)
+            
+            # Draw description cell rectangle with fill
+            desc_x = pdf.get_x()
+            # Set fill color based on alternating rows
+            if alternate_row:
+                pdf.set_fill_color(245, 245, 245)  # Light gray
+            else:
+                pdf.set_fill_color(255, 255, 255)  # White
+            pdf.rect(desc_x, y_position, 138, row_height, 'F')  # 'F' means filled rectangle
+            
+            # Draw description cell border
+            pdf.rect(desc_x, y_position, 138, row_height)
             
             # Format description text - Item name in bold, then details
             pdf.set_xy(pdf.get_x() + 3, y_position + 2)  # Add internal padding
             pdf.set_font('DejaVu', 'B', 9)
-            pdf.cell(124, 5, name, 0, 1, 'L')
+            pdf.cell(132, 5, name, 0, 1, 'L')
             
             # Add the description text
             pdf.set_xy(pdf.get_x() + 3, pdf.get_y())
             pdf.set_font('DejaVu', '', 8)
             
-            # Format the description to fit the cell width
-            wrapped_text = ""
+            # Format the description to fit the cell width with proper wrapping
             if description:
                 words = description.split()
                 line = ""
+                wrapped_text = ""
                 for word in words:
-                    if pdf.get_string_width(line + word) < 124:
-                        line += word + " "
+                    test_line = line + word + " "
+                    if pdf.get_string_width(test_line) < 132:
+                        line = test_line
                     else:
                         wrapped_text += line + "\n"
                         line = word + " "
                 wrapped_text += line
                 
                 # Write the wrapped text
-                pdf.multi_cell(124, 4, wrapped_text, 0, 'L')
+                pdf.multi_cell(132, 4, wrapped_text, 0, 'L')
             
             # Move to next row position
-            pdf.set_xy(pdf.get_x(), y_position + description_height)
+            pdf.set_xy(pdf.get_x(), y_position + row_height)
             
             # Check for page break if needed
             if pdf.get_y() > 270:
                 pdf.add_page()
-                # Repeat the table header
-                pdf.set_font('DejaVu', 'B', 10)
-                pdf.cell(20, 8, 'Item #', 1, 0, 'C')
-                pdf.cell(40, 8, 'Status', 1, 0, 'C')
-                pdf.cell(130, 8, 'Detailed Requirement', 1, 1, 'L')
-            
-            item_number += 1
+                # Repeat the table header with blue background
+                pdf.set_fill_color(220, 230, 241)  # Light blue background
+                pdf.set_font('DejaVu', 'B', 9)
+                pdf.cell(12, 10, '#', 1, 0, 'C', True)
+                pdf.cell(40, 10, 'Status', 1, 0, 'C', True)
+                pdf.cell(138, 10, 'Detailed Requirement Description', 1, 1, 'C', True)
+                # Reset alternating row counter
+                alternate_row = False
         
         # Add summary at the end
-        pdf.ln(10)
-        pdf.set_font('DejaVu', 'B', 12)
-        pdf.cell(190, 10, 'Overall Compliance Summary', 0, 1, 'L')
+        pdf.add_page()
+        pdf.set_font('DejaVu', 'B', 16)
+        pdf.cell(190, 10, 'Compliance Summary Report', 0, 1, 'C')
+        pdf.ln(3)
+        
+        # Add summary explanation
         pdf.set_font('DejaVu', '', 10)
+        pdf.multi_cell(190, 5, 'This report summarizes the compliance status of the course outline against the University of Calgary checklist requirements. The compliance rate is calculated only for applicable items, excluding those marked as N/A.', 0, 'L')
+        pdf.ln(5)
         
         # Count different statuses
         present_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
@@ -923,12 +990,102 @@ def download_pdf():
         applicable_items = total_items - na_count
         compliance_percentage = (present_count / applicable_items * 100) if applicable_items > 0 else 100
         
-        pdf.cell(95, 8, f'Total Requirements: {total_items}', 1, 0, 'L')
-        pdf.cell(95, 8, f'Applicable Requirements: {applicable_items}', 1, 1, 'L')
-        pdf.cell(95, 8, f'Requirements Present: {present_count}', 1, 0, 'L')
-        pdf.cell(95, 8, f'Requirements Missing: {missing_count}', 1, 1, 'L')
-        pdf.cell(95, 8, f'Requirements N/A: {na_count}', 1, 0, 'L')
-        pdf.cell(95, 8, f'Compliance Rate: {compliance_percentage:.1f}%', 1, 1, 'L')
+        # Create a professional summary section
+        # Draw header
+        pdf.set_fill_color(220, 230, 241)  # Light blue background
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 12, 'Course Outline Compliance Statistics', 1, 1, 'C', True)
+        
+        # Create a table for statistics
+        pdf.set_font('DejaVu', '', 10)
+        
+        # Row 1: Total and Applicable
+        pdf.set_fill_color(245, 245, 245)  # Light gray
+        pdf.cell(95, 10, f'Total Requirements: {total_items}', 1, 0, 'L', True)
+        pdf.cell(95, 10, f'Applicable Requirements: {applicable_items}', 1, 1, 'L', True)
+        
+        # Row 2: Present and Missing
+        pdf.set_fill_color(255, 255, 255)  # White
+        pdf.cell(95, 10, f'Requirements Present: {present_count}', 1, 0, 'L', True)
+        pdf.cell(95, 10, f'Requirements Missing: {missing_count}', 1, 1, 'L', True)
+        
+        # Row 3: N/A and Rate
+        pdf.set_fill_color(245, 245, 245)  # Light gray
+        pdf.cell(95, 10, f'Requirements N/A: {na_count}', 1, 0, 'L', True)
+        
+        # Set compliance rate color based on percentage
+        if compliance_percentage >= 90:
+            pdf.set_text_color(0, 128, 0)  # Green for high compliance
+        elif compliance_percentage >= 70:
+            pdf.set_text_color(255, 140, 0)  # Orange for medium compliance
+        else:
+            pdf.set_text_color(255, 0, 0)  # Red for low compliance
+            
+        pdf.set_font('DejaVu', 'B', 10)
+        pdf.cell(95, 10, f'Compliance Rate: {compliance_percentage:.1f}%', 1, 1, 'L', True)
+        pdf.set_text_color(0, 0, 0)  # Reset to black
+        
+        # Add visual compliance meter
+        pdf.ln(10)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 10, 'Visual Compliance Indicator', 0, 1, 'L')
+        
+        # Draw progress bar background
+        bar_width = 180
+        bar_height = 20
+        pdf.set_fill_color(220, 220, 220)  # Light gray background
+        pdf.rect(15, pdf.get_y(), bar_width, bar_height, 'F')  # 'F' means filled rectangle
+        
+        # Draw progress bar fill based on compliance percentage
+        filled_width = min(bar_width * (compliance_percentage / 100), bar_width)
+        
+        # Set color based on percentage
+        if compliance_percentage >= 90:
+            pdf.set_fill_color(0, 180, 0)  # Green for high compliance
+        elif compliance_percentage >= 70:
+            pdf.set_fill_color(255, 140, 0)  # Orange for medium compliance
+        else:
+            pdf.set_fill_color(255, 0, 0)  # Red for low compliance
+            
+        pdf.rect(15, pdf.get_y(), filled_width, bar_height, 'F')  # 'F' means filled rectangle
+        
+        # Add percentage text on top of the bar
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.set_text_color(255, 255, 255)  # White text
+        
+        # Center the text on the filled portion if it's wide enough
+        if filled_width > 40:
+            pdf.set_xy(15 + (filled_width / 2) - 20, pdf.get_y() + (bar_height / 2) - 3)
+            pdf.cell(40, 6, f'{compliance_percentage:.1f}%', 0, 0, 'C')
+        else:
+            # Place text after the bar if too narrow
+            pdf.set_xy(15 + bar_width + 5, pdf.get_y() + (bar_height / 2) - 3)
+            pdf.set_text_color(0, 0, 0)  # Black text
+            pdf.cell(40, 6, f'{compliance_percentage:.1f}%', 0, 0, 'L')
+        
+        pdf.set_text_color(0, 0, 0)  # Reset to black
+        
+        # Add compliance recommendation
+        pdf.ln(30)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 10, 'Compliance Recommendation:', 0, 1, 'L')
+        
+        recommendation_text = ""
+        if compliance_percentage >= 90:
+            recommendation_text = "This course outline is highly compliant with the University of Calgary's requirements. Minor improvements may still be beneficial for the few missing items."
+        elif compliance_percentage >= 70:
+            recommendation_text = "This course outline meets most of the University of Calgary's requirements, but needs attention to several missing items. Please review the missing requirements and update accordingly."
+        else:
+            recommendation_text = "This course outline requires significant improvements to meet the University of Calgary's requirements. Please carefully review all missing items and update the outline accordingly."
+        
+        pdf.set_font('DejaVu', '', 10)
+        pdf.multi_cell(190, 5, recommendation_text, 0, 'L')
+        
+        # Add a note about N/A items
+        if na_count > 0:
+            pdf.ln(5)
+            pdf.set_font('DejaVu', 'I', 10)
+            pdf.multi_cell(190, 5, f"Note: {na_count} items were marked as Not Applicable and excluded from the compliance rate calculation. These may include requirements that don't apply to this specific course, such as group work or final exam details for courses without these components.", 0, 'L')
 
         # Create temporary file and save
         import tempfile
