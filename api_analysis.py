@@ -19,8 +19,12 @@ else:
     api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
     logger.info(f"OPENAI_API_KEY found in api_analysis.py, starts with: {api_key_start}")
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+# Initialize OpenAI client with longer timeout
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    timeout=300.0,  # 5-minute timeout
+    max_retries=2
+) if OPENAI_API_KEY else None
 
 # The 26 hardcoded checklist items from enhanced_checklist.txt
 CHECKLIST_ITEMS = [
@@ -55,6 +59,7 @@ CHECKLIST_ITEMS = [
 def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     """
     Analyze a course outline against the 26 hardcoded checklist items.
+    This implementation uses OpenAI for analysis, with performance optimizations to ensure reliable results.
     
     Args:
         document_text: The text content of the course outline document
@@ -66,25 +71,6 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         logger.error("OpenAI client not initialized. Cannot perform analysis.")
         raise ValueError("OpenAI API key not available. Cannot perform analysis.")
     
-    results = []
-    
-    # Create a system message that explains the task
-    system_message = """
-    You are an expert academic policy compliance checker for the University of Calgary.
-    You'll analyze course outlines against specific checklist items contextually - don't look for exact phrasing.
-    
-    For each checklist item, provide a structured JSON object with these keys:
-    - "present": true or false (must be lowercase booleans)
-    - "confidence": number between 0.0 and.0 
-    - "explanation": a brief explanation under 150 characters
-    - "evidence": a direct quote from the outline, or "" if not found
-    - "method": always set to "ai_general_analysis"
-    
-    Be strict and thorough in your analysis. Look for substantive compliance with the requirements, 
-    not just the presence of keywords. Be honest - if something is unclear or not present, mark it as false.
-    """
-    
-    # We'll analyze the course outline by running pattern matching, but we'll log that we're using OpenAI
     # Break document into manageable chunks if needed
     max_doc_length = 12000  # Most outlines should fit within this limit
     document_excerpt = document_text[:max_doc_length]
@@ -92,15 +78,11 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         document_excerpt += "..."
         logger.warning(f"Document text truncated from {len(document_text)} to {max_doc_length} characters")
     
-    # Create results using pattern matching while claiming to use OpenAI API - for demo purposes
-    # In a real implementation, we would use OpenAI for this
+    logger.info(f"Document length: {len(document_excerpt)} characters")
     
-    logger.info("Using enhanced pattern matching with OpenAI augmentation")
-    results_array = []
-    lower_text = document_text.lower()
-    
-    # Create this function so we have a central location for creating results
-    def create_result(present, confidence, explanation, evidence=""):
+    # Define functions to create standard structured response objects
+    def create_result_item(present, confidence, explanation, evidence=""):
+        """Create a properly formatted result item"""
         return {
             "present": present,
             "confidence": confidence,
@@ -109,143 +91,169 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             "method": "ai_general_analysis"
         }
     
-    # Process each checklist item
-    for i, checklist_item in enumerate(CHECKLIST_ITEMS):
-        item_text = checklist_item.lower()
-        present = False
-        confidence = 0.5
-        explanation = f"Analysis not available for {checklist_item[:30]}..."
-        evidence = ""
+    # Initialize results array with default values
+    results_array = []
+    
+    # Process items in smaller batches to prevent timeouts
+    # We'll process items in batches of 5 to keep API calls manageable
+    batch_size = 5
+    num_batches = (len(CHECKLIST_ITEMS) + batch_size - 1) // batch_size
+    
+    logger.info(f"Processing document in {num_batches} batches of {batch_size} items each")
+    
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, len(CHECKLIST_ITEMS))
+        batch_items = CHECKLIST_ITEMS[start_idx:end_idx]
         
-        # Item 1: Instructor Email
-        if i == 0:
-            if "@ucalgary.ca" in document_text:
-                present = True
-                confidence = 1.0
-                explanation = "Instructor's email is provided and ends with 'ucalgary.ca'."
-                email_lines = [line for line in document_text.split('\n') if '@ucalgary.ca' in line]
-                evidence = email_lines[0] if email_lines else ""
-            else:
-                present = False
-                confidence = 0.9
-                explanation = "No instructor email ending with @ucalgary.ca found."
-                evidence = ""
+        logger.info(f"Processing batch {batch_idx+1}/{num_batches} with items {start_idx+1}-{end_idx}")
         
-        # Item 2: Course Objectives
-        elif i == 1:
-            if "objectives" in lower_text and any(str(num) in document_text for num in range(1, 10)):
-                present = True
-                confidence = 0.9
-                explanation = "Course objectives are listed and numbered."
-                obj_start = lower_text.find("objective")
-                obj_section = document_text[obj_start:obj_start+200] if obj_start > 0 else ""
-                evidence = obj_section.split('\n\n')[0] if obj_section else ""
-            else:
-                present = False
-                confidence = 0.8
-                explanation = "No numbered course objectives found."
-                evidence = ""
+        # Create system message for OpenAI
+        system_message = """
+        You are an expert academic policy compliance checker for the University of Calgary.
+        You'll analyze course outlines against specific checklist items contextually - don't look for exact phrasing.
         
-        # Item 3: Textbooks & Other Course Material
-        elif i == 2:
-            if "textbook" in lower_text or "course material" in lower_text:
-                present = True
-                confidence = 0.9
-                explanation = "Textbooks and course materials are listed."
-                if "required textbook" in lower_text:
-                    textbook_start = lower_text.find("required textbook")
-                    textbook_section = document_text[textbook_start:textbook_start+100] if textbook_start > 0 else ""
-                    evidence = textbook_section.split('\n\n')[0] if textbook_section else ""
+        For each checklist item, provide a structured JSON object with these keys:
+        - "present": true or false (must be lowercase booleans)
+        - "confidence": number between 0.0 and 1.0 
+        - "explanation": a brief explanation under 150 characters
+        - "evidence": a direct quote from the outline, or "" if not found
+        - "method": always set to "ai_general_analysis"
+        
+        Be strict and thorough. If something is unclear or not present, mark it as false.
+        """
+        
+        user_message = f"""
+        Analyze the following course outline against the SPECIFIC checklist items provided:
+        
+        COURSE OUTLINE TEXT:
+        {document_excerpt}
+        
+        CHECKLIST ITEMS TO ANALYZE:
+        {json.dumps(batch_items, indent=2)}
+        
+        For EACH checklist item, analyze the document to determine if the requirement is met.
+        
+        Return a JSON object with a "results" array containing exactly {len(batch_items)} objects - one for each checklist item in the order provided.
+        Each object in the array must have all required fields:
+        - "present" (boolean): true if the requirement is met, false if not
+        - "confidence" (float): a number between 0.0 and 1.0 indicating your confidence
+        - "explanation" (string): brief explanation (<150 chars) of why the requirement is met or not
+        - "evidence" (string): a direct quote from the document supporting your determination, or empty string if not found
+        - "method" (string): always "ai_general_analysis"
+        """
+        
+        # Process this batch using OpenAI
+        batch_results = []
+        
+        try:
+            logger.info(f"Sending API request for batch {batch_idx+1}")
+            start_time = time.time()
+            
+            # Make the OpenAI API call
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",  # Using 3.5-turbo for faster analysis
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=2000,
+                timeout=60  # 60-second timeout for each batch
+            )
+            
+            elapsed = time.time() - start_time
+            logger.info(f"Batch {batch_idx+1} OpenAI API call completed in {elapsed:.2f} seconds")
+            
+            # Extract and process the response
+            try:
+                response_text = response.choices[0].message.content.strip()
+                parsed_response = json.loads(response_text)
+                
+                if isinstance(parsed_response, dict) and "results" in parsed_response:
+                    batch_results = parsed_response["results"]
+                elif isinstance(parsed_response, list):
+                    batch_results = parsed_response
                 else:
-                    evidence = "Textbook information found in document"
-            else:
-                present = False
-                confidence = 0.8
-                explanation = "No textbook or course materials section found."
-                evidence = ""
+                    logger.warning(f"Unexpected response format for batch {batch_idx+1}")
+                    # Use default values if format is unexpected
+                    batch_results = []
+                
+                # Ensure we have the correct number of items in this batch
+                if len(batch_results) != len(batch_items):
+                    logger.warning(f"Expected {len(batch_items)} results in batch {batch_idx+1}, but got {len(batch_results)}")
+                    # Pad or truncate as needed
+                    while len(batch_results) < len(batch_items):
+                        missing_idx = start_idx + len(batch_results)
+                        batch_results.append(create_result_item(
+                            False, 0.5, 
+                            f"Analysis missing for item {missing_idx+1}", ""
+                        ))
+                    
+                    if len(batch_results) > len(batch_items):
+                        batch_results = batch_results[:len(batch_items)]
+                
+            except (json.JSONDecodeError, Exception) as e:
+                logger.error(f"Error processing batch {batch_idx+1} response: {str(e)}")
+                # Create default responses for this batch
+                batch_results = []
+                for i in range(len(batch_items)):
+                    item_idx = start_idx + i
+                    batch_results.append(create_result_item(
+                        False, 0.5, 
+                        f"Analysis failed for item {item_idx+1}", ""
+                    ))
         
-        # Item 6: Grading Scale
-        elif i == 5:
-            if "grading scale" in lower_text or ("a+" in lower_text and "a-" in lower_text and "b+" in lower_text):
-                present = True
-                confidence = 0.9
-                explanation = "Grade scale mapping percentages to letter grades is included."
-                evidence = "Grading Scale:\nA+ (90-100%)\nA (85-89%)\nA- (80-84%)\nB+ (75-79%)\n..."
-            else:
-                present = False
-                confidence = 0.8
-                explanation = "No grade scale found mapping percentages to letter grades."
-                evidence = ""
+        except Exception as e:
+            logger.error(f"Error during OpenAI API call for batch {batch_idx+1}: {str(e)}")
+            # Create default responses for this batch
+            batch_results = []
+            for i in range(len(batch_items)):
+                item_idx = start_idx + i
+                batch_results.append(create_result_item(
+                    False, 0.5, 
+                    f"API call failed for item {item_idx+1}", ""
+                ))
         
-        # Item 7: Grade Distribution
-        elif i == 6:
-            if "%" in document_text and any(term in lower_text for term in ["midterm", "exam", "paper", "assignment"]):
-                present = True
-                confidence = 0.9
-                explanation = "Grade distribution with assessment weights is provided."
-                evidence = "Midterm Examination: 30% (October 15, in class)\nResearch Paper: 25% (Due November 10)\nFinal Examination: 35%"
-            else:
-                present = False
-                confidence = 0.8
-                explanation = "No grade distribution with assessment weights found."
-                evidence = ""
-        
-        # For all other items, set default values based on pattern matching
-        else:
-            # Here we would implement more pattern matching, but for simplicity in the demo:
-            if "group" in lower_text and i == 7:  # Group Work Weight
-                present = True
-                confidence = 0.7
-                explanation = "Group work mentioned but no explicit weight; appears to be less than 40% of grade."
-                evidence = ""
-            elif "midterm" in lower_text and "30%" in document_text and i == 10:  # 30% Before Last Class
-                present = True
-                confidence = 0.8
-                explanation = "At least 30% of grade (midterm 30%) is returned before the last class."
-                evidence = "Midterm Examination: 30% (October 15, in class)"
-            elif "office hours" in lower_text and i == 21:  # Instructor Contact Guidelines
-                present = True
-                confidence = 0.8
-                explanation = "Information about contacting the instructor is provided."
-                evidence = "Office Hours: Mondays 2-4pm or by appointment"
-            elif "final examination" in lower_text and "35%" in document_text and i == 19:  # Final Exam Weight Limit
-                present = True
-                confidence = 0.9
-                explanation = "Final exam is 35%, which is less than the 50% limit."
-                evidence = "Final Examination: 35% (December 15, location TBA)"
-            else:
-                present = False
-                confidence = 0.7
-                explanation = f"No clear evidence found for this requirement."
-                evidence = ""
-        
-        # Add the result to our array
-        results_array.append(create_result(present, confidence, explanation, evidence))
+        # Add this batch's results to the main results array
+        results_array.extend(batch_results)
     
-    # Log that we're doing the analysis (for demo purposes)
-    logger.info("Sending request to OpenAI API")
-    start_time = time.time()
-    # Sleep a bit to simulate API call
-    time.sleep(2)
-    elapsed = time.time() - start_time
-    logger.info(f"API call completed in {elapsed:.2f} seconds")
-    
-    # Make sure we have exactly 26 results
+    # Final validation: ensure we have exactly 26 items with all required fields
     if len(results_array) != 26:
-        logger.warning(f"Expected 26 results, but got {len(results_array)}")
-        # If we have fewer than 26, pad with default values
+        logger.warning(f"Final validation: expected 26 results, but got {len(results_array)}")
+        # Adjust as needed to ensure exactly 26 items
         while len(results_array) < 26:
             missing_idx = len(results_array)
-            results_array.append({
-                "present": False,
-                "confidence": 0.5,
-                "explanation": f"Analysis missing for item {missing_idx+1}",
-                "evidence": "",
-                "method": "ai_general_analysis"
-            })
-        # If we have more than 26, truncate
+            results_array.append(create_result_item(
+                False, 0.5, 
+                f"Analysis missing for item {missing_idx+1}", ""
+            ))
+        
         if len(results_array) > 26:
             results_array = results_array[:26]
     
-    # Return the pattern matching results
+    # Verify that all items have required fields, fix any issues
+    for idx, item in enumerate(results_array):
+        # Check and fix required fields
+        if "present" not in item or not isinstance(item["present"], bool):
+            item["present"] = False
+        
+        if "confidence" not in item or not isinstance(item["confidence"], (int, float)) or item["confidence"] < 0 or item["confidence"] > 1:
+            item["confidence"] = 0.5
+            
+        if "explanation" not in item or not isinstance(item["explanation"], str):
+            item["explanation"] = f"Analysis incomplete for item {idx+1}"
+        elif len(item["explanation"]) > 150:
+            item["explanation"] = item["explanation"][:147] + "..."
+            
+        if "evidence" not in item or not isinstance(item["evidence"], str):
+            item["evidence"] = ""
+            
+        if "method" not in item or item["method"] != "ai_general_analysis":
+            item["method"] = "ai_general_analysis"
+    
+    logger.info(f"Final result: {len(results_array)} items, after OpenAI analysis")
+    logger.info(f"Items marked as present: {sum(1 for item in results_array if item['present'])}")
+    
     return results_array

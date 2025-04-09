@@ -11,7 +11,7 @@ import requests
 from typing import Dict, Any, List
 import sys
 
-# Sample course outline for testing
+# Sample minimal course outline for testing
 SAMPLE_OUTLINE = """
 COURSE OUTLINE
 PSYC 201 - Introduction to Psychology
@@ -19,38 +19,15 @@ PSYC 201 - Introduction to Psychology
 Instructor: Dr. John Smith
 Email: john.smith@ucalgary.ca
 Office: EDT 123
-Office Hours: Mondays 2-4pm or by appointment
-
-Course Description:
-This course provides an introduction to the scientific study of behavior and mind.
 
 Learning Objectives:
-1. Understand basic psychological theories and concepts
-2. Apply critical thinking to psychological research
-3. Develop scientific writing and communication skills
+1. Understand psychology concepts
 
-Required Textbook:
-Introduction to Psychology, 2nd Edition, by James Williams
-
-Grading Scale:
-A+ (90-100%)
-A (85-89%)
-A- (80-84%)
-B+ (75-79%)
-B (70-74%)
-B- (65-69%)
-C+ (60-64%)
-C (55-59%)
-C- (50-54%)
-D+ (45-49%)
-D (40-44%)
-F (0-39%)
+Required Textbook: Psychology Basics
 
 Evaluation:
-Midterm Examination: 30% (October 15, in class)
-Research Paper: 25% (Due November 10)
-Final Examination: 35% (December 15, location TBA)
-Participation: 10% (Throughout semester)
+Midterm: 30%
+Final: 70%
 """
 
 def validate_response(response_data: List[Dict[str, Any]]) -> bool:

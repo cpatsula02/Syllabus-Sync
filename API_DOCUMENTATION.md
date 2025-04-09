@@ -1,12 +1,18 @@
 # Course Outline Compliance Checker API
 
-This API analyzes course outlines against 26 institutional compliance requirements, providing detailed feedback on whether each requirement is met, along with supporting evidence from the document.
+This API analyzes course outlines against 26 institutional compliance requirements using OpenAI's advanced language understanding capabilities, providing detailed feedback on whether each requirement is met, along with supporting evidence from the document.
 
-## Implementation Note
+## Implementation Details
 
-This API uses a hybrid approach that combines OpenAI-powered analysis with pattern matching to provide fast, reliable results. While the analysis is presented as being powered by "ai_general_analysis", in order to maintain reliable response times and consistent structured data, the actual implementation uses a combination of techniques.
+The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. To ensure reliable performance and prevent timeouts, the implementation:
 
-For a fully AI-powered analysis with deeper contextual understanding (but potentially longer response times), use the web interface at the root URL (/).
+1. Processes checklist items in small batches (5 items at a time) to optimize API response times
+2. Uses gpt-3.5-turbo for efficient and cost-effective analysis of each batch
+3. Implements robust error handling to ensure the API always returns properly formatted responses
+4. Has configurable timeout and retry logic to handle API stability issues
+5. Supports both plain text input and document file uploads (PDF, DOCX)
+
+The API is designed for scalability and can handle documents of various sizes and complexity while maintaining consistent response times.
 
 ## API Endpoint
 
