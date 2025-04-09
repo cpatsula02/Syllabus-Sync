@@ -108,6 +108,9 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         logger.error("OpenAI client not initialized. Cannot perform analysis.")
         raise ValueError("OpenAI API key not available. Cannot perform analysis.")
     
+    # Load detailed checklist items for second-chance analysis
+    detailed_checklist_items = load_detailed_checklist()
+    
     # Break document into manageable chunks if needed
     max_doc_length = 12000  # Most outlines should fit within this limit
     document_excerpt = document_text[:max_doc_length]
@@ -317,6 +320,101 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         if len(results_array) > 26:
             results_array = results_array[:26]
     
+    # Identify failed items for second-chance analysis
+    failed_item_indices = []
+    for idx, item in enumerate(results_array):
+        # Check for error states or missing results that need retry
+        if (not item.get("present", False) and 
+            ("fail" in item.get("explanation", "").lower() or 
+             "error" in item.get("explanation", "").lower() or
+             "missing" in item.get("explanation", "").lower())):
+            failed_item_indices.append(idx)
+    
+    # Perform second-chance analysis on failed items
+    if failed_item_indices and len(detailed_checklist_items) > 0:
+        logger.info(f"Performing second-chance analysis on {len(failed_item_indices)} failed items")
+        
+        for failed_idx in failed_item_indices:
+            # Only retry if we have detailed checklist items and the index is valid
+            if failed_idx < len(detailed_checklist_items):
+                item_to_retry = detailed_checklist_items[failed_idx]
+                logger.info(f"Second-chance analysis for item #{failed_idx+1}: {item_to_retry[:50]}...")
+                
+                # Create a more focused prompt specifically for this failed item
+                try:
+                    system_message = """
+                    You are an expert academic policy compliance checker for the University of Calgary.
+                    
+                    You will be analyzing ONE specific checklist item that failed in the initial analysis.
+                    Perform an extremely careful analysis to determine if this requirement is present in any form.
+                    
+                    Focus on contextual understanding, not exact keyword matches. Look for related concepts, synonyms, 
+                    and implicit information that fulfills the requirement's intent, even when the exact terms are absent.
+                    
+                    Your entire response MUST be pure JSON with the following exact fields:
+                    - "present": boolean value (true or false, lowercase)
+                    - "confidence": number between 0.0 and 1.0
+                    - "explanation": string with brief explanation under 150 characters
+                    - "evidence": string with direct quote from the outline, or "" if not found
+                    - "method": string value, always set to "ai_general_analysis"
+                    - "triple_checked": boolean value, always set to true
+                    
+                    Be strict and thorough. If evidence is unclear or ambiguous, mark as false.
+                    """
+                    
+                    user_message = f"""
+                    Analyze the following course outline against the SPECIFIC checklist item provided:
+                    
+                    COURSE OUTLINE TEXT:
+                    {document_text}
+                    
+                    CHECKLIST ITEM TO ANALYZE:
+                    {item_to_retry}
+                    
+                    Perform THREE careful passes through the document:
+                    - FIRST PASS: Initial scan for obvious mentions and relevant sections
+                    - SECOND PASS: Deeper analysis for indirect or related information
+                    - THIRD PASS: Final verification and critical evaluation
+                    
+                    YOUR RESPONSE MUST BE VALID JSON with the fields: present, confidence, explanation, evidence, method, and triple_checked.
+                    """
+                    
+                    # Make the focused OpenAI API call for this specific item
+                    retry_response = client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": system_message},
+                            {"role": "user", "content": user_message}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.1,
+                        max_tokens=1000,
+                        timeout=60
+                    )
+                    
+                    retry_text = retry_response.choices[0].message.content.strip()
+                    retry_result = json.loads(retry_text)
+                    
+                    # Ensure the retry result has all required fields
+                    required_fields = ["present", "confidence", "explanation", "evidence", "method", "triple_checked"]
+                    is_valid = all(field in retry_result for field in required_fields)
+                    
+                    if is_valid:
+                        # Add a note about this being from a second-chance analysis
+                        retry_result["explanation"] = f"[2nd Analysis] {retry_result['explanation'][:130]}..."
+                        
+                        # Mark this as a second chance analysis
+                        retry_result["second_chance"] = True
+                        
+                        # Replace the original failed result
+                        results_array[failed_idx] = retry_result
+                        logger.info(f"Second-chance analysis for item #{failed_idx+1} completed successfully")
+                    else:
+                        logger.warning(f"Second-chance analysis for item #{failed_idx+1} returned invalid result")
+                
+                except Exception as e:
+                    logger.error(f"Error during second-chance analysis for item #{failed_idx+1}: {str(e)}")
+    
     # Verify that all items have required fields, fix any issues
     for idx, item in enumerate(results_array):
         # Check and fix required fields
@@ -340,6 +438,10 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         # Add triple-checking indicator
         if "triple_checked" not in item:
             item["triple_checked"] = True
+            
+        # Track if this was from a second-chance analysis
+        if "second_chance" not in item:
+            item["second_chance"] = False
     
     logger.info(f"Final result: {len(results_array)} items, after OpenAI analysis")
     logger.info(f"Items marked as present: {sum(1 for item in results_array if item['present'])}")

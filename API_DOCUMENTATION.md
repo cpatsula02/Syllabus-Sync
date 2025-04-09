@@ -26,6 +26,16 @@ A unique triple-checking process is implemented for each checklist item:
 
 Only after all three passes does the system finalize its determination and confidence level, with each result marked with a "triple_checked" field set to true.
 
+### Automatic Second-Chance Analysis
+
+The system implements an intelligent second-chance analysis for items that initially fail:
+
+1. After the initial analysis, the system identifies any failed items with errors or missing information
+2. A focused, item-specific analysis is performed for each failed item with a more tailored prompt
+3. Results from the second-chance analysis are clearly marked with a prefix in the explanation field
+4. If the second-chance analysis succeeds, it replaces the original failed result
+5. All second-chance analyses are logged for transparency and tracked with the "second_chance" boolean field
+
 To ensure reliable performance and prevent timeouts, the implementation:
 
 1. Processes checklist items in small batches (3 items at a time) to optimize API response times
@@ -87,10 +97,11 @@ The API returns a JSON array with 26 items, each corresponding to one of the ins
 |-------|------|-------------|
 | `present` | boolean | Whether the requirement is met (true) or not (false) |
 | `confidence` | float | Confidence level (0.0-1.0) in the determination |
-| `explanation` | string | Brief explanation (<150 chars) of the analysis |
+| `explanation` | string | Brief explanation (<150 chars) of the analysis. If from second-chance analysis, prefixed with "[2nd Analysis]" |
 | `evidence` | string | Direct quote from the document supporting the determination, or empty string if not found |
 | `method` | string | Always "ai_general_analysis" |
 | `triple_checked` | boolean | Always true, indicates the item was analyzed using the triple-checking process |
+| `second_chance` | boolean | Whether the result came from a second-chance analysis after an initial failure |
 
 ## Checklist Items
 
