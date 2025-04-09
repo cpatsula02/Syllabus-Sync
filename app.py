@@ -405,11 +405,15 @@ def get_match_details():
 @app.route('/download_pdf', methods=['GET'])
 def download_pdf():
     """Generate a PDF report of the analysis results"""
-    if not analysis_data.get('checklist_items'):
-        return render_template('index.html', error="Please analyze documents first before generating the PDF report.")
-
-    import os
     try:
+        # Get session data
+        analysis_data = session.get('analysis_data', {})
+        if not analysis_data or not analysis_data.get('checklist_items'):
+            flash("No analysis data found. Please analyze a document first.")
+            return redirect('/')
+
+        import os
+        import re
         # Create PDF with UTF-8 support
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
