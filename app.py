@@ -407,8 +407,10 @@ def download_pdf():
     """Generate a PDF report of the analysis results"""
     try:
         # Get session data
+        print("Starting PDF generation...")
         analysis_data = session.get('analysis_data', {})
         if not analysis_data or not analysis_data.get('checklist_items'):
+            print("ERROR: No analysis data found in session")
             flash("No analysis data found. Please analyze a document first.")
             return redirect('/')
 
@@ -426,10 +428,8 @@ def download_pdf():
         pdf.add_font('DejaVu', '', os.path.join(font_path, 'DejaVuSansCondensed.ttf'), uni=True)
         pdf.add_font('DejaVu', 'B', os.path.join(font_path, 'DejaVuSansCondensed-Bold.ttf'), uni=True)
         pdf.add_font('DejaVu', 'I', os.path.join(font_path, 'DejaVuSansCondensed-Oblique.ttf'), uni=True)
-        try:
-            pdf.add_font('DejaVu', 'BI', os.path.join(font_path, 'DejaVuSansCondensed-BoldOblique.ttf'), uni=True)
-        except Exception as e:
-            logger.warning(f"Could not add bold-italic font: {str(e)}")
+        # We don't need bold-italic font, so we'll skip it to avoid FPDF style type errors
+        print("Skipping bold-italic font to avoid FPDF style errors")
 
         # Set up document
         pdf.set_font('DejaVu', 'B', 16)
@@ -761,6 +761,8 @@ def download_pdf():
         pdf.cell(63, 8, f'Present: {present_items}', 1, 0, 'L')
         pdf.cell(64, 8, f'Missing: {missing_items} / N/A: {na_items}', 1, 1, 'L')
         
+        print("Preparing to add detailed checklist page...")
+        
         # Add a new page for the detailed checklist descriptions with status
         pdf.add_page()
         pdf.set_font('DejaVu', 'B', 16)
@@ -774,26 +776,38 @@ def download_pdf():
         
         # Load the enhanced checklist descriptions
         enhanced_checklist = []
+        print(f"Starting to load enhanced checklist from: {os.path.abspath('enhanced_checklist.txt')}")
         try:
             with open('enhanced_checklist.txt', 'r') as file:
-                enhanced_checklist = file.read().strip().split('\n\n')
+                content = file.read().strip()
+                print(f"Read {len(content)} characters from enhanced_checklist.txt")
+                enhanced_checklist = content.split('\n\n')
+                print(f"Parsed {len(enhanced_checklist)} checklist items")
         except Exception as e:
+            print(f"ERROR loading enhanced checklist: {str(e)}")
             logger.error(f"Error loading enhanced checklist: {str(e)}")
             # Create a placeholder if the file can't be loaded
             enhanced_checklist = [f"{i+1}. {item}" for i, item in enumerate(unique_checklist_items)]
+            print(f"Created {len(enhanced_checklist)} placeholder items")
         
         # Create a mapping between short item names and full descriptions
         item_to_desc_map = {}
+        print(f"Creating mapping for {len(enhanced_checklist)} checklist items")
         for item_desc in enhanced_checklist:
-            match = re.match(r'^(\d+)\.\s+(.+?):', item_desc)
+            print(f"Processing item: {item_desc[:50]}...")
+            match = re.match(r'^(\d+)\.\s+([^:]+):', item_desc)
             if match:
                 num = match.group(1)
                 name = match.group(2)
+                print(f"  Matched: #{num} - {name}")
                 # Find the corresponding item in the checklist items
                 for checklist_item in unique_checklist_items:
                     if name.lower() in checklist_item.lower():
                         item_to_desc_map[checklist_item] = item_desc
+                        print(f"    Found match with: {checklist_item}")
                         break
+            else:
+                print(f"  NO MATCH for regex pattern in: {item_desc[:50]}")
         
         # Create a professional table design
         # Set up the table header with blue background
@@ -813,10 +827,13 @@ def download_pdf():
         
         # First pass to match existing items
         for item_desc in enhanced_checklist:
-            match = re.match(r'^(\d+)\.\s+(.+?):', item_desc)
+            print(f"First pass processing: {item_desc[:50]}...")
+            # Try modified regex to better handle the format
+            match = re.match(r'^(\d+)\.\s+([^:]+):', item_desc)
             if match:
                 num = match.group(1)
                 name = match.group(2)
+                print(f"  Matched enhanced: #{num} - {name}")
                 found_match = False
                 
                 # Try to find this item in the user's checklist
@@ -824,14 +841,33 @@ def download_pdf():
                     if name.lower() in checklist_item.lower():
                         result = analysis_data['analysis_results'].get(checklist_item, {})
                         status = result.get('status', 'present' if checklist_item not in analysis_data['missing_items'] else 'missing')
-                        enhanced_items.append((num, name, item_desc[len(match.group(0)):], status, checklist_item))
+                        
+                        # Extract description - everything after the colon and first space
+                        description_start = item_desc.find(":", len(num) + 2) + 1
+                        if description_start > 0:
+                            description = item_desc[description_start:].strip()
+                        else:
+                            description = ""
+                            
+                        enhanced_items.append((num, name, description, status, checklist_item))
                         processed_items.add(checklist_item)
                         found_match = True
+                        print(f"    Found match: {checklist_item}")
                         break
                 
                 # If no match found, add it as a default item
                 if not found_match:
-                    enhanced_items.append((num, name, item_desc[len(match.group(0)):], 'missing', None))
+                    print(f"    NO MATCH FOUND FOR: {name}")
+                    # Extract description - everything after the colon and first space
+                    description_start = item_desc.find(":", len(num) + 2) + 1
+                    if description_start > 0:
+                        description = item_desc[description_start:].strip()
+                    else:
+                        description = ""
+                        
+                    enhanced_items.append((num, name, description, 'missing', None))
+            else:
+                print(f"  NO REGEX MATCH for: {item_desc[:50]}...")
         
         # Second pass to add any remaining items from user's checklist
         for checklist_item in unique_checklist_items:
