@@ -1087,6 +1087,9 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     - Enhanced pattern matching with specific requirement validation
     - Improved error handling for API and document processing issues
     """
+    # Ensure we have the OS module imported
+    import os
+    
     try:
         # Validate file paths
         if not os.path.exists(checklist_path):
@@ -1433,4 +1436,14 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
     except Exception as e:
         logging.exception(f"Error processing documents: {str(e)}")
-        return [], {"error": str(e)}
+        # Create a properly structured empty results dictionary that will work with .get() calls
+        empty_results = {}
+        for item in checklist_items if 'checklist_items' in locals() else []:
+            empty_results[item] = {
+                'present': False,
+                'confidence': 0,
+                'explanation': f"Error during processing: {str(e)}",
+                'evidence': "",
+                'method': 'error_fallback'
+            }
+        return [], empty_results

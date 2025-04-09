@@ -199,13 +199,17 @@ def index():
                 present_items = total_items - len(missing_items)
                 missing_count = len(missing_items)
                 
-                # Calculate API usage statistics
-                api_calls = sum(result.get('verification_attempts', 0) 
-                               for result in results.values())
+                # Calculate API usage statistics - with defensive error handling
+                api_calls = 0
+                api_used = False
                 
-                # Determine if API was used at all
-                api_used = any(result.get('verification_attempts', 0) > 0 
-                              for result in results.values())
+                if isinstance(results, dict):
+                    # Check all results and ensure we only access dictionary values
+                    for result in results.values():
+                        if isinstance(result, dict):
+                            api_calls += result.get('verification_attempts', 0)
+                            if result.get('verification_attempts', 0) > 0:
+                                api_used = True
                 
                 # Build verification strategy message - always emphasize AI verification
                 verification_strategy = (
@@ -267,13 +271,31 @@ def index():
                 error_message = str(api_error).lower()
                 if 'api key' in error_message or 'apikey' in error_message or 'authentication' in error_message:
                     flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
-                    # Force fallback methods
-                    checklist_items, results = process_documents(
-                        checklist_path=checklist_path,
-                        outline_path=outline_path,
-                        api_attempts=0,  # Force no API usage
-                        additional_context=additional_context
-                    )
+                    # Force fallback methods with defensive error handling
+                    try:
+                        checklist_items, results = process_documents(
+                            checklist_path=checklist_path,
+                            outline_path=outline_path,
+                            api_attempts=0,  # Force no API usage
+                            additional_context=additional_context
+                        )
+                        
+                        # Additional validation of results
+                        if not isinstance(results, dict):
+                            logger.error(f"Invalid results type: {type(results)}. Creating empty results.")
+                            results = {}
+                            for item in checklist_items:
+                                results[item] = {
+                                    'present': False,
+                                    'confidence': 0,
+                                    'explanation': "Error processing this item.",
+                                    'evidence': "",
+                                    'method': 'fallback_error_recovery'
+                                }
+                    except Exception as fallback_error:
+                        logger.exception(f"Fallback processing failed: {str(fallback_error)}")
+                        flash(f"An error occurred during document analysis: {str(fallback_error)}")
+                        return redirect(request.url)
                     
                     # Continue with results processing
                     missing_items = []
