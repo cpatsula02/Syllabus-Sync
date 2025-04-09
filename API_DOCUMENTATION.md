@@ -6,10 +6,10 @@ This API analyzes course outlines against 26 institutional compliance requiremen
 
 The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. To ensure reliable performance and prevent timeouts, the implementation:
 
-1. Processes checklist items in small batches (5 items at a time) to optimize API response times
+1. Processes checklist items in small batches (3 items at a time) to optimize API response times
 2. Uses gpt-3.5-turbo for efficient and cost-effective analysis of each batch
 3. Implements robust error handling to ensure the API always returns properly formatted responses
-4. Has configurable timeout and retry logic to handle API stability issues
+4. Has extended timeouts (120 seconds per batch, 600 seconds total) and enhanced retry logic (3 attempts) to handle API stability issues
 5. Supports both plain text input and document file uploads (PDF, DOCX)
 
 The API is designed for scalability and can handle documents of various sizes and complexity while maintaining consistent response times.
@@ -71,7 +71,7 @@ The API returns a JSON array with 26 items, each corresponding to one of the ins
 
 ## Checklist Items
 
-The API evaluates the following 26 institutional requirements:
+The API evaluates the following 26 institutional requirements, using detailed descriptions from enhanced_checklist.txt for more accurate analysis:
 
 1. **Instructor Email**: Does the outline include the instructor's email? An acceptable email must end with "ucalgary.ca".
 2. **Course Objectives**: Are the course objectives listed and numbered?

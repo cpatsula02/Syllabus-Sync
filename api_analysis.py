@@ -3,6 +3,7 @@ import os
 import logging
 import json
 import time
+import re
 import openai
 from openai import OpenAI
 
@@ -22,39 +23,75 @@ else:
 # Initialize OpenAI client with longer timeout
 client = OpenAI(
     api_key=OPENAI_API_KEY,
-    timeout=300.0,  # 5-minute timeout
-    max_retries=2
+    timeout=600.0,  # 10-minute timeout (increased for detailed checklist items)
+    max_retries=3   # Increased retries
 ) if OPENAI_API_KEY else None
 
-# The 26 hardcoded checklist items from enhanced_checklist.txt
-CHECKLIST_ITEMS = [
-    "Instructor Email: Does the outline include the instructor's email? An acceptable email must end with \"ucalgary.ca\".",
-    "Course Objectives: Are the course objectives listed and numbered?",
-    "Textbooks & Other Course Material: Are any textbooks, readings, and additional course materials listed?",
-    "Prohibited Materials: Check for information that details any prohibited platforms, resources, and tools that cannot be used.",
-    "Course Workload: Is there a course workload section?",
-    "Grading Scale: Does the course outline include the Grade Scale header and a table mapping percentages to letter grades?",
-    "Grade Distribution Table: Does the course outline include a Grade Distribution statement with weights assigned to assessments?",
-    "Group Work Weight: If group work is included, verify it doesn't exceed 40% of the overall final grade.",
-    "Assessment-Objectives Alignment: Check that assessments indicate which course objectives each assessment measures.",
-    "Due Dates in Grade Table: Does the grade distribution table include due dates for all assignments and examinations?",
-    "30% Before Last Class: Will students receive AT LEAST 30% of their final grade before the last day of classes?",
-    "No Post-Term Assignments: Are there any assignments due after the last day of classes?",
-    "Missed Assessment Policy: Does the outline have a missed assessment policy section?",
-    "Late Submission Policy: Does the outline have a Late Policy section that explains penalties for late submissions?",
-    "Participation Grading Criteria: If class participation is listed, are details provided on how it's evaluated?",
-    "Assignment Submission Instructions: Are assignment details included with instructions on how and where to submit work?",
-    "Group Project Guidelines: If a group project is listed, are details provided including the first group work deadline?",
-    "Midterm/Quiz Information: For any midterms or quizzes, is information provided about timing, location, format, and permitted materials?",
-    "Final Exam Details: If a Final Exam is listed, does the outline include information on timing, location, modality, and permitted materials?",
-    "Final Exam Weight Limit: Does the Final Exam count for LESS THAN 50% of the final grade?",
-    "Take-Home Final Identification: If there is a Take-Home Final Examination, is it clearly identified?",
-    "Instructor Contact Guidelines: Is the \"Contacting Your Instructor\" section included with guidelines for communication?",
-    "Class Schedule Inclusion: Is there a Class Schedule and Topics section showing weekly topics and activities?",
-    "Due Dates in Schedule: Does the Class Schedule include or reference assignment due dates?",
-    "Exam Dates in Schedule: Does the Class Schedule include quiz, test, or exam dates?",
-    "Functional Web Links: Are all links in the outline valid and working?"
-]
+# Load the 26 detailed checklist items from enhanced_checklist.txt
+def load_detailed_checklist():
+    """
+    Load the detailed checklist items from enhanced_checklist.txt file.
+    This ensures we're using the most detailed descriptions for analysis.
+    
+    Returns:
+        List of detailed checklist item strings
+    """
+    detailed_items = []
+    try:
+        with open('enhanced_checklist.txt', 'r') as f:
+            content = f.read()
+            # Extract numbered items with their detailed descriptions
+            pattern = r'(\d+)\.\s+(.*?)(?=\n\n\d+\.|\Z)'
+            matches = re.findall(pattern, content, re.DOTALL)
+            
+            # Sort by item number to ensure correct order
+            matches.sort(key=lambda x: int(x[0]))
+            
+            for _, description in matches:
+                detailed_items.append(description.strip())
+                
+        logger.info(f"Loaded {len(detailed_items)} detailed checklist items")
+        
+        # If we have fewer than 26 items, log a warning
+        if len(detailed_items) < 26:
+            logger.warning(f"Expected 26 detailed checklist items, but found {len(detailed_items)}")
+            
+        return detailed_items
+    except Exception as e:
+        logger.error(f"Error loading detailed checklist: {str(e)}")
+        # If we can't load the detailed items, fall back to basic definitions
+        logger.warning("Falling back to basic checklist items")
+        return [
+            "Instructor Email: Does the outline include the instructor's email? An acceptable email must end with \"ucalgary.ca\".",
+            "Course Objectives: Are the course objectives listed and numbered?",
+            "Textbooks & Other Course Material: Are any textbooks, readings, and additional course materials listed?",
+            "Prohibited Materials: Check for information that details any prohibited platforms, resources, and tools that cannot be used.",
+            "Course Workload: Is there a course workload section?",
+            "Grading Scale: Does the course outline include the Grade Scale header and a table mapping percentages to letter grades?",
+            "Grade Distribution Table: Does the course outline include a Grade Distribution statement with weights assigned to assessments?",
+            "Group Work Weight: If group work is included, verify it doesn't exceed 40% of the overall final grade.",
+            "Assessment-Objectives Alignment: Check that assessments indicate which course objectives each assessment measures.",
+            "Due Dates in Grade Table: Does the grade distribution table include due dates for all assignments and examinations?",
+            "30% Before Last Class: Will students receive AT LEAST 30% of their final grade before the last day of classes?",
+            "No Post-Term Assignments: Are there any assignments due after the last day of classes?",
+            "Missed Assessment Policy: Does the outline have a missed assessment policy section?",
+            "Late Submission Policy: Does the outline have a Late Policy section that explains penalties for late submissions?",
+            "Participation Grading Criteria: If class participation is listed, are details provided on how it's evaluated?",
+            "Assignment Submission Instructions: Are assignment details included with instructions on how and where to submit work?",
+            "Group Project Guidelines: If a group project is listed, are details provided including the first group work deadline?",
+            "Midterm/Quiz Information: For any midterms or quizzes, is information provided about timing, location, format, and permitted materials?",
+            "Final Exam Details: If a Final Exam is listed, does the outline include information on timing, location, modality, and permitted materials?",
+            "Final Exam Weight Limit: Does the Final Exam count for LESS THAN 50% of the final grade?",
+            "Take-Home Final Identification: If there is a Take-Home Final Examination, is it clearly identified?",
+            "Instructor Contact Guidelines: Is the \"Contacting Your Instructor\" section included with guidelines for communication?",
+            "Class Schedule Inclusion: Is there a Class Schedule and Topics section showing weekly topics and activities?",
+            "Due Dates in Schedule: Does the Class Schedule include or reference assignment due dates?",
+            "Exam Dates in Schedule: Does the Class Schedule include quiz, test, or exam dates?",
+            "Functional Web Links: Are all links in the outline valid and working?"
+        ]
+
+# Load the detailed checklist items when the module is imported
+CHECKLIST_ITEMS = load_detailed_checklist()
 
 def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     """
@@ -95,8 +132,8 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     results_array = []
     
     # Process items in smaller batches to prevent timeouts
-    # We'll process items in batches of 5 to keep API calls manageable
-    batch_size = 5
+    # With detailed checklist items, smaller batches are better
+    batch_size = 3  # Reduced batch size to handle detailed descriptions
     num_batches = (len(CHECKLIST_ITEMS) + batch_size - 1) // batch_size
     
     logger.info(f"Processing document in {num_batches} batches of {batch_size} items each")
@@ -159,8 +196,8 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=2000,
-                timeout=60  # 60-second timeout for each batch
+                max_tokens=3000,  # Increased max tokens for detailed descriptions
+                timeout=120  # 120-second timeout for each batch (doubled for detailed checklist items)
             )
             
             elapsed = time.time() - start_time
