@@ -139,7 +139,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Button to load enhanced checklist
         document.getElementById('loadEnhancedChecklist').addEventListener('click', function() {
-            fetch('/get_enhanced_checklist')
+            fetch('/get-enhanced-checklist')
                 .then(response => response.text())
                 .then(data => {
                     document.getElementById('checklist').value = data;

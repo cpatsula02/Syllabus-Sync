@@ -766,7 +766,7 @@ def download_pdf():
         flash(f"Error generating PDF: {str(e)}")
         return redirect('/')
 
-@app.route('/get_enhanced_checklist')
+@app.route('/get-enhanced-checklist')
 def get_enhanced_checklist():
     """Serve the simplified checklist items from the file"""
     try:
