@@ -5,7 +5,6 @@ import io
 import logging
 import re
 import socket
-import traceback  # Import traceback for improved error reporting
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents, extract_text
 import urllib.request
@@ -33,98 +32,27 @@ def handle_error(e):
     """
     Enhanced error handler that provides detailed, helpful error messages
     specifically for OpenAI API issues and other common errors.
-    Includes detailed logging for debugging purposes.
-    CRITICAL: Updated with improved handling that prevents internal server errors
-    and gracefully handles API connection failures
     """
     error_message = str(e)
-    error_type = type(e).__name__
-    
-    # Log detailed error information for debugging
-    try:
-        app.logger.error(f"CRITICAL ERROR: {error_type}: {error_message}")
-        app.logger.error(f"Error handling request: {request.path} Method: {request.method}")
-        
-        if request.form:
-            app.logger.error(f"Form data keys: {list(request.form.keys())}")
-        if request.files:
-            app.logger.error(f"Uploaded files: {list(request.files.keys())}")
-        
-        import traceback
-        app.logger.error(f"Traceback: {traceback.format_exc()}")
-    except Exception as logging_error:
-        # Fail silently if we can't log - don't compound the error
-        print(f"Unable to log error details: {str(logging_error)}")
+    app.logger.error(f"Unhandled error: {error_message}")
     
     # Create a more user-friendly error message based on the error type
     user_message = "An error occurred while processing your request."
     
-    try:
-        # Check for specific API-related errors with improved detection
-        if any(term in error_message.lower() for term in ["openai", "api key", "api error", "api call", "api request"]):
-            user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
-        elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
-            user_message = "There was an internal formatting error in the analysis. The development team has been notified."
-        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout", "asyncio", "worker", "gunicorn", "worker timeout", "worker killing"]):
-            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system has been optimized to process smaller batches. Please try again - the system should now process your document properly. For very large documents, consider breaking them into smaller sections for better processing."
-        elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
-            user_message = "The system ran out of memory while processing your request. Please try a smaller document."
-        elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
-            user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
-        elif "json" in error_message.lower():
-            user_message = "There was an error processing the AI response. Please try again or upload a different document."
-        elif "socket" in error_message.lower() or "connection" in error_message.lower() or "connect" in error_message.lower():
-            user_message = "Connection error: The system experienced a network issue while processing your request. We've improved error handling and reduced batch sizes. Please try again."
-    except Exception as error_handling_error:
-        # If error analysis itself fails, use a simple generic message
-        print(f"Error during error analysis: {str(error_handling_error)}")
-        user_message = "An unexpected error occurred. Please try again with a smaller document."
+    # Check for specific API-related errors
+    if "openai" in error_message.lower() or "api key" in error_message.lower():
+        user_message = "OpenAI API error: The system requires a valid OpenAI API key to function. Please ensure your API key is correctly set in the environment variables."
+    elif "timeout" in error_message.lower():
+        user_message = "The request timed out. Please try again with a smaller document or fewer checklist items."
+    elif "memory" in error_message.lower():
+        user_message = "The system ran out of memory while processing your request. Please try a smaller document."
+    elif "file format" in error_message.lower() or "parsing" in error_message.lower():
+        user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
     
-    # CRITICAL IMPROVEMENT: Check if this is an API request related to outline analysis
-    # If it is, provide a fallback result set instead of showing an error
-    if request.path.startswith('/api/analyze'):
-        logger.warning("API error occurred during analysis - using fallback mechanism")
-        
-        # Generate a fallback response with 26 items that all pass compliance
-        # This ensures external systems can continue functioning even if OpenAI has issues
-        fallback_items = []
-        for i in range(26):
-            fallback_items.append({
-                "present": True,
-                "confidence": 0.7,
-                "explanation": f"System automatically validated requirement {i+1} due to AI service limitations.",
-                "evidence": "",
-                "method": "ai_general_analysis",
-                "triple_checked": True,
-                "second_chance": False
-            })
-        
-        logger.info("Returning fallback analysis results with 26 passing items")
-        return jsonify(fallback_items), 200
-    
-    try:
-        # For regular web requests, safe template rendering with explicit defaults
-        logger.info("Attempting to render index.html template with error message")
-        return render_template(
-            'index.html',
-            error=user_message,
-            checklist_items=[],  # Ensure required template variables are defined
-            analysis_results={},
-            missing_items=[],
-            grade_table_items=[],
-            valid_links=[],
-            invalid_links=[],
-            document_path="",
-            document_text="",
-            show_results=False
-        ), 500
-    except Exception as template_error:
-        # Log detailed information about the template error
-        logger.error(f"Template rendering failed: {str(template_error)}")
-        logger.error(f"Template error traceback: {traceback.format_exc()}")
-        
-        # If even rendering the template fails, return a simple plain text response
-        return f"Error: {user_message}", 500
+    return render_template(
+        'index.html',
+        error=user_message
+    ), 500
 
 # In-memory storage for last analysis
 analysis_data = {
@@ -162,30 +90,19 @@ def identify_grade_table_items(checklist_items):
 def validate_links(text):
     """
     Validates links found in the provided text.
-    Returns lists of valid and invalid links.
-    Used for checking the 26th checklist item about functional web links.
     """
     # Safety check - ensure text is a string
     if not isinstance(text, str):
         logger.warning(f"validate_links received non-string input: {type(text)}")
         return [], []
 
-    # Improved URL pattern to catch more variants
     url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
     urls = re.findall(url_pattern, text)
-    
-    # Remove duplicates while preserving order
-    unique_urls = []
-    for url in urls:
-        if url not in unique_urls:
-            unique_urls.append(url)
-    
     valid_links = []
     invalid_links = []
 
-    # Limit to first 10 links to prevent timeouts
-    max_links_to_check = 10
-    for url in unique_urls[:max_links_to_check]:
+    # Limit to first 5 links to prevent timeouts
+    for url in urls[:5]:
         # Make sure URL starts with http:// or https://
         if not url.startswith(('http://', 'https://')):
             url = 'http://' + url
@@ -194,16 +111,14 @@ def validate_links(text):
             # Set a short timeout to prevent long waits
             urllib.request.urlopen(url, timeout=3)
             valid_links.append(url)
-            logger.info(f"Valid link found: {url}")
         except Exception as e:
             logger.warning(f"Invalid link {url}: {str(e)}")
             invalid_links.append(url)
 
     # If there are more links than we checked, log it
-    if len(unique_urls) > max_links_to_check:
-        logger.info(f"Only checked {max_links_to_check} out of {len(unique_urls)} unique links")
+    if len(urls) > 5:
+        logger.info(f"Only checked 5 out of {len(urls)} links")
 
-    logger.info(f"Link validation complete: {len(valid_links)} valid, {len(invalid_links)} invalid links")
     return valid_links, invalid_links
 
 
@@ -347,51 +262,6 @@ def index():
                 grade_table_items = identify_grade_table_items(checklist_items)
                 logger.info(f"Identified {len(grade_table_items)} grade table related items")
 
-                # Add extra validation for problematic items (like "30% Before Last Class")
-                for key, value in analysis_results.items():
-                    if "30%" in key or "Before Last Class" in key:
-                        try:
-                            # Check if this item has proper values and fix if not
-                            if not isinstance(value, dict):
-                                logger.error(f"Item '{key}' has invalid value type: {type(value)}")
-                                analysis_results[key] = {
-                                    "present": False,
-                                    "confidence": 0.5, 
-                                    "explanation": "Format validation error - couldn't process this item.",
-                                    "evidence": "",
-                                    "method": "ai_general_analysis",
-                                    "triple_checked": True,
-                                    "second_chance": False
-                                }
-                            # Check for missing required fields
-                            elif not all(k in value for k in ["present", "confidence", "explanation", "evidence", "method"]):
-                                missing_fields = [k for k in ["present", "confidence", "explanation", "evidence", "method"] if k not in value]
-                                logger.error(f"Item '{key}' is missing fields: {missing_fields}")
-                                # Add missing fields with default values
-                                for field in missing_fields:
-                                    if field == "present":
-                                        value[field] = False
-                                    elif field == "confidence":
-                                        value[field] = 0.5
-                                    elif field == "explanation":
-                                        value[field] = "Field validation error - missing explanation."
-                                    elif field == "evidence":
-                                        value[field] = ""
-                                    elif field == "method":
-                                        value[field] = "ai_general_analysis"
-                        except Exception as e:
-                            logger.error(f"Error validating '{key}': {str(e)}")
-                            # Create a default response if validation fails
-                            analysis_results[key] = {
-                                "present": False,
-                                "confidence": 0.5,
-                                "explanation": "Error during validation - using default response.",
-                                "evidence": "",
-                                "method": "ai_general_analysis",
-                                "triple_checked": True,
-                                "second_chance": False
-                            }
-                
                 # Format results for template with enhanced data and strict duplicate prevention
                 results = []
                 present_count = 0
@@ -409,35 +279,7 @@ def index():
                     seen_normalized_items.add(normalized_item)
 
                     processed_items.add(item)  # Mark as processed
-                    
-                    # Validate result before using
                     result = analysis_results.get(item, {})
-                    if not isinstance(result, dict):
-                        logger.error(f"Item '{item}' has invalid analysis result type: {type(result)}")
-                        result = {
-                            "present": False,
-                            "confidence": 0.5,
-                            "explanation": "Error: Invalid result format",
-                            "evidence": "",
-                            "method": "ai_general_analysis",
-                            "triple_checked": True
-                        }
-                    
-                    # Ensure all required fields exist
-                    for field in ["present", "confidence", "explanation", "evidence", "method"]:
-                        if field not in result:
-                            logger.error(f"Item '{item}' is missing field: {field}")
-                            if field == "present":
-                                result[field] = False
-                            elif field == "confidence":
-                                result[field] = 0.5
-                            elif field == "explanation":
-                                result[field] = "Error: Missing explanation field"
-                            elif field == "evidence":
-                                result[field] = ""
-                            elif field == "method":
-                                result[field] = "ai_general_analysis"
-                    
                     is_present = result.get("present", False)
                     is_grade_item = item in grade_table_items
 
@@ -495,27 +337,16 @@ def index():
                     if verification_attempts > 0:
                         api_calls_made += 1
 
-                try:
-                    # Ensure all variables are properly prepared to prevent rendering errors
-                    template_data = {
-                        'results': results if isinstance(results, list) else [],
-                        'present_count': present_count if isinstance(present_count, int) else 0,
-                        'missing_count': missing_count if isinstance(missing_count, int) else 0,
-                        'total_count': len(checklist_items) if isinstance(checklist_items, list) else 0,
-                        'missing_items': missing_items if isinstance(missing_items, list) else [],
-                        'grade_table_items': grade_table_items if isinstance(grade_table_items, list) else [],
-                        'analysis_methods': analysis_methods if isinstance(analysis_methods, dict) else {},
-                        'api_calls_made': api_calls_made if isinstance(api_calls_made, int) else 0,
-                        'max_attempts': api_attempts if isinstance(api_attempts, int) else 3
-                    }
-                    
-                    return render_template('results.html', **template_data)
-                except Exception as render_error:
-                    # If rendering template fails, log error and provide a more helpful error message
-                    app.logger.error(f"Error rendering results template: {str(render_error)}")
-                    traceback.print_exc()
-                    flash("Error displaying results. The analysis completed successfully, but there was an error displaying the results. Please try again with a different document.")
-                    return redirect(request.url)
+                return render_template('results.html', 
+                                    results=results,
+                                    present_count=present_count,
+                                    missing_count=missing_count,
+                                    total_count=len(checklist_items),
+                                    missing_items=missing_items,
+                                    grade_table_items=grade_table_items,
+                                    analysis_methods=analysis_methods,
+                                    api_calls_made=api_calls_made,
+                                    max_attempts=api_attempts)
 
             except TimeoutError:
                 flash("Request timed out. Please try again with a smaller file or fewer items.")
@@ -654,6 +485,526 @@ def download_pdf():
         logger.exception(f"Error generating professional PDF: {str(e)}")
         flash(f"Error generating PDF report: {str(e)}")
         return redirect('/')
+
+        # Count the different statuses (present, missing, not applicable)
+        total_items = len(analysis_data['checklist_items'])
+        missing_items = len(analysis_data['missing_items'])
+
+        # Count not applicable items
+        na_items = 0
+        for item in analysis_data['checklist_items']:
+            result = analysis_data['analysis_results'].get(item, {})
+            if result.get('status', '') == 'na':
+                na_items += 1
+
+        present_items = total_items - missing_items - na_items
+
+        # Calculate API usage statistics for the PDF report
+        analysis_methods = {}
+        ai_analyzed_items = 0
+        total_verification_calls = 0
+
+        for item in analysis_data['checklist_items']:
+            result = analysis_data['analysis_results'].get(item, {})
+            method = result.get("method", "ai_general_analysis")
+
+            # Count occurrences of each method
+            if method in analysis_methods:
+                analysis_methods[method] += 1
+            else:
+                analysis_methods[method] = 1
+
+            # Count verification attempts per item
+            verification_attempts = result.get("verification_attempts", 0)
+            total_verification_calls += verification_attempts
+
+            # Count items that used AI (at least one successful verification)
+            if verification_attempts > 0:
+                ai_analyzed_items += 1
+
+        # Quick summary statistics table
+        pdf.cell(95, 8, f'Total checklist items: {total_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Items present: {present_items}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Items missing: {missing_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Items not applicable: {na_items}', 1, 1, 'L')
+        pdf.ln(5)
+
+        # Add analysis method statistics
+        if len(analysis_methods) > 1:  # Only add if we have different methods
+            pdf.set_font('DejaVu', 'B', 9)
+            pdf.cell(190, 8, 'Analysis Methods Used:', 0, 1, 'L')
+
+            for method, count in analysis_methods.items():
+                method_name = method.replace('_', ' ').title()
+                pdf.cell(190, 6, f'- {method_name}: {count} items', 0, 1, 'L')
+
+            pdf.ln(3)
+            pdf.set_font('DejaVu', '', 10)  # Reset font
+
+        # Missing items section
+        if missing_items > 0:
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(190, 10, 'Missing Items:', 0, 1, 'L')
+            pdf.set_font('DejaVu', '', 10)
+
+            for item in analysis_data['missing_items']:
+                # Highlight grade table items in the missing list
+                is_grade_item = item in analysis_data['grade_table_items']
+                if is_grade_item:
+                    pdf.set_text_color(200, 0, 0)  # Red for important missing items
+
+                # Calculate required height for the missing item text
+                item_length = len(item)
+                chars_per_line = 60  # Conservative estimate
+                item_lines = max(1, item_length / chars_per_line)
+                item_height = max(7, item_lines * 5)  # Minimum 7mm, 5mm per line
+
+                # Format the missing item text with generous spacing
+                pdf.multi_cell(190, item_height, f"- {item}", 0, 'L')
+
+                # Add rationale for why the item is missing
+                result = analysis_data['analysis_results'].get(item, {})
+                explanation = result.get('explanation', '')
+                if explanation:
+                    pdf.set_text_color(100, 100, 100)  # Gray
+                    pdf.set_font('DejaVu', 'I', 9)  # Italic, smaller font
+
+                    # Calculate height needed for explanation text with generous spacing
+                    explanation_text = f"   Rationale: {explanation}"
+                    explanation_length = len(explanation_text)
+
+                    # More conservative estimate for font size 9 - use fewer chars per line to ensure enough space
+                    explanation_chars_per_line = 40  # Very conservative estimate for font size 9
+                    explanation_lines = max(1, explanation_length / explanation_chars_per_line)
+
+                    # Use even more generous line height for rationales
+                    explanation_height = max(7, explanation_lines * 6)  # At least 7mm, 6mm per line
+
+                    # Add extra padding for longer explanations
+                    if explanation_lines > 2:
+                        explanation_height += 4  # Add 4mm extra padding for longer explanations
+                    if explanation_lines > 4:
+                        explanation_height += 4  # Additional padding for very long explanations
+
+                    # Add a small space before the explanation
+                    pdf.ln(1)
+
+                    # Write the explanation with calculated height
+                    pdf.multi_cell(180, explanation_height, explanation_text, 0, 'L')
+                    pdf.set_font('DejaVu', '', 10)  # Reset font
+                    pdf.ln(3)  # Add more space after the rationale
+
+                if is_grade_item:
+                    pdf.set_text_color(0, 0, 0)  # Reset to black
+                else:
+                    pdf.set_text_color(0, 0, 0)  # Reset to black
+
+            pdf.ln(5)
+
+        # Detailed analysis section
+        pdf.set_font('DejaVu', 'B', 14)
+        pdf.cell(190, 10, 'Detailed Checklist Analysis', 0, 1, 'L')
+
+        # Table header
+        pdf.set_font('DejaVu', 'B', 10)
+        pdf.cell(140, 8, 'Checklist Item', 1, 0, 'L')
+        pdf.cell(50, 8, 'Status', 1, 1, 'C')
+
+        # Table content
+        pdf.set_font('DejaVu', '', 10)
+        for item in analysis_data['checklist_items']:
+            # Get result details
+            result = analysis_data['analysis_results'].get(item, {})
+            is_present = result.get('present', False)
+            is_grade_item = item in analysis_data['grade_table_items']
+            status = result.get('status', 'present' if is_present else 'missing')
+
+            # Improved cell height calculation for checklist items with better text wrapping
+            y_position = pdf.get_y()
+
+            # Calculate required height for the item text with more accurate estimation
+            font_size = 10
+
+            # Highlight grade table items with slightly different formatting
+            if is_grade_item:
+                pdf.set_font('DejaVu', 'B', font_size)
+            else:
+                pdf.set_font('DejaVu', '', font_size)
+
+            # A simpler and more reliable approach: use a fixed character per line estimate,
+            # but be generous with space allocation to prevent overlapping
+            item_length = len(item)
+            chars_per_line = 50  # Conservative estimate to ensure enough space
+            estimated_lines = max(1, item_length / chars_per_line)
+
+            # Set a generous row height based on the estimated number of lines
+            # Use a larger multiplier to ensure enough space
+            line_height = 5  # mm per line - generous spacing
+            row_height = max(8, estimated_lines * line_height)  # Minimum 8mm
+
+            # For very long items, add extra space to be safe
+            if estimated_lines > 3:
+                row_height += 5  # Add 5mm extra padding for long items
+
+            # Draw the checklist item cell
+            pdf.multi_cell(140, row_height, item, 1, 'L')
+
+            # Position cursor for the status cell
+            pdf.set_xy(pdf.get_x() + 140, y_position)
+
+            # Color-code status
+            if status == 'na':
+                pdf.set_text_color(100, 100, 100)  # Gray for N/A
+                status_text = 'N/A'
+            elif status == 'present':
+                pdf.set_text_color(0, 128, 0)  # Green for present
+                status_text = 'Present'
+            else:
+                pdf.set_text_color(255, 0, 0)  # Red for missing
+                status_text = 'Missing'
+
+            pdf.rect(pdf.get_x(), y_position, 50, row_height)
+
+            # Center status text vertically and horizontally
+            pdf.set_xy(pdf.get_x() + (50 - pdf.get_string_width(status_text)) / 2, y_position + (row_height - 5) / 2)
+            pdf.cell(50, 5, status_text, 1, 1, 'C')
+            pdf.set_text_color(0, 0, 0)  # Reset to black
+
+            # Include evidence if present (max 300 chars)
+            if is_present or status == 'na':
+                evidence = result.get('evidence', '')
+                if evidence:
+                    # Strip HTML tags for clean PDF text
+                    evidence = re.sub(r'<[^>]*>', '', evidence)
+                    if len(evidence) > 300:
+                        evidence = evidence[:297] + '...'
+
+                    pdf.set_font('DejaVu', '', 8)
+                    pdf.set_text_color(100, 100, 100)  # Gray
+
+                    # Add method information
+                    method = result.get('method', 'ai_general_analysis').replace('_', ' ').title()
+                    confidence = result.get('confidence', None)
+                    confidence_str = f" (Confidence: {int(confidence * 100)}%)" if confidence else ""
+
+                    # Calculate height needed for evidence text to prevent overlap
+                    evidence_text = f"Match via {method}{confidence_str}: {evidence}"
+                    evidence_length = len(evidence_text)
+
+                    # Use a very conservative estimate of characters per line to ensure enough space
+                    chars_per_line = 60  # Conservative estimate for font size 8
+                    evidence_lines = max(1, evidence_length / chars_per_line)
+
+                    # Use generous line height for evidence text
+                    line_height = 4  # mm per line for font size 8
+                    evidence_height = max(6, evidence_lines * line_height)  # At least 6mm height
+
+                    # Add extra padding for longer evidence text
+                    if evidence_lines > 4:
+                        evidence_height += 4  # Add 4mm extra padding for long evidence
+
+                    # Write the evidence with calculated height
+                    pdf.multi_cell(190, evidence_height, evidence_text, 0, 'L')
+                    pdf.set_text_color(0, 0, 0)  # Reset to black
+
+            # Add space between items
+            pdf.ln(2)
+
+        # Add the detailed checklist table with full item descriptions
+        print("Adding detailed checklist table...")
+
+        # Read the detailed checklist file
+        detailed_checklist_items = []
+        try:
+            print("Opening enhanced_checklist.txt file...")
+            with open('enhanced_checklist.txt', 'r') as file:
+                content = file.read().strip()
+                print(f"Read {len(content)} characters from the file")
+                # Split by numbered list items (number followed by a period at the start of a line)
+                detailed_checklist_items = []
+                lines = content.split('\n')
+                print(f"Split content into {len(lines)} lines")
+                current_item = ""
+
+                for line in lines:
+                    # If the line starts with a number and period (item number), it's a new item
+                    if re.match(r'^\d+\.', line):
+                        # Save the previous item if it exists
+                        if current_item:
+                            detailed_checklist_items.append(current_item.strip())
+                            print(f"Added item: {current_item[:50]}...")
+                        current_item = line
+                        print(f"Started new item: {line[:50]}...")
+                    else:
+                        # Continue with the current item
+                        current_item += "\n" + line
+
+                # Add the last item
+                if current_item:
+                    detailed_checklist_items.append(current_item.strip())
+                    print(f"Added final item: {current_item[:50]}...")
+
+                print(f"Loaded {len(detailed_checklist_items)} detailed checklist items")
+                if detailed_checklist_items:
+                    print(f"First item: {detailed_checklist_items[0][:100]}")
+                    print(f"Last item: {detailed_checklist_items[-1][:100]}")
+
+            # Add the detailed checklist table to the PDF
+            print("Calling add_detailed_checklist_table...")
+            add_detailed_checklist_table(pdf, analysis_data, detailed_checklist_items)
+            print("Successfully added detailed checklist table")
+        except Exception as e:
+            print(f"Error adding detailed checklist table: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            # Continue with the rest of the PDF even if this fails
+
+        # Add a new page for the Quick Overview
+        pdf.add_page()
+        pdf.set_font('DejaVu', 'B', 16)
+        pdf.cell(190, 10, 'Course Outline Compliance - Quick Overview', 0, 1, 'C')
+        pdf.ln(5)
+
+        # Header for items table
+        pdf.set_font('DejaVu','B', 10)
+        pdf.cell(150, 8, 'Checklist Item', 1, 0, 'L')
+        pdf.cell(30, 8, 'Status', 1, 1, 'C')
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_checklist_items = []
+        for item in analysis_data['checklist_items']:
+            if item not in seen:
+                seen.add(item)
+                unique_checklist_items.append(item)
+
+        # List items with status
+        pdf.set_font('DejaVu', '', 9)
+        for item in unique_checklist_items:
+            # Get the status from results
+            result = analysis_data['analysis_results'].get(item, {})
+            status = result.get('status', 'present' if item not in analysis_data['missing_items'] else 'missing')
+
+            # Use a very conservative estimate ofcharacters per line to ensure enough space
+            chars_per_line = 60  # Conservative estimate for better readability
+            item_length = len(item)
+            lines_needed = max(1, item_length / chars_per_line)
+
+            # Increase minimum row height and add padding for multi-line items
+            base_height = 8  # Minimum height in mm
+            line_height = 5  # Height per line in mm
+            padding = 2     # Extra padding in mm
+
+            row_height = max(base_height, (lines_needed * line_height) + padding)
+
+            # Save position for status cell
+            x_pos = pdf.get_x()
+            y_pos = pdf.get_y()
+
+            # Add box around item with proper spacing
+            pdf.rect(x_pos, y_pos, 150, row_height)
+
+            # Print item with padding
+            pdf.set_xy(x_pos + 2, y_pos + 2)  # Add internal padding
+            pdf.multi_cell(146, line_height, item.strip(), 0, 'L')
+
+            # Print status in its own box
+            pdf.set_xy(x_pos + 150, y_pos)
+
+            # Set color based on status
+            if status == 'na':
+                pdf.set_text_color(100, 100, 100)  # Gray for N/A
+                status_text = 'N/A'
+            elif status == 'present':
+                pdf.set_text_color(0, 128, 0)  # Green for present
+                status_text = 'Present'
+            else:
+                pdf.set_text_color(255, 0, 0)  # Red for missing
+                status_text = 'Missing'
+
+            pdf.rect(x_pos + 150, y_pos, 30, row_height)
+
+            # Center status text vertically and horizontally
+            pdf.set_xy(x_pos + 150 + (30 - pdf.get_string_width(status_text)) / 2, y_pos + (row_height - 5) / 2)
+            pdf.cell(30, 5, status_text, 0, 1, 'C')
+            pdf.set_text_color(0, 0, 0)
+
+            # Add spacing between items
+            pdf.set_xy(x_pos, y_pos + row_height + 2)
+
+            # Check for new page
+            if pdf.get_y() > 250:
+                pdf.add_page()
+                pdf.set_font('DejaVu', 'B', 10)
+                pdf.cell(150, 8, 'Checklist Item', 1, 0, 'L')
+                pdf.cell(30, 8, 'Status', 1, 1, 'C')
+                pdf.set_font('DejaVu', '', 9)
+
+        # Add summary at bottom of last page
+        pdf.ln(10)
+        pdf.set_font('DejaVu', 'B', 10)
+        total_items = len(unique_checklist_items)
+        present_items = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
+                           (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
+        na_items = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
+        missing_items = total_items - present_items - na_items
+
+        pdf.cell(63, 8, f'Total Items: {total_items}', 1, 0, 'L')
+        pdf.cell(63, 8, f'Present: {present_items}', 1, 0, 'L')
+        pdf.cell(64, 8, f'Missing: {missing_items} / N/A: {na_items}', 1, 1, 'L')
+
+        # Add summary at the end
+        pdf.add_page()
+        pdf.set_font('DejaVu', 'B', 16)
+        pdf.cell(190, 10, 'Compliance Summary Report', 0, 1, 'C')
+        pdf.ln(3)
+
+        # Add summary explanation
+        pdf.set_font('DejaVu', '', 10)
+        pdf.multi_cell(190, 5, 'This report summarizes the compliance status of the course outline against the University of Calgary checklist requirements. The compliance rate is calculated only for applicable items, excluding those marked as N/A.', 0, 'L')
+        pdf.ln(5)
+
+        # Count different statuses
+        present_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
+                           (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
+        na_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
+        missing_count = total_items - present_count - na_count
+
+        # Calculate compliance percentage (excluding N/A items)
+        applicable_items = total_items - na_count
+        compliance_percentage = (present_count / applicable_items * 100) if applicable_items > 0 else 100
+
+        # Create a professional summary section
+        # Draw header
+        pdf.set_fill_color(220, 230, 241)  # Light blue background
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 12, 'Course Outline Compliance Statistics', 1, 1, 'C', True)
+
+        # Create a table for statistics
+        pdf.set_font('DejaVu', '', 10)
+
+        # Row 1: Total and Applicable
+        pdf.set_fill_color(245, 245, 245)  # Light gray
+        pdf.cell(95, 10, f'Total Requirements: {total_items}', 1, 0, 'L', True)
+        pdf.cell(95, 10, f'Applicable Requirements: {applicable_items}', 1, 1, 'L', True)
+
+        # Row 2: Present and Missing
+        pdf.set_fill_color(255, 255, 255)  # White
+        pdf.cell(95, 10, f'Requirements Present: {present_count}', 1, 0, 'L', True)
+        pdf.cell(95, 10, f'Requirements Missing: {missing_count}', 1, 1, 'L', True)
+
+        # Row 3: N/A and Rate
+        pdf.set_fill_color(245, 245, 245)  # Light gray
+        pdf.cell(95, 10, f'Requirements N/A: {na_count}', 1, 0, 'L', True)
+
+        # Set compliance rate color based on percentage
+        if compliance_percentage >= 90:
+            pdf.set_text_color(0, 128, 0)  # Green for high compliance
+        elif compliance_percentage >= 70:
+            pdf.set_text_color(255, 140, 0)  # Orange for medium compliance
+        else:
+            pdf.set_text_color(255, 0, 0)  # Red for low compliance
+
+        pdf.set_font('DejaVu', 'B', 10)
+        pdf.cell(95, 10, f'Compliance Rate: {compliance_percentage:.1f}%', 1, 1, 'L', True)
+        pdf.set_text_color(0, 0, 0)  # Reset to black
+
+        # Add visual compliance meter
+        pdf.ln(10)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 10, 'Visual Compliance Indicator', 0, 1, 'L')
+
+        # Draw progress bar background
+        bar_width = 180
+        bar_height = 20
+        pdf.set_fill_color(220, 220, 220)  # Light gray background
+        pdf.rect(15, pdf.get_y(), bar_width, bar_height, 'F')  # 'F' means filled rectangle
+
+        # Draw progress bar fill based on compliance percentage
+        filled_width = min(bar_width * (compliance_percentage / 100), bar_width)
+
+        # Set color based on percentage
+        if compliance_percentage >= 90:
+            pdf.set_fill_color(0, 180, 0)  # Green for high compliance
+        elif compliance_percentage >= 70:
+            pdf.set_fill_color(255, 140, 0)  # Orange for medium compliance
+        else:
+            pdf.set_fill_color(255, 0, 0)  # Red for low compliance
+
+        pdf.rect(15, pdf.get_y(), filled_width, bar_height, 'F')  # 'F' means filled rectangle
+
+        # Add percentage text on top of the bar
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.set_text_color(255, 255, 255)  # White text
+
+        # Center the text on the filled portion if it's wide enough
+        if filled_width > 40:
+            pdf.set_xy(15 + (filled_width / 2) - 20, pdf.get_y() + (bar_height / 2) - 3)
+            pdf.cell(40, 6, f'{compliance_percentage:.1f}%', 0, 0, 'C')
+        else:
+            # Place text after the bar if too narrow
+            pdf.set_xy(15 + bar_width + 5, pdf.get_y() + (bar_height / 2) - 3)
+            pdf.set_text_color(0, 0, 0)  # Black text
+            pdf.cell(40, 6, f'{compliance_percentage:.1f}%', 0, 0, 'L')
+
+        pdf.set_text_color(0, 0, 0)  # Reset to black
+
+        # Add compliance recommendation
+        pdf.ln(30)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 10, 'Compliance Recommendation:', 0, 1, 'L')
+
+        recommendation_text = ""
+        if compliance_percentage >= 90:
+            recommendation_text = "This course outline is highly compliant with the University of Calgary's requirements. Minor improvements may still be beneficial for the few missing items."
+        elif compliance_percentage >= 70:
+            recommendation_text = "This course outline meets most of the University of Calgary's requirements, but needs attention to several missing items. Please review the missing requirements and update accordingly."
+        else:
+            recommendation_text = "This course outline requires significant improvements to meet the University of Calgary's requirements. Please carefully review all missing items and update the outline accordingly."
+
+        pdf.set_font('DejaVu', '', 10)
+        pdf.multi_cell(190, 5, recommendation_text, 0, 'L')
+
+        # Add a note about N/A items
+        if na_count > 0:
+            pdf.ln(5)
+            pdf.set_font('DejaVu', 'I', 10)
+            pdf.multi_cell(190, 5, f"Note: {na_count} items were marked as Not Applicable and excluded from the compliance rate calculation. These may include requirements that don't apply to this specific course, such as group work or final exam details for courses without these components.", 0, 'L')
+
+        # Create temporary file and save
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        temp_filename = temp_file.name
+        temp_file.close()
+
+        # Save PDF to temporary file
+        pdf.output(temp_filename)
+
+        # Read the PDF file into a BytesIO object
+        pdf_buffer = io.BytesIO()
+        with open(temp_filename, 'rb') as f:
+            pdf_buffer.write(f.read())
+
+        # Delete the temporary file
+        os.unlink(temp_filename)
+
+        # Reset the buffer position
+        pdf_buffer.seek(0)
+
+        # Send the PDF to the browser with download option
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name='syllabus_sync_report.pdf'
+        )
+
+    except Exception as e:
+        logger.exception(f"Error generating PDF: {str(e)}")
+        flash(f"Error generating PDF: {str(e)}")
+        return redirect('/')
+
+@app.route('/get-enhanced-checklist')
 def get_enhanced_checklist():
     """Serve the simplified checklist items from the file"""
     try:
@@ -678,11 +1029,9 @@ def api_analyze_course_outline():
     - A JSON array of 26 items, each with:
       - present: boolean indicating if the item is present in the outline
       - confidence: number between 0.0 and 1.0
-      - explanation: brief explanation (prefixed with "[2nd Analysis]" if from second-chance analysis)
+      - explanation: brief explanation
       - evidence: direct quote from the outline, or empty string if not found
       - method: always "ai_general_analysis"
-      - triple_checked: boolean indicating if the item was analyzed using multiple passes (always true)
-      - second_chance: boolean indicating if this result came from a second-chance analysis after an initial failure
     """
     try:
         document_text = ""
@@ -719,26 +1068,7 @@ def api_analyze_course_outline():
         
     except Exception as e:
         logger.exception(f"Error analyzing course outline: {str(e)}")
-        
-        # CRITICAL: Instead of returning an error, we return a graceful fallback response
-        # This ensures the API always returns a valid response format even when OpenAI API fails
-        logger.warning("API error detected - generating fallback results")
-        
-        # Generate a fallback response with 26 items that all pass compliance
-        fallback_items = []
-        for i in range(26):
-            fallback_items.append({
-                "present": True,
-                "confidence": 0.7,
-                "explanation": f"System automatically validated requirement {i+1} due to AI service limitations.",
-                "evidence": "",
-                "method": "ai_general_analysis",
-                "triple_checked": True,
-                "second_chance": False
-            })
-        
-        logger.info("Returning fallback analysis results with 26 passing items")
-        return jsonify(fallback_items)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     try:

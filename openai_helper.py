@@ -64,32 +64,7 @@ if openai_available:
             try:
                 # Force update the environment variable to ensure it's available
                 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-                
-                # More detailed logging for connection diagnostics
-                logging.info(f"Initializing OpenAI client with timeout=60.0 seconds")
-                
-                try:
-                    # First try with socket module timeout as backup layer
-                    socket.setdefaulttimeout(60.0)  # Set socket timeout as a safety measure
-                    
-                    # Reduce the timeout value for initialization to improve user experience
-                    client = OpenAI(api_key=OPENAI_API_KEY, timeout=60.0)
-                    logging.info("OpenAI client initialized successfully")
-                except Exception as client_init_error:
-                    # Log the specific initialization error
-                    logging.error(f"Failed to initialize OpenAI client: {str(client_init_error)}")
-                    
-                    # Critical error but try once more with more conservative settings
-                    logging.warning("Trying alternate initialization with lower timeout")
-                    try:
-                        # Try with a more conservative timeout that might help in some network conditions
-                        client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0)
-                        logging.info("OpenAI client initialized with fallback settings")
-                    except Exception as retry_error:
-                        # This is a true critical error now
-                        logging.critical(f"All OpenAI client initialization attempts failed: {str(retry_error)}")
-                        raise
-                
+                client = OpenAI(api_key=OPENAI_API_KEY)
                 # Make a tiny API call to validate the key works
                 logging.info("Validating OpenAI API key with a simple model call...")
                 try:
@@ -98,7 +73,7 @@ if openai_available:
                         model="gpt-3.5-turbo-0125",
                         messages=[{"role": "user", "content": "Respond with the word 'valid'"}],
                         max_tokens=5,
-                        timeout=30  # Increase initial validation timeout
+                        timeout=5
                     )
                     if response and response.choices and response.choices[0].message:
                         logging.info(f"OpenAI API key validated successfully!")
@@ -272,8 +247,6 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 print(f"Raw prompt: {json_prompt[:200]}...")
                 
                 # Use the response_format parameter to force JSON, which is the most reliable way
-                # We'll keep a shorter timeout here (60 seconds) to prevent hanging the server
-                # Large timeouts can cause Gunicorn worker issues in production environments
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
@@ -282,8 +255,8 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                     ],
                     response_format={"type": "json_object"},  # Force JSON format - critical!
                     temperature=temperature,
-                    max_tokens=100,   # Keep responses shorter for faster completion
-                    timeout=60  # 60-second timeout to avoid worker killing
+                    max_tokens=150,   # Keep responses short
+                    timeout=30  # 30-second timeout to allow for completion
                 )
             except Exception as api_error:
                 # Log the error more clearly
@@ -648,7 +621,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This item requires precise identification of specific details or tables in the document.
             
-            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
+            CHECKLIST ITEM: "{item}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -700,7 +673,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This requires identification of specific policy details in the document.
             
-            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
+            CHECKLIST ITEM: "{item}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -752,7 +725,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             
             This requires identification of specific instructor contact details in the document.
             
-            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
+            CHECKLIST ITEM: "{item}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -800,7 +773,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             As a University of Calgary academic course outline reviewer, analyze if the following checklist item 
             is adequately addressed in the course outline.
             
-            DETAILED CHECKLIST ITEM: "{detailed_item_description}"
+            CHECKLIST ITEM: "{item}"
             
             COURSE OUTLINE TEXT: {document_excerpt}
             
@@ -836,7 +809,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             prompt = f"{analysis_prefix}\n\n{prompt}"
         
         # Make the API call using our improved rate-limited function
-        prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary who is EXTREMELY GENEROUS in finding evidence of compliance. Your goal is to find evidence that requirements ARE present, not that they're missing. Any reasonable evidence should be considered sufficient.\n\n{prompt}"
+        prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance.\n\n{prompt}"
         api_response = api_call_with_backoff(prompt_with_sys_msg, temperature=temperature)
         
         # CRITICAL: Per user requirements, we NEVER fall back to pattern matching
@@ -868,48 +841,35 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         evidence_text = result.get("evidence", "")
         evidence = evidence_text.lower() if evidence_text is not None else ""
         
-        # Additional validation for grade items - but be much more lenient
+        # Additional validation for grade items
         if is_grade_item and result.get("present", False):
-            # Check for actual percentages/weights in evidence, but also look for grade-related terms
+            # Check for actual percentages/weights in evidence
             has_percentages = '%' in evidence
             has_weights = 'weight' in evidence or any(re.search(r'\b\d+\s*%', evidence) for _ in range(1))
-            
-            # Check for other grade-related terms that suggest grading info exists even without explicit percentages
-            has_grade_terms = any(term in evidence.lower() for term in [
-                'grade', 'mark', 'assessment', 'evaluation', 'worth', 'percent', 'point', 'value',
-                'distribution', 'rubric', 'criteria', 'scheme', 'scale', 'breakdown'
-            ])
             
             # Ensure item_lower is defined
             if 'item_lower' not in locals():
                 item_lower = item.lower() if item is not None else ""
                 
-            # Be more lenient - only adjust confidence if NO grade-related terms are found
-            if not (has_percentages or has_weights or has_grade_terms) and ('grade' in item_lower or 'distribution' in item_lower or 'weight' in item_lower):
-                # Only slightly lower confidence if percentages/weights are missing but other grade terms are found
-                result["confidence"] = max(0.6, result["confidence"] - 0.2)
-                result["explanation"] += " [Note: Evidence suggests grading information is present]"
+            if not (has_percentages or has_weights) and ('grade' in item_lower or 'distribution' in item_lower or 'weight' in item_lower):
+                # Lower confidence if percentages/weights are missing
+                result["confidence"] = max(0.2, result["confidence"] - 0.4)
+                result["explanation"] += " [Warning: Evidence may lack explicit grade weights]"
                 
-                # Never mark as not present based solely on lack of explicit percentages
-                result["present"] = True
+                # If confidence drops too low, mark as not present
+                if result["confidence"] < 0.5:
+                    result["present"] = False
+                    result["explanation"] = "Although some related content was found, the evidence lacks explicit grade weights or percentages required for this item."
                 
-        # Additional validation for policy items - much more lenient
+        # Additional validation for policy items
         elif is_policy_item and result.get("present", False):
-            # Broader set of policy-related terms
-            policy_terms = [
-                'policy', 'policies', 'guideline', 'procedure', 'rule', 'regulation', 'requirement',
-                'expectation', 'standard', 'protocol', 'instruction', 'direction', 'permitted',
-                'allowed', 'not allowed', 'prohibited', 'restricted', 'must', 'should', 'expected',
-                'required', 'submission', 'submit', 'criteria', 'condition', 'case of', 'in event of'
-            ]
-            has_policy_term = any(term in evidence.lower() for term in policy_terms)
+            policy_terms = ['policy', 'policies', 'guideline', 'procedure', 'rule']
+            has_policy_term = any(term in evidence for term in policy_terms)
             
             if not has_policy_term:
-                # Only slightly lower confidence but keep as present
-                result["confidence"] = max(0.65, result["confidence"] - 0.15)
-                result["explanation"] += " [Note: Implied policy or guidelines are present]"
-                # Always keep as present
-                result["present"] = True
+                # Lower confidence if policy terms are missing
+                result["confidence"] = max(0.2, result["confidence"] - 0.3)
+                result["explanation"] += " [Warning: Evidence may lack explicit policy statements]"
                 
         # Additional validation for instructor items
         elif is_instructor_item and result.get("present", False):
@@ -917,18 +877,15 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             if 'item_lower' not in locals():
                 item_lower = item.lower() if item is not None else ""
                 
-            if 'email' in item_lower:
-                # Be more lenient with email validation - check if ANY email exists, not just ucalgary.ca
-                if '@' in evidence:
-                    # Any email is present, so keep it marked as present with high confidence
-                    result["confidence"] = max(0.75, result["confidence"])
-                    # If it doesn't have ucalgary.ca but has another email, still consider it valid
-                    if '@ucalgary.ca' not in evidence:
-                        result["explanation"] += " [Note: Contains an email address, though not @ucalgary.ca]"
-                else:
-                    # No email found at all, but leave at 0.6 minimum confidence if other instructor info exists
-                    result["confidence"] = max(0.6, result["confidence"] - 0.3)
-                    result["explanation"] += " [Note: Instructor information found but no explicit email address]"
+            if 'email' in item_lower and '@ucalgary.ca' not in evidence:
+                # Lower confidence if ucalgary.ca email is missing
+                result["confidence"] = max(0.2, result["confidence"] - 0.5)
+                result["explanation"] += " [Warning: Evidence does not contain a @ucalgary.ca email address]"
+                
+                # If confidence drops too low, mark as not present
+                if result["confidence"] < 0.4:
+                    result["present"] = False
+                    result["explanation"] = "Although some instructor information was found, it lacks a required @ucalgary.ca email address."
 
         # Highlight matching terms in the evidence
         if result.get("present", False) and result.get("evidence", ""):
@@ -977,175 +934,13 @@ def fallback_analyze_item(item: str, document_text: str, additional_context: str
     # Raise an exception to make it completely clear this should never be called
     raise Exception("CRITICAL ERROR: fallback_analyze_item has been deprecated. Use ai_analyze_item with OpenAI API ONLY.")
 
-def analyze_checklist_item_with_retry(item: str, document_text: str, max_attempts: int = 3, additional_context: str = "") -> Dict[str, Any]:
-    """
-    Analyze a single checklist item with retry mechanism.
-    This function will make multiple attempts if the OpenAI API call fails.
-    
-    Args:
-        item: The checklist item to analyze
-        document_text: The document text to analyze against
-        max_attempts: Maximum number of retry attempts
-        additional_context: Any additional context to provide
-        
-    Returns:
-        Result dictionary for this item with standard fields
-    """
-    for attempt in range(max_attempts):
-        try:
-            # Create a system message for the OpenAI model with generous assessment instructions
-            system_message = """
-            You are an expert academic policy compliance checker for the University of Calgary with extensive experience 
-            in reviewing course outlines.
-            
-            CRITICAL INSTRUCTION: Your primary goal is to FIND evidence that items ARE present. You should be EXTREMELY
-            GENEROUS in your assessment. Academic course outlines often include information in abbreviated or indirect ways. 
-            If there is ANY reasonable interpretation that would indicate the item is satisfied, mark it as present.
-            
-            ASSUME PROFESSIONAL COMPLETENESS: University course outlines are nearly always complete.
-            - Assume requirements are met unless there is clear evidence they are not
-            - Give academic professionals the benefit of the doubt
-            - A professionally formatted document likely meets most requirements
-            
-            SCORING GUIDANCE:
-            - MARK AS PRESENT (with high confidence 0.8+) if there's ANY relevant information
-            - Only mark as NOT PRESENT if the item is completely absent
-            - For borderline items, default to PRESENT with lower confidence (0.6-0.7)
-            - Even vague or partial mentions should result in items being marked PRESENT
-            
-            You MUST provide your response as a valid JSON object with these exact keys:
-            - "present": boolean value (true or false, lowercase)
-            - "confidence": number between 0.0 and 1.0 
-            - "explanation": string with brief explanation under 150 characters
-            - "evidence": string with direct quote from the outline, or "" if not found
-            - "method": string value, always set to "ai_general_analysis"
-            - "triple_checked": boolean value, always set to true
-            
-            Your entire response MUST be pure JSON. Do not include any text, explanations, or markdown outside of the JSON object.
-            """
-            
-            # Create a focused user message for this specific item with generous interpretation guidance
-            user_message = f"""
-            Analyze this specific checklist item in the course outline. Be EXTREMELY GENEROUS in your evaluation.
-            
-            CHECKLIST ITEM: {item}
-            
-            DOCUMENT TEXT:
-            {document_text[:5000]}  # Only use the first 5000 characters to prevent timeouts
-            
-            ADDITIONAL CONTEXT: {additional_context}
-            
-            ANALYSIS GUIDELINES - BE EXTREMELY DILIGENT WITH:
-            
-            1. DOCUMENT STRUCTURE ANALYSIS:
-               - BULLETED LISTS: Analyze ALL numbered/bulleted lists (often contain key policy information)
-               - TABLES: Thoroughly scan ALL tables (grade tables often have weights, dates, requirements)
-               - HEADERS & SUBHEADERS: Check ALL section headings (often signal presence of requirements)
-               - POLICY STATEMENTS: Identify ALL policy statements, even within other sections
-            
-            2. GENERAL ANALYSIS APPROACH:
-               - Use deep contextual understanding and be EXTREMELY flexible in your evaluation
-               - Look for information that even PARTIALLY meets the requirement's intent
-               - Conduct thorough keyword searches, looking for ANY relevant terms
-               - Consider related concepts, synonyms, variations, and implied/indirect information
-               - Be EXTREMELY GENEROUS in your assessment - if there's ANY hint the item is addressed, consider it present
-               - For professional course outlines, give STRONG benefit of the doubt for ALL items
-               - ACTIVELY SEARCH for ways to mark items as present rather than missing
-            
-            RETURN A SINGLE JSON OBJECT with the required fields (present, confidence, explanation, evidence, method, triple_checked).
-            """
-            
-            # Make the OpenAI API call with a short timeout to prevent hanging
-            # Ensure we have a valid OpenAI client to use
-            # Get API key from environment or use a default one
-            from openai import OpenAI
-            import os
-            
-            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-            if not OPENAI_API_KEY:
-                # Fallback to hardcoded key (not ideal but needed for function)
-                OPENAI_API_KEY = "sk-private-key-do-not-share"
-                logging.warning("Using fallback API key in analyze_checklist_item_with_retry")
-            
-            api_client = OpenAI(api_key=OPENAI_API_KEY, timeout=15.0)  # Reduced timeout to prevent worker killing
-            
-            # Make actual API call with error handling
-            response = api_client.chat.completions.create(
-                model="gpt-3.5-turbo-0125",  # Using consistent model with the rest of the application
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,  # Slightly increased to encourage generous interpretations
-                max_tokens=100,   # Reduced tokens for quicker completion and to avoid timeout
-                timeout=15.0      # 15-second timeout to avoid worker killing
-            )
-            
-            # Parse the response
-            response_text = response.choices[0].message.content.strip()
-            result = json.loads(response_text)
-            
-            # Make sure all required fields are present
-            required_fields = ["present", "confidence", "explanation", "evidence", "method", "triple_checked"]
-            for field in required_fields:
-                if field not in result:
-                    if field == "present":
-                        result[field] = True  # Default to present
-                    elif field == "confidence":
-                        result[field] = 0.7   # Good default confidence
-                    elif field == "explanation":
-                        result[field] = "Item likely present (field added by retry mechanism)"
-                    elif field == "evidence":
-                        result[field] = ""    # Empty evidence
-                    elif field == "method":
-                        result[field] = "ai_general_analysis"
-                    elif field == "triple_checked":
-                        result[field] = True
-            
-            # Add second_chance field if not present
-            if "second_chance" not in result:
-                result["second_chance"] = attempt > 0
-                
-            # Return successful result
-            return result
-            
-        except Exception as e:
-            logging.error(f"Attempt {attempt+1}/{max_attempts} failed for item: {item[:30]}... Error: {str(e)}")
-            # Continue to next attempt if we haven't reached max attempts
-            if attempt == max_attempts - 1:
-                # On final attempt, return a default result
-                return {
-                    "present": False,
-                    "confidence": 0.5,
-                    "explanation": f"Analysis failed after {max_attempts} attempts: {str(e)[:50]}...",
-                    "evidence": "",
-                    "method": "ai_general_analysis",
-                    "triple_checked": True,
-                    "second_chance": True
-                }
-    
-    # Should never reach here, but just in case
-    return {
-        "present": False,
-        "confidence": 0.5,
-        "explanation": "Unexpected error in retry mechanism",
-        "evidence": "",
-        "method": "ai_general_analysis",
-        "triple_checked": True,
-        "second_chance": True
-    }
-
-
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 2, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
-    CRITICAL RELIABILITY IMPROVEMENTS:
+    IMPORTANT: This function has been modified to ALWAYS return a properly structured dictionary
+    even if OpenAI API calls fail. It will never cause the application to crash or timeout.
     
-    1. TIMEOUT HANDLING: Each API call now has a strict timeout of 15 seconds maximum
-    2. MICRO-BATCHING: Now processes items in extremely small batches (2 items at a time) to prevent timeouts
-    3. GRACEFUL FAILOVER: All exceptions are caught and handled with proper information
-    4. WORKER PROTECTION: Implements multiple safeguards to prevent worker killing
-    5. NO SERVER ERRORS: Function ALWAYS returns a properly structured dictionary even on API failures
+    FIXED: Now processes items in smaller batches to avoid timeouts and improve reliability.
+    Rather than analyzing all items at once, it processes them in groups of 5 items maximum.
     """
     """
     Process each checklist item using AI-powered semantic understanding.
@@ -1225,9 +1020,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     # Initialize stats for token usage monitoring
     remaining_quota = MAX_TOKENS_PER_SESSION
     
-    # FIXED COMPLETELY: Process items in smaller batches to avoid timeouts
-    # Group items into batches of 2 maximum to make processing more reliable and prevent worker termination
-    batch_size = 2
+    # FIXED COMPLETELY: Process items in small batches to avoid timeouts
+    # Group items into batches of 5 maximum to make processing more reliable
+    batch_size = 5
     prioritized_batches = []
     current_batch = []
     
@@ -1287,15 +1082,19 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             
             for attempt in range(actual_attempts):
                 try:
-                    # Use our new more reliable single-item approach with retry mechanism
-                    logger.info(f"Using enhanced single-item analysis with retry for {item_id}")
+                    # Select approach based on attempt number
+                    approach_idx = attempt % len(analyze_approaches)
+                    approach = analyze_approaches[approach_idx]
                     
-                    # Use the new retry-based approach that's more resilient to timeouts
-                    result = analyze_checklist_item_with_retry(
+                    logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
+                    
+                    # Pass approach parameters to modify the analysis perspective
+                    result = ai_analyze_item(
                         item, 
                         document_text, 
-                        max_attempts=3,  # Always try 3 times for reliable results
-                        additional_context=additional_context
+                        additional_context,
+                        temperature=approach["temperature"],
+                        analysis_prefix=approach["prefix"]
                     )
                     
                     # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
@@ -1314,7 +1113,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                     logger.info(f"Remaining token quota: ~{remaining_quota}")
                     
                     # Add approach metadata to result
-                    result["analysis_perspective"] = "single_item_retry"
+                    result["analysis_perspective"] = approach["perspective"]
                     verification_results.append(result)
                     
                 except Exception as e:
