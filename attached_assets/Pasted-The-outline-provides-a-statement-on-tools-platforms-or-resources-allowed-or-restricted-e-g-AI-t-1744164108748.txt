@@ -1,0 +1,17 @@
+The outline provides a statement on tools, platforms, or resources allowed or restricted (e.g., AI tools, books, websites, software).
+. A section describes the expected student workload (e.g., hours per week inside/outside class).
+A grade scale is provided showing how letter grades map to percentage ranges and grade points. High Priority
+If group work is included, it makes up 40% or less of the total grade; if group work is not included, mark as “N/A”.
+Due dates are listed for assessments (can appear in a grade table, course schedule, or assignment description). High Priority
+There are no assignments scheduled after the final class or presentation date (cross-check final due dates with the last class). High Priority
+A missed assessment policy is included, even if it appears under another title (e.g., deferrals, make-up work, illness accommodations). High Priority
+If participation is part of the grade, the outline explains how it is evaluated (e.g., discussion, LinkedIn activity, peer feedback). High Priority
+The outline explains how and where students must submit assignments (e.g., via D2L dropbox, not by email).
+If a group project is listed, the outline includes its description and due date of the first group deliverable. High Priority
+If a midterm or quiz is included, the outline provides timing, modality (in-person or online), location, technology requirements, and allowed materials.
+If a final exam is included, the outline provides the same info as above and confirms it does not count for more than 50% of the course grade. High Priority
+If a take-home final exam is included, it is flagged for administrative review. If not included, mark as “N/A”. High Priority
+A class schedule or session breakdown is included, listing dates, topics, or milestones (can appear in table or list form). High Priority
+The schedule includes due dates for major assignments or assessments. High Priority
+The schedule includes any listed midterm, final exam, or quiz dates. High Priority
+All web or external links included in the outline are working or valid

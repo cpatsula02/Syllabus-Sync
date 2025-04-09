@@ -137,6 +137,14 @@ def extract_checklist_items(text: str) -> List[str]:
     # Third pass: add special headers if we don't have many items yet
     if len(items) < 10:
         logger.warning(f"Few items found ({len(items)}). Looking for header-like text...")
+        # Define special header patterns to look for in text
+        special_headers = [
+            r'^\d+\.\s+([A-Z][a-z]+(?:\s+[A-Za-z]+){2,})',  # Numbered headers: "1. Important Requirement Here"
+            r'^[A-Z][A-Z\s]+(?:\:|\-|\s)(.+)',  # ALL CAPS followed by text 
+            r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,5})[\:\s]+',  # Title Case Headers
+            r'^\*\*([^*]+)\*\*',  # Markdown bold headers: **Header**
+            r'^#{1,3}\s+([^#\n]+)'  # Markdown headers: ### Header
+        ]
         for pattern in special_headers:
             for line in lines:
                 if len(line) > 10:  # Minimum length requirement
@@ -200,15 +208,20 @@ def extract_checklist_items(text: str) -> List[str]:
 
 def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
     """
+    Enhanced pattern matching with more flexible detection.
+    
     Check if item requirements are met anywhere in the document, regardless of section.
-    Uses semantic understanding to identify related content in any context.
-    """
-    """
-    Advanced semantic matching with strict validation for critical elements.
-    Uses multiple strategies including header recognition, semantic equivalence,
-    and specific pattern validation for critical items.
-
-    Implements a more strict matching algorithm to reduce false positives.
+    Uses improved semantic understanding to identify related content in any context.
+    
+    This updated function uses multiple detection strategies:
+    1. Header recognition for section-based requirements
+    2. Semantic equivalence for conceptual matches
+    3. Pattern validation for critical elements
+    4. Keyword expansion to capture more variations
+    5. Multiple passes with different sensitivity levels
+    
+    Implements a more comprehensive matching algorithm to reduce false negatives
+    while maintaining accuracy.
     """
     document_lower = document_text.lower()
     item_lower = item.lower()
@@ -224,21 +237,35 @@ def check_item_in_document(item: str, document_text: str, additional_context="")
     if not item_concepts:
         return False
 
-    # Special handling for specific item types to reduce false positives
+    # Special handling for specific item types with expanded keyword lists
     is_grade_item = any(term in item_lower for term in [
-        'grade distribution', 'weight', 'assessment', 'table',
-        'due date', 'participation', 'group project', 'final exam',
-        'take home', 'class schedule', 'missed assessment', 'late policy'
+        'grade distribution', 'weight', 'assessment', 'table', 'grade', 'grading', 
+        'due date', 'participation', 'group project', 'final exam', 'midterm',
+        'take home', 'class schedule', 'missed assessment', 'late policy',
+        'assignment', 'evaluation', 'worth', 'percentage', 'points', 'mark', 'marks',
+        'score', 'scores', 'weighting', 'weighed', 'final grade', 'exams', 'quizzes',
+        'submissions', 'submission', 'submit', 'test', 'tests', 'homework', 'lab',
+        'project', 'projects', 'quiz', 'presentation', 'report', 'essay', 'paper',
+        'assignments', 'grade scale', 'distribution', 'components', 'dates',
+        'assessment dates', 'deadlines', 'scheduled', 'timetable'
     ])
 
     is_policy_item = any(term in item_lower for term in [
-        'policy', 'policies', 'guideline', 'rule', 'regulation', 
-        'requirement', 'procedure', 'standard', 'integrity'
+        'policy', 'policies', 'guideline', 'rule', 'regulation', 'absence',
+        'requirement', 'procedure', 'standard', 'integrity', 'statement',
+        'misconduct', 'plagiarism', 'attendance', 'accommodations', 'syllabus',
+        'diversity', 'inclusion', 'accessibility', 'guidelines', 'rules',
+        'procedure', 'requirements', 'code of conduct', 'academic dishonesty', 'regrade',
+        'credit', 'extra credit', 'make-up', 'makeup', 'defer', 'deferral', 'extension',
+        'withdraw', 'withdrawal', 'drop', 'cheating', 'illness', 'medical', 'documentation',
+        'late', 'missed', 'absence', 'accommodation', 'disability', 'religious'
     ])
 
     is_instructor_item = any(term in item_lower for term in [
-        'instructor', 'professor', 'faculty', 'teacher', 
-        'contact', 'email', 'office hours'
+        'instructor', 'professor', 'faculty', 'teacher', 'lecturer', 'ta', 'teaching assistant',
+        'contact', 'email', 'office hours', 'consultation', 'appointment', 'ucalgary.ca',
+        'phone', 'telephone', 'office', 'location', 'availability', 'reach', 'communicate',
+        'communication', 'information', 'name', 'staff', 'department', 'faculty'
     ])
 
     # Get document sections with improved section recognition
@@ -295,11 +322,16 @@ def extract_core_concepts(text):
 
 def extract_document_sections(document_text):
     """Extract sections with their titles and content from the document."""
-    # Look for potential section headers (uppercase words followed by newline, numbered sections, etc.)
+    # Look for potential section headers with improved pattern recognition
     section_patterns = [
         r'([A-Z][A-Z\s]{3,}[A-Z])[\s\n:]+',  # ALL CAPS HEADERS
         r'(\d+\.\s+[A-Za-z\s]{3,}[a-zA-Z])[\s\n:]+',  # Numbered headers like "1. Section Title"
-        r'([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?):\s*\n',  # Title Case Headers:
+        r'([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?):\s*\n',  # Title Case Headers with colon
+        r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,5})[\s\n]+',  # Title Case Headers without colon
+        r'([A-Z][a-z]+(?:_[A-Z][a-z]+)+)[\s\n:]+',  # CamelCase_With_Underscores headers
+        r'(\*\*[^*\n]+\*\*)[\s\n]+',  # Markdown bold headers like **Header**
+        r'(#+\s+[^\n]+)[\s\n]+',  # Markdown headers like ### Header
+        r'(\d+\.\d+(?:\.\d+)*\s+[A-Za-z\s]{3,}[a-zA-Z])[\s\n:]+',  # Multi-level numbering like "1.2.3 Title"
     ]
 
     sections = {}
@@ -613,79 +645,6 @@ def check_special_entity_patterns(item, document, additional_context=""):
 
             if re.search(email_pattern, context):
                 return True
-
-    return False
-
-    # Add this item to processed set
-    _processed_pattern_items.add(item_hash)
-    # Check for instructor email requirement
-    if 'instructor' in item and 'email' in item:
-        # Look for email patterns in the document
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@ucalgary\.ca\b'
-        instructor_pattern = r'(instructor|professor|teacher|faculty)(.{0,30})(email|contact|reach)'
-
-        # Look for email near instructor context
-        instructor_matches = re.finditer(instructor_pattern, document, re.IGNORECASE)
-        for match in instructor_matches:
-            context_start = max(0, match.start() - 100)
-            context_end = min(len(document), match.end() + 100)
-            context = document[context_start:context_end]
-
-            if re.search(email_pattern, context):
-                return True
-
-    # Check for grade distribution table
-    if ('grade' in item and 'distribution' in item) or 'weight' in item:
-        # Check for table patterns
-        table_patterns = [
-            r'\|\s*Assessment\s*\|\s*Weight\s*\|',  # Markdown table header
-            r'Component\s+Weight',  # Simple table format
-            r'(\w+\s+){1,3}:\s*\d{1,3}\s*%',  # Component: XX% format
-            r'\d{1,3}\s*%\s*-\s*(\w+\s+){1,3}',  # XX% - Component format
-        ]
-
-        for pattern in table_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Check for specific formatting requirements
-    if 'formatted' in item or 'format' in item:
-        # Check for page numbering, margins, font specifications
-        format_patterns = [
-            r'(page|margin|font|spacing)(.{0,30})(requirement|specification)',
-            r'(format|formatting)(.{0,30})(guide|requirement|instruction)',
-        ]
-
-        for pattern in format_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Check for learning outcomes
-    if 'learning' in item and ('outcome' in item or 'objective' in item):
-        outcome_patterns = [
-            r'learning\s+outcomes?',
-            r'course\s+objectives?',
-            r'students\s+will\s+(be\s+able\s+to|learn|understand|demonstrate)',
-            r'by\s+the\s+end\s+of\s+this\s+course',
-        ]
-
-        for pattern in outcome_patterns:
-            if re.search(pattern, document, re.IGNORECASE):
-                return True
-
-    # Add context-specific checks based on additional_context if provided
-    if additional_context:
-        context_lower = additional_context.lower()
-        if 'graduate course' in context_lower and 'graduate' in item.lower():
-            grad_patterns = [
-                r'graduate(\s+level|\s+student|\s+program|\s+requirement)',
-                r'master\'?s(\s+program|\s+degree|\s+requirement)',
-                r'ph\.?d\.?(\s+student|\s+program|\s+requirement)',
-            ]
-
-            for pattern in grad_patterns:
-                if re.search(pattern, document, re.IGNORECASE):
-                    return True
 
     return False
 

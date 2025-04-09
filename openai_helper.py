@@ -349,19 +349,24 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         # Determine if this is a special item type for customized prompting
         item_lower = item.lower()
         
-        # Check for grade/assessment related items
+        # Check for grade/assessment related items (expanded keyword list)
         is_grade_item = any(term in item_lower for term in [
-            'grade distribution', 'weight', 'assessment', 'table',
-            'due date', 'participation', 'group project', 'final exam',
+            'grade distribution', 'weight', 'assessment', 'table', 'grade', 'grading', 
+            'due date', 'participation', 'group project', 'final exam', 'midterm',
             'take home', 'class schedule', 'missed assessment', 'late policy',
-            'assignment', 'evaluation', 'worth', 'percentage', 'grading'
+            'assignment', 'evaluation', 'worth', 'percentage', 'points', 'mark', 'marks',
+            'score', 'scores', 'weighting', 'weighed', 'final grade', 'exams', 'quizzes',
+            'submissions', 'submission', 'submit', 'test', 'tests', 'homework', 'lab'
         ])
         
-        # Check for policy-related items
+        # Check for policy-related items (expanded keyword list)
         is_policy_item = any(term in item_lower for term in [
-            'policy', 'policies', 'missed', 'late', 'academic integrity',
-            'misconduct', 'plagiarism', 'attendance', 'accommodations',
-            'diversity', 'inclusion', 'accessibility', 'guidelines', 'rules'
+            'policy', 'policies', 'missed', 'late', 'academic integrity', 'absence',
+            'misconduct', 'plagiarism', 'attendance', 'accommodations', 'syllabus',
+            'diversity', 'inclusion', 'accessibility', 'guidelines', 'rules', 'statement',
+            'procedure', 'requirements', 'code of conduct', 'academic dishonesty', 'regrade',
+            'credit', 'extra credit', 'make-up', 'makeup', 'defer', 'deferral', 'extension',
+            'withdraw', 'withdrawal', 'drop', 'cheating', 'illness', 'medical', 'documentation'
         ])
         
         # Check for instructor/contact related items
