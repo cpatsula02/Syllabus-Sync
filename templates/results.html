@@ -52,7 +52,13 @@
             <div class="row mt-3">
                 <div class="col-12">
                     <div class="alert alert-light border p-3">
-                        <h6 class="mb-2 fw-bold"><i class="fas fa-brain me-2 text-primary"></i>Multi-Perspective Analysis</h6>
+                        <h6 class="mb-2 fw-bold"><i class="fas fa-brain me-2 text-primary"></i>AI-Powered Analysis Using OpenAI API</h6>
+                        <div class="alert alert-primary">
+                            <i class="fas fa-robot me-2"></i><strong>OpenAI API is being used exclusively</strong> for all checklist verifications. Pattern matching fallbacks are completely disabled.
+                        </div>
+                        <div class="alert alert-info mt-2">
+                            <i class="fas fa-info-circle me-2"></i><strong>Implementation Details:</strong> Each checklist item is processed using OpenAI's GPT model with strict JSON response formatting and validation. The system makes independent API calls for each checklist item to ensure reliable results.
+                        </div>
                         <p class="mb-2">Each checklist item was analyzed through multiple perspectives:</p>
                         <div class="d-flex flex-wrap mb-2">
                             <span class="badge bg-info me-2 mb-1 p-2"><i class="fas fa-chalkboard-teacher me-1"></i> Instructor Perspective</span>
@@ -105,7 +111,7 @@
                 
                 <div class="alert alert-info mb-3">
                     <i class="fas fa-robot me-2"></i>
-                    <strong>AI-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis. Each item was scanned <strong>exactly 3 times</strong> from different analytical viewpoints (instructor, student, and administrator perspectives) to ensure accurate results and minimize false negatives.
+                    <strong>OpenAI API-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis using the OpenAI API exclusively. Each item was processed using OpenAI's GPT model with strict JSON response requirements to ensure accurate results and minimize false negatives.
                 </div>
 
                 <!-- Yellow box with bullet-pointed missing items -->

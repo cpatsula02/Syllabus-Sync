@@ -190,6 +190,19 @@ def index():
                     # Process results from OpenAI API exclusively - no pattern matching
                     results = analysis_results
                     
+                    # Debug logging to understand the structure of results
+                    app.logger.error(f"DEBUG INFO: Type of results is: {type(results)}")
+                    app.logger.error(f"DEBUG INFO: results dict contains {len(results)} items")
+                    
+                    # Debug the structure of each key-value pair
+                    for key, value in results.items():
+                        app.logger.error(f"DEBUG: Processing key {key}, value type: {type(value)}")
+                        
+                        # Debug method field to ensure OpenAI API is being used
+                        if isinstance(value, dict) and 'method' in value:
+                            method = value.get('method', '')
+                            app.logger.error(f"DEBUG: Item '{key}' used method: {method}")
+                    
                     # Check if any results have the openai_api_error method
                     api_errors = [item for item, result in results.items() 
                                  if result.get('method') == 'openai_api_error']

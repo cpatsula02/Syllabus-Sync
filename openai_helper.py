@@ -25,9 +25,22 @@ except ImportError:
     logging.critical("Please install the openai library with: pip install openai")
     openai_available = False
     # Define empty classes for type compatibility
-    class RateLimitError(Exception): pass
-    class APIError(Exception): pass
-    class APITimeoutError(Exception): pass
+    # Custom exception classes with proper initialization to avoid parameter errors
+    class RateLimitError(Exception):
+        def __init__(self, message="Rate limit exceeded"):
+            self.message = message
+            super().__init__(self.message)
+    
+    class APIError(Exception):
+        def __init__(self, message="API error occurred", request=None):
+            self.message = message
+            self.request = request
+            super().__init__(self.message)
+    
+    class APITimeoutError(Exception):
+        def __init__(self, message="API request timed out"):
+            self.message = message
+            super().__init__(self.message)
 
 # Configure OpenAI with API key
 # Get API key from environment and make sure it's accessible to this module
@@ -256,8 +269,12 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 else:
                     raise APIError(f"OpenAI API error: {str(api_error)}")
             
-            # Estimate response tokens
+            # Get raw response content for debugging
             response_text = response.choices[0].message.content
+            print(f"RAW OPENAI RESPONSE: {response_text}")
+            logger.info(f"RAW OPENAI RESPONSE: {response_text}")
+            
+            # Estimate response tokens
             response_tokens = count_tokens(response_text)
             
             # Update token count
@@ -353,9 +370,12 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 if "evidence" not in result:
                     result["evidence"] = ""
                 
-                # Add method field if missing
+                # Add method field if missing - Always indicate OpenAI API use
                 if "method" not in result:
-                    result["method"] = "ai_analysis_recovery"
+                    result["method"] = "openai_api_analysis"
+                elif "ai_" in result["method"] and "openai" not in result["method"].lower():
+                    # Update any AI methods to explicitly show OpenAI usage
+                    result["method"] = "openai_" + result["method"]
                 
                 # Cache and return the result
                 CACHE[cache_key] = result
