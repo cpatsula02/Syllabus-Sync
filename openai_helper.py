@@ -169,11 +169,9 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     one_minute_ago = current_time - timedelta(minutes=1)
     API_CALL_HISTORY[:] = [t for t in API_CALL_HISTORY if t > one_minute_ago]
     
-    # If we've made more than 5 calls in the last minute, add a small delay but keep it minimal
+    # Don't add sleep delays as they cause worker timeouts
     if len(API_CALL_HISTORY) > 5:
-        delay = 0.5  # Fixed shorter delay to prevent timeouts
-        logger.info(f"Rate limiting - adding {delay:.2f}s delay")
-        time.sleep(delay)
+        logger.info(f"Rate limiting detected, but skipping delay to avoid timeouts")
     
     # Try the API call with short timeout to prevent worker hanging
     for attempt in range(MAX_RETRIES):
@@ -213,8 +211,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             logger.warning(f"Rate limit error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
             if attempt < MAX_RETRIES - 1:
                 sleep_time = RETRY_DELAY_BASE ** attempt * (1 + random.random())
-                logger.info(f"Waiting {sleep_time:.2f}s before retry")
-                time.sleep(sleep_time)
+                logger.info(f"Would wait {sleep_time:.2f}s before retry, but skipping to avoid timeouts")
             else:
                 logger.error("Rate limit error after all retries")
                 return {"error": "Rate limit exceeded", "fallback_required": True}
@@ -223,8 +220,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             logger.warning(f"API error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
             if attempt < MAX_RETRIES - 1:
                 sleep_time = RETRY_DELAY_BASE ** attempt * (1 + random.random())
-                logger.info(f"Waiting {sleep_time:.2f}s before retry")
-                time.sleep(sleep_time)
+                logger.info(f"Would wait {sleep_time:.2f}s before retry, but skipping to avoid timeouts")
             else:
                 logger.error("API error after all retries")
                 return {"error": "API error", "fallback_required": True}
@@ -907,9 +903,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
         ]
         
-        # We'll use 1-2 verification attempts per item to avoid timeouts
-        # Use fewer attempts than specified if we're using a web request (max_attempts is usually 2)
-        actual_attempts = min(2, max_attempts)
+        # Use only a single verification attempt for each item to prevent timeouts
+        # This is critical for web requests to avoid worker timeouts
+        actual_attempts = 1  # Force to 1 regardless of max_attempts
         
         for attempt in range(actual_attempts):
             try:
