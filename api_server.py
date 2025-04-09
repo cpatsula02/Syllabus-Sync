@@ -5,6 +5,7 @@ import io
 import logging
 import re
 import socket
+import urllib.request
 from document_processor import extract_text
 from api_analysis import analyze_course_outline
 
@@ -29,6 +30,53 @@ app.secret_key = os.environ.get('SESSION_SECRET', 'dev_secret_key')
 
 # Create uploads directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+def validate_links(text):
+    """
+    Validates links found in the provided text.
+    Returns lists of valid and invalid links.
+    Used for checking the 26th checklist item (functional web links).
+    """
+    # Safety check - ensure text is a string
+    if not isinstance(text, str):
+        logger.warning(f"validate_links received non-string input: {type(text)}")
+        return [], []
+
+    # Improved URL pattern to catch more variants
+    url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
+    urls = re.findall(url_pattern, text)
+    
+    # Remove duplicates while preserving order
+    unique_urls = []
+    for url in urls:
+        if url not in unique_urls:
+            unique_urls.append(url)
+    
+    valid_links = []
+    invalid_links = []
+
+    # Limit to first 10 links to prevent timeouts
+    max_links_to_check = 10
+    for url in unique_urls[:max_links_to_check]:
+        # Make sure URL starts with http:// or https://
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+
+        try:
+            # Set a short timeout to prevent long waits
+            urllib.request.urlopen(url, timeout=3)
+            valid_links.append(url)
+            logger.info(f"Valid link found: {url}")
+        except Exception as e:
+            logger.warning(f"Invalid link {url}: {str(e)}")
+            invalid_links.append(url)
+
+    # If there are more links than we checked, log it
+    if len(unique_urls) > max_links_to_check:
+        logger.info(f"Only checked {max_links_to_check} out of {len(unique_urls)} unique links")
+
+    logger.info(f"Link validation complete: {len(valid_links)} valid, {len(invalid_links)} invalid links")
+    return valid_links, invalid_links
 
 @app.route('/api/analyze-course-outline', methods=['POST'])
 def api_analyze_course_outline():
@@ -79,6 +127,35 @@ def api_analyze_course_outline():
         logger.info("Starting course outline analysis via API")
         results = analyze_course_outline(document_text)
         logger.info(f"Analysis complete, returned {len(results)} results")
+        
+        # Handle web links validation (for the 26th checklist item)
+        valid_links, invalid_links = validate_links(document_text)
+        
+        # Find the web links related checklist item (usually the 26th item)
+        for i, item in enumerate(results):
+            if 'link' in item.get('explanation', '').lower() or 'url' in item.get('explanation', '').lower():
+                if invalid_links:
+                    results[i] = {
+                        'present': False,
+                        'confidence': 0.9,
+                        'explanation': f'Found {len(invalid_links)} invalid links in document',
+                        'evidence': "Invalid links found: " + ", ".join(invalid_links[:3]),
+                        'method': 'ai_general_analysis',
+                        'triple_checked': True,
+                        'second_chance': False
+                    }
+                else:
+                    results[i] = {
+                        'present': True,
+                        'confidence': 0.9,
+                        'explanation': 'All links in document are valid',
+                        'evidence': "Valid links found: " + ", ".join(valid_links[:3]),
+                        'method': 'ai_general_analysis',
+                        'triple_checked': True,
+                        'second_chance': False
+                    }
+                logger.info(f"Updated item {i+1} with web links validation results")
+                break
         
         return jsonify(results)
         

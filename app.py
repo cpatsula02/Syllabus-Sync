@@ -90,19 +90,30 @@ def identify_grade_table_items(checklist_items):
 def validate_links(text):
     """
     Validates links found in the provided text.
+    Returns lists of valid and invalid links.
+    Used for checking the 26th checklist item about functional web links.
     """
     # Safety check - ensure text is a string
     if not isinstance(text, str):
         logger.warning(f"validate_links received non-string input: {type(text)}")
         return [], []
 
+    # Improved URL pattern to catch more variants
     url_pattern = r"(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})"
     urls = re.findall(url_pattern, text)
+    
+    # Remove duplicates while preserving order
+    unique_urls = []
+    for url in urls:
+        if url not in unique_urls:
+            unique_urls.append(url)
+    
     valid_links = []
     invalid_links = []
 
-    # Limit to first 5 links to prevent timeouts
-    for url in urls[:5]:
+    # Limit to first 10 links to prevent timeouts
+    max_links_to_check = 10
+    for url in unique_urls[:max_links_to_check]:
         # Make sure URL starts with http:// or https://
         if not url.startswith(('http://', 'https://')):
             url = 'http://' + url
@@ -111,14 +122,16 @@ def validate_links(text):
             # Set a short timeout to prevent long waits
             urllib.request.urlopen(url, timeout=3)
             valid_links.append(url)
+            logger.info(f"Valid link found: {url}")
         except Exception as e:
             logger.warning(f"Invalid link {url}: {str(e)}")
             invalid_links.append(url)
 
     # If there are more links than we checked, log it
-    if len(urls) > 5:
-        logger.info(f"Only checked 5 out of {len(urls)} links")
+    if len(unique_urls) > max_links_to_check:
+        logger.info(f"Only checked {max_links_to_check} out of {len(unique_urls)} unique links")
 
+    logger.info(f"Link validation complete: {len(valid_links)} valid, {len(invalid_links)} invalid links")
     return valid_links, invalid_links
 
 

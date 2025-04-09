@@ -322,8 +322,13 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     # Identify failed items for second-chance analysis
     failed_item_indices = []
     for idx, item in enumerate(results_array):
+        # Handle last item (26th) as web links validation
+        if idx == 25 and item["explanation"] and not "API" in item["explanation"]:
+            # Special web links validation - only mark as needing retry if there was an API error
+            # Since normal results for this item should be processed separately
+            pass
         # Check for error states, API failures, or missing results that need retry
-        if ((not item.get("present", False) and 
+        elif ((not item.get("present", False) and 
             ("fail" in item.get("explanation", "").lower() or 
              "error" in item.get("explanation", "").lower() or
              "missing" in item.get("explanation", "").lower())) or
