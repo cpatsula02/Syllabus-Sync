@@ -1275,20 +1275,28 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 }
 
             if ENABLE_OPENAI:
-                # FIXED: Removed signal-based timeout handling which was causing issues
-                # Using the built-in timeout in the API call instead
-
-                # Log what we're doing
-                logging.info(f"Using OpenAI API EXCLUSIVELY for analysis (NO fallbacks used)")
+                # Set up timeout to prevent hanging
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("OpenAI API request timed out")
+                
+                # Set a timeout for OpenAI requests (longer timeout as requested by user)
+                logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (45 seconds)
                 
                 try:
-                    # Try the OpenAI API - it now has its own timeout handling
+                    # Try the OpenAI API with timeout protection
                     ai_results = analyze_checklist_items_batch(
                         checklist_items, 
                         outline_text, 
                         max_attempts=api_attempts, 
                         additional_context=enhanced_context
                     )
+                    
+                    # Cancel the alarm since we're done
+                    signal.alarm(0)
                     
                     # Check if we received a proper dictionary result
                     if isinstance(ai_results, dict):
@@ -1308,7 +1316,9 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             logging.error("Invalid results structure detected - returning error to user (NO pattern matching fallback used)")
                     else:
                         logging.error(f"OpenAI analysis returned invalid results type: {type(ai_results)} - returning error to user (NO pattern matching fallback used)")
-                except Exception as e:
+                except (TimeoutError, Exception) as e:
+                    # Cancel the alarm if there was an exception
+                    signal.alarm(0)
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
                     logging.error("API failed - returning error to user (NO pattern matching fallback used)")
             

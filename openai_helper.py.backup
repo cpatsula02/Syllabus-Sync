@@ -190,15 +190,18 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             # Instead, we're ensuring OpenAI API works properly - not sleeping
             logging.warning("Using ACTUAL OpenAI API call - no sleep simulation")
             
-            # FIXED: Simplified timeout handling to avoid conflicts between socket timeout and request timeout
-            # For json_object response_format, we need to include "json" in the message
-            json_prompt = prompt
-            if "json" not in prompt.lower():
-                json_prompt = f"{prompt}\n\nIMPORTANT: Return your assessment in valid JSON format."
-                
+            # Robust timeout handling with socket timeout protection
+            # Store original socket timeout
+            original_timeout = socket.getdefaulttimeout()
             try:
-                # Use only the client timeout parameter and avoid socket timeout manipulation
-                # This prevents conflicts between different timeout mechanisms
+                # Set socket timeout to prevent hanging connections
+                socket.setdefaulttimeout(40)  # Set socket timeout slightly less than API timeout
+                
+                # For json_object response_format, we need to include "json" in the message
+                json_prompt = prompt
+                if "json" not in prompt.lower():
+                    json_prompt = f"{prompt}\n\nIMPORTANT: Return your assessment in valid JSON format."
+                    
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
@@ -206,19 +209,16 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                     ],
                     response_format={"type": "json_object"},
                     temperature=temperature,  # Use the provided temperature parameter
-                    max_tokens=150,   # Further reduced token output to speed up response
-                    timeout=25  # Shorter timeout to prevent worker termination
+                    max_tokens=200,   # Further reduced token output to speed up response and prevent timeouts
+                    timeout=35  # Reduced timeout to prevent worker termination
                 )
-            except Exception as api_error:
-                # Log the error more clearly
-                logger.error(f"OpenAI API error: {str(api_error)}")
-                # Classify the error more specifically to help with debugging
-                if "connection" in str(api_error).lower():
-                    raise APIError(f"OpenAI API connection error: {str(api_error)}")
-                elif "timeout" in str(api_error).lower():
-                    raise APITimeoutError(f"OpenAI API timeout: {str(api_error)}")
-                else:
-                    raise APIError(f"OpenAI API error: {str(api_error)}")
+            except Exception as socket_error:
+                # Log the error
+                logger.error(f"OpenAI API connection error: {str(socket_error)}")
+                raise APIError(f"OpenAI API connection error: {str(socket_error)}")
+            finally:
+                # Always reset socket timeout, even if there's an error
+                socket.setdefaulttimeout(original_timeout)
             
             # Estimate response tokens
             response_text = response.choices[0].message.content
@@ -727,9 +727,6 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     """
     IMPORTANT: This function has been modified to ALWAYS return a properly structured dictionary
     even if OpenAI API calls fail. It will never cause the application to crash or timeout.
-    
-    FIXED: Now processes items in smaller batches to avoid timeouts and improve reliability.
-    Rather than analyzing all items at once, it processes them in groups of 5 items maximum.
     """
     """
     Process each checklist item using AI-powered semantic understanding.
@@ -809,157 +806,130 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     # Initialize stats for token usage monitoring
     remaining_quota = MAX_TOKENS_PER_SESSION
     
-    # FIXED COMPLETELY: Process items in small batches to avoid timeouts
-    # Group items into batches of 5 maximum to make processing more reliable
-    batch_size = 5
-    prioritized_batches = []
-    current_batch = []
-    
-    for priority_item in prioritized_items:
+    # Process items in priority order
+    for _, i, item in prioritized_items:
         # Skip if already processed (handles potential duplicates)
-        _, i, item = priority_item
         if item in processed_items:
             continue
             
-        current_batch.append(priority_item)
-        if len(current_batch) >= batch_size:
-            prioritized_batches.append(current_batch)
-            current_batch = []
-    
-    # Add the last batch if it's not empty
-    if current_batch:
-        prioritized_batches.append(current_batch)
+        processed_items.add(item)
         
-    logger.info(f"Processing items in {len(prioritized_batches)} batches of max {batch_size} items each")
-    
-    # Analyze approaches that will be used for each item
-    analyze_approaches = [
-        {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective with deep educational expertise: "},
-        {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective focusing on clarity and usability: "},
-        {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
-    ]
-    
-    # Process each batch
-    for batch_num, batch in enumerate(prioritized_batches):
-        logger.info(f"Processing batch {batch_num+1}/{len(prioritized_batches)}")
+        item_id = f'Item #{i+1}'
+        logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
-        # Process each item in the batch
-        for _, i, item in batch:
-            # Skip if already processed (handles potential duplicates)
-            if item in processed_items:
-                continue
+        # For remaining quota-based decisions - DISABLED as per user requirements
+        # We don't want to use pattern matching fallback even if quota is low
+        if False:  # INTENTIONALLY DISABLED - never use pattern matching fallback
+            logger.warning(f"Token quota check is intentionally disabled - will never use fallback")
+            continue
+        
+        # Make multiple API attempts per item for verification (as specified by max_attempts)
+        # Each attempt uses a slightly different approach to ensure thorough verification
+        api_success = False
+        verification_results = []
+        
+        # We must analyze each item exactly 3 times with different approaches to ensure thorough verification
+        analyze_approaches = [
+            {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective with deep educational expertise: "},
+            {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective focusing on clarity and usability: "},
+            {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
+        ]
+        
+        # Use only a single verification attempt for each item to prevent timeouts
+        # This is critical for web requests to avoid worker timeouts
+        actual_attempts = 1  # Force to 1 regardless of max_attempts
+        
+        for attempt in range(actual_attempts):
+            try:
+                # Select approach based on attempt number
+                approach_idx = attempt % len(analyze_approaches)
+                approach = analyze_approaches[approach_idx]
                 
-            processed_items.add(item)
-            
-            item_id = f'Item #{i+1}'
-            logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
-            
-            # For remaining quota-based decisions - DISABLED as per user requirements
-            # We don't want to use pattern matching fallback even if quota is low
-            if False:  # INTENTIONALLY DISABLED - never use pattern matching fallback
-                logger.warning(f"Token quota check is intentionally disabled - will never use fallback")
-                continue
-            
-            # Make multiple API attempts per item for verification (as specified by max_attempts)
-            # Each attempt uses a slightly different approach to ensure thorough verification
-            api_success = False
-            verification_results = []
-            
-            # Use only a single verification attempt for each item to prevent timeouts
-            # This is critical for web requests to avoid worker timeouts
-            actual_attempts = 1  # Force to 1 regardless of max_attempts
-            
-            for attempt in range(actual_attempts):
-                try:
-                    # Select approach based on attempt number
-                    approach_idx = attempt % len(analyze_approaches)
-                    approach = analyze_approaches[approach_idx]
-                    
-                    logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
-                    
-                    # Pass approach parameters to modify the analysis perspective
-                    result = ai_analyze_item(
-                        item, 
-                        document_text, 
-                        additional_context,
-                        temperature=approach["temperature"],
-                        analysis_prefix=approach["prefix"]
-                    )
-                    
-                    # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
-                    # Instead, we'll get an exception before reaching this point
-                    # This code is just here as a safety check
-                    if result.get('error'):
-                        logger.error(f"API error for {item_id}: {result.get('error')}")
-                        # CRITICAL: Per user requirements, we never use fallbacks
-                        raise APIError(f"OpenAI API error for {item_id}: {result.get('error')}")
-                    
-                    total_api_calls += 1
-                    api_success = True
-                    
-                    # Update token usage stats
-                    remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
-                    logger.info(f"Remaining token quota: ~{remaining_quota}")
-                    
-                    # Add approach metadata to result
-                    result["analysis_perspective"] = approach["perspective"]
-                    verification_results.append(result)
-                    
-                except Exception as e:
-                    api_errors += 1
-                    logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
-                    # CRITICAL: Per requirements, we NEVER switch to fallback analysis
-                    # Instead we propagate the error upward
-                    logger.error("API error detected but NOT switching to fallback analysis per requirements")
-                    # We'll handle this in the next conditional block
-                    # We leave the loop to prevent unnecessary retries
-            
-            # Process verification results or report API error (no fallback)
-            if api_success and verification_results:
-                # Use the most common result for present/not present
-                present_votes = sum(1 for r in verification_results if r.get('present', False))
+                logger.info(f"Using AI analysis for {item_id} (verification attempt {attempt+1}/{actual_attempts}, perspective: {approach['perspective']})")
                 
-                # If majority of attempts say item is present, mark as present
-                is_present = present_votes > len(verification_results) / 2
+                # Pass approach parameters to modify the analysis perspective
+                result = ai_analyze_item(
+                    item, 
+                    document_text, 
+                    additional_context,
+                    temperature=approach["temperature"],
+                    analysis_prefix=approach["prefix"]
+                )
                 
-                # Combine results from multiple verification attempts
-                if is_present:
-                    # Use the result with highest confidence that says "present"
-                    present_results = [r for r in verification_results if r.get('present', False)]
-                    if present_results:
-                        selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
-                    else:
-                        # Use first result if votes calculation produced inconsistent results
-                        selected_result = verification_results[0]
+                # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
+                # Instead, we'll get an exception before reaching this point
+                # This code is just here as a safety check
+                if result.get('error'):
+                    logger.error(f"API error for {item_id}: {result.get('error')}")
+                    # CRITICAL: Per user requirements, we never use fallbacks
+                    raise APIError(f"OpenAI API error for {item_id}: {result.get('error')}")
+                
+                total_api_calls += 1
+                api_success = True
+                
+                # Update token usage stats
+                remaining_quota = MAX_TOKENS_PER_SESSION - CURRENT_SESSION_TOKENS
+                logger.info(f"Remaining token quota: ~{remaining_quota}")
+                
+                # Add approach metadata to result
+                result["analysis_perspective"] = approach["perspective"]
+                verification_results.append(result)
+                
+            except Exception as e:
+                api_errors += 1
+                logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
+                # CRITICAL: Per requirements, we NEVER switch to fallback analysis
+                # Instead we propagate the error upward
+                logger.error("API error detected but NOT switching to fallback analysis per requirements")
+                # We'll handle this in the next conditional block
+                # We leave the loop to prevent unnecessary retries
+        
+        # Process verification results or report API error (no fallback)
+        if api_success and verification_results:
+            # Use the most common result for present/not present
+            present_votes = sum(1 for r in verification_results if r.get('present', False))
+            
+            # If majority of attempts say item is present, mark as present
+            is_present = present_votes > len(verification_results) / 2
+            
+            # Combine results from multiple verification attempts
+            if is_present:
+                # Use the result with highest confidence that says "present"
+                present_results = [r for r in verification_results if r.get('present', False)]
+                if present_results:
+                    selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
                 else:
-                    # Use the result with highest confidence that says "not present"
-                    absent_results = [r for r in verification_results if not r.get('present', False)]
-                    if absent_results:
-                        selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
-                    else:
-                        # Use first result if votes calculation produced inconsistent results
-                        selected_result = verification_results[0]
-                
-                # Add verification metadata
-                selected_result['verification_attempts'] = len(verification_results)
-                selected_result['verification_present_votes'] = present_votes
-                
-                results[item] = selected_result
+                    # Use first result if votes calculation produced inconsistent results
+                    selected_result = verification_results[0]
             else:
-                # CRITICAL: As per user requirements, we DON'T use fallback
-                # Instead, we report the API error and continue
-                logger.error(f"API FAILURE for {item_id} - reporting error without fallback (as requested)")
-                
-                # Create an error result that clearly indicates API failure without using pattern matching
-                results[item] = {
-                    'present': False,  # Default to not present 
-                    'confidence': 0.0,  # Zero confidence
-                    'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
-                    'evidence': "API error occurred - exclusive API verification was requested.",
-                    'method': 'openai_api_error'  # Indicate the error method, not fallback
-                }
-                # Still track it for reporting purposes as API failures
-                api_failure_count += 1
+                # Use the result with highest confidence that says "not present"
+                absent_results = [r for r in verification_results if not r.get('present', False)]
+                if absent_results:
+                    selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
+                else:
+                    # Use first result if votes calculation produced inconsistent results
+                    selected_result = verification_results[0]
+            
+            # Add verification metadata
+            selected_result['verification_attempts'] = len(verification_results)
+            selected_result['verification_present_votes'] = present_votes
+            
+            results[item] = selected_result
+        else:
+            # CRITICAL: As per user requirements, we DON'T use fallback
+            # Instead, we report the API error and continue
+            logger.error(f"API FAILURE for {item_id} - reporting error without fallback (as requested)")
+            
+            # Create an error result that clearly indicates API failure without using pattern matching
+            results[item] = {
+                'present': False,  # Default to not present 
+                'confidence': 0.0,  # Zero confidence
+                'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
+                'evidence': "API error occurred - exclusive API verification was requested.",
+                'method': 'openai_api_error'  # Indicate the error method, not fallback
+            }
+            # Still track it for reporting purposes as API failures
+            api_failure_count += 1
     
     # Check if we've covered all items
     all_items_set = set(items)
