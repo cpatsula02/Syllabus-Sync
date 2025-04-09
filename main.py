@@ -560,6 +560,8 @@ def handle_delete_annotation(data):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    if request.method == 'GET' and current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
         # Initialize paths to None for cleanup in the finally block
         checklist_path = None

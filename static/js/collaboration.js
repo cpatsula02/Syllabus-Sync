@@ -711,19 +711,25 @@ class CollaborationInterface {
     }
 }
 
-// Initialize the collaboration interface when the page loads
+// Initialize the collaboration interface when the page loads, but only for document view pages
 document.addEventListener('DOMContentLoaded', function() {
-    const documentIdElement = document.getElementById('document-id');
-    const currentUserIdElement = document.getElementById('current-user-id');
-    const currentUsernameElement = document.getElementById('current-username');
+    // Check if we're on a document view page
+    const documentDisplay = document.getElementById('document-display');
     
-    if (documentIdElement && currentUserIdElement && currentUsernameElement) {
-        const documentId = documentIdElement.value;
-        const currentUserId = currentUserIdElement.value;
-        const currentUsername = currentUsernameElement.value;
+    // Only initialize collaboration on document view pages
+    if (documentDisplay) {
+        const documentIdElement = document.getElementById('document-id');
+        const currentUserIdElement = document.getElementById('current-user-id');
+        const currentUsernameElement = document.getElementById('current-username');
         
-        new CollaborationInterface(documentId, currentUserId, currentUsername);
-    } else {
-        console.error('Missing required elements for collaboration interface');
+        if (documentIdElement && currentUserIdElement && currentUsernameElement) {
+            const documentId = documentIdElement.value;
+            const currentUserId = currentUserIdElement.value;
+            const currentUsername = currentUsernameElement.value;
+            
+            new CollaborationInterface(documentId, currentUserId, currentUsername);
+        } else {
+            console.error('Missing required elements for collaboration interface');
+        }
     }
 });

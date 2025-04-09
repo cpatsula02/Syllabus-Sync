@@ -166,6 +166,10 @@
 {% endblock %}
 
 {% block content %}
+<input type="hidden" id="document-id" value="{{ document_id }}">
+<input type="hidden" id="current-user-id" value="{{ current_user.id }}">
+<input type="hidden" id="current-username" value="{{ current_user.username }}">
+
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-md-8">
