@@ -204,9 +204,9 @@ def index():
                             method = value.get('method', '')
                             app.logger.error(f"DEBUG: Item '{key}' used method: {method}")
                     
-                    # Check if any results have the openai_api_error method
+                    # Check if any results have an error method
                     api_errors = [item for item, result in results.items() 
-                                 if result.get('method') == 'openai_api_error']
+                                 if result.get('method') == 'ai_general_analysis' and 'error' in result.get('explanation', '').lower()]
                     
                     if api_errors:
                         # Extract the first error message

@@ -120,25 +120,29 @@ if False:  # This code will never execute
         """Stub for find_original_text - not used"""
         return ""
 
-# Empty stub for find_best_keyword_section
-def find_best_keyword_section(document_text, keywords):
-    """Stub for find_best_keyword_section - not used"""
-    return ""
+# PATTERN MATCHING COMPLETELY DISABLED
+if False:  # This code will never execute
+    def find_best_keyword_section(document_text, keywords):
+        """Stub for find_best_keyword_section - not used"""
+        return ""
 
-# Empty stub for check_special_entity_patterns
-def check_special_entity_patterns(item, document, additional_context=""):
-    """Stub for check_special_entity_patterns - not used"""
-    return False
+# PATTERN MATCHING COMPLETELY DISABLED
+if False:  # This code will never execute
+    def check_special_entity_patterns(item, document, additional_context=""):
+        """Stub for check_special_entity_patterns - not used"""
+        return False
 
-# Empty stub for find_matching_excerpt
-def find_matching_excerpt(item, document_text):
-    """Stub for find_matching_excerpt - not used"""
-    return False, ""
+# PATTERN MATCHING COMPLETELY DISABLED
+if False:  # This code will never execute
+    def find_matching_excerpt(item, document_text):
+        """Stub for find_matching_excerpt - not used"""
+        return False, ""
 
-# Empty stub for identify_grade_distribution_table
-def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
-    """Stub for identify_grade_distribution_table - always returns no table found"""
-    return False, ""
+# PATTERN MATCHING COMPLETELY DISABLED
+if False:  # This code will never execute
+    def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
+        """Stub for identify_grade_distribution_table - always returns no table found"""
+        return False, ""
 
 def extract_checklist_items_strict(text: str) -> List[str]:
     """

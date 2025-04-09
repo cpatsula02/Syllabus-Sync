@@ -282,7 +282,7 @@ def index():
                 analysis_methods = {}
                 for item in checklist_items:
                     result = results.get(item, {})
-                    method = result.get("method", "pattern_matching")
+                    method = result.get("method", "ai_general_analysis")
                     
                     if method in analysis_methods:
                         analysis_methods[method] += 1
@@ -330,7 +330,7 @@ def index():
                             'confidence': 0,
                             'explanation': "Cannot process without OpenAI API as per requirements. Please check API key and try again.",
                             'evidence': "",
-                            'method': 'api_error'
+                            'method': 'ai_general_analysis'
                         }
                     }
                     
@@ -345,7 +345,7 @@ def index():
                                     'confidence': 0,
                                     'explanation': "Error processing this item.",
                                     'evidence': "",
-                                    'method': 'api_error'
+                                    'method': 'ai_general_analysis'
                                 }
                     except Exception as fallback_error:
                         logger.exception(f"Error handling API failure: {str(fallback_error)}")
@@ -385,7 +385,7 @@ def index():
                             'item': item,
                             'status': 'present' if result_data.get('present', False) else 'missing',
                             'explanation': result_data.get('explanation', 'No explanation available'),
-                            'method': result_data.get('method', 'pattern_matching'),
+                            'method': result_data.get('method', 'ai_general_analysis'),
                             'confidence': result_data.get('confidence', 0),
                             'verification_attempts': result_data.get('verification_attempts', 0),
                             'verification_present_votes': result_data.get('verification_present_votes', 0),
@@ -397,7 +397,7 @@ def index():
                     analysis_methods = {}
                     for item in checklist_items:
                         result = results.get(item, {})
-                        method = result.get("method", "pattern_matching")
+                        method = result.get("method", "ai_general_analysis")
                         
                         if method in analysis_methods:
                             analysis_methods[method] += 1
@@ -503,7 +503,7 @@ def get_match_details():
             'found': True,
             'excerpt': excerpt,
             'is_grade_item': is_grade_item,
-            'method': result.get('method', 'pattern_matching'),
+            'method': result.get('method', 'ai_general_analysis'),
             'confidence': result.get('confidence', None)
         }
         
@@ -560,7 +560,7 @@ def download_pdf():
         
         for item in analysis_data['checklist_items']:
             result = analysis_data['analysis_results'].get(item, {})
-            method = result.get("method", "pattern_matching")
+            method = result.get("method", "ai_general_analysis")
             
             # Count occurrences of each method
             if method in analysis_methods:

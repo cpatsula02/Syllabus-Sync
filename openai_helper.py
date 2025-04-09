@@ -296,7 +296,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                         "confidence": 0.1,
                         "explanation": "API response was invalid - unable to determine if item is present",
                         "evidence": "",
-                        "method": "api_error_recovery"
+                        "method": "ai_general_analysis"
                     }
                 
                 # Extract message safely
@@ -309,7 +309,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                         "confidence": 0.1,
                         "explanation": "API response was invalid - unable to determine if item is present",
                         "evidence": "",
-                        "method": "api_error_recovery"
+                        "method": "ai_general_analysis"
                     }
                 
                 response_text = message.content.strip()
@@ -338,7 +338,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                         "confidence": 0.1,
                         "explanation": "API returned an unusable response - unable to determine if item is present",
                         "evidence": "",
-                        "method": "api_error_recovery"
+                        "method": "ai_general_analysis"
                     }
                 
                 # Make sure result is a dictionary and has minimal required fields
@@ -350,7 +350,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                         "confidence": 0.1,
                         "explanation": "API returned an invalid result structure",
                         "evidence": "",
-                        "method": "api_error_recovery"
+                        "method": "ai_general_analysis"
                     }
                 
                 # Ensure all required fields exist
@@ -644,7 +644,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
               "confidence": a number from 0.0 to 1.0,
               "explanation": "Brief reason why item is present or missing",
               "evidence": "Direct quote from document if found, otherwise empty string",
-              "method": "ai_policy_analysis"
+              "method": "ai_general_analysis"
             }
             """
         elif is_instructor_item:
@@ -693,7 +693,7 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
               "confidence": a number from 0.0 to 1.0,
               "explanation": "Brief reason why item is present or missing",
               "evidence": "Direct quote from document if found, otherwise empty string",
-              "method": "ai_instructor_analysis"
+              "method": "ai_general_analysis"
             }
             """
         else:
