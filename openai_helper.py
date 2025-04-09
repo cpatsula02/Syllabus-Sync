@@ -1223,9 +1223,9 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     # Initialize stats for token usage monitoring
     remaining_quota = MAX_TOKENS_PER_SESSION
     
-    # FIXED COMPLETELY: Process items in small batches to avoid timeouts
-    # Group items into batches of 5 maximum to make processing more reliable
-    batch_size = 5
+    # FIXED COMPLETELY: Process items in smaller batches to avoid timeouts
+    # Group items into batches of 2 maximum to make processing more reliable and prevent worker termination
+    batch_size = 2
     prioritized_batches = []
     current_batch = []
     

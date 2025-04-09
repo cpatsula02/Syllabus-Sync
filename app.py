@@ -65,16 +65,16 @@ def handle_error(e):
             user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
         elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
             user_message = "There was an internal formatting error in the analysis. The development team has been notified."
-        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout", "asyncio", "worker", "gunicorn", "worker timeout"]):
-            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system timeout has been increased to 5 minutes. Please try again - the system should now process your document properly. For very large documents, consider breaking them into smaller sections for better processing."
+        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout", "asyncio", "worker", "gunicorn", "worker timeout", "worker killing"]):
+            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system has been optimized to process smaller batches. Please try again - the system should now process your document properly. For very large documents, consider breaking them into smaller sections for better processing."
         elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
             user_message = "The system ran out of memory while processing your request. Please try a smaller document."
         elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
             user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
         elif "json" in error_message.lower():
             user_message = "There was an error processing the AI response. Please try again or upload a different document."
-        elif "socket" in error_message.lower() or "connection" in error_message.lower():
-            user_message = "Connection error: The system experienced a network issue while processing your request. We've increased connection timeouts to 5 minutes. Please try again."
+        elif "socket" in error_message.lower() or "connection" in error_message.lower() or "connect" in error_message.lower():
+            user_message = "Connection error: The system experienced a network issue while processing your request. We've improved error handling and reduced batch sizes. Please try again."
     except Exception as error_handling_error:
         # If error analysis itself fails, use a simple generic message
         print(f"Error during error analysis: {str(error_handling_error)}")
