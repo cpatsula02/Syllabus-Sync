@@ -766,6 +766,17 @@ def download_pdf():
         flash(f"Error generating PDF: {str(e)}")
         return redirect('/')
 
+@app.route('/get_enhanced_checklist')
+def get_enhanced_checklist():
+    """Serve the enhanced checklist items from the file"""
+    try:
+        with open('enhanced_checklist.txt', 'r') as file:
+            checklist_content = file.read()
+        return checklist_content
+    except Exception as e:
+        logger.error(f"Error loading enhanced checklist: {str(e)}")
+        return "Error loading enhanced checklist", 500
+
 if __name__ == "__main__":
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
