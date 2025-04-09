@@ -757,10 +757,10 @@ def download_pdf():
         pdf.cell(63, 8, f'Present: {present_items}', 1, 0, 'L')
         pdf.cell(64, 8, f'Missing: {missing_items} / N/A: {na_items}', 1, 1, 'L')
         
-        # Add a new page for the detailed checklist descriptions
+        # Add a new page for the detailed checklist descriptions with status
         pdf.add_page()
         pdf.set_font('DejaVu', 'B', 16)
-        pdf.cell(190, 10, 'Detailed Checklist Descriptions', 0, 1, 'C')
+        pdf.cell(190, 10, 'Complete Checklist Evaluation', 0, 1, 'C')
         pdf.ln(5)
         
         # Load the enhanced checklist descriptions
@@ -773,46 +773,162 @@ def download_pdf():
             # Create a placeholder if the file can't be loaded
             enhanced_checklist = [f"{i+1}. {item}" for i, item in enumerate(unique_checklist_items)]
         
-        # Add each detailed description
-        pdf.set_font('DejaVu', '', 10)
+        # Create a mapping between short item names and full descriptions
+        item_to_desc_map = {}
         for item_desc in enhanced_checklist:
-            # Get item number
             match = re.match(r'^(\d+)\.\s+(.+?):', item_desc)
             if match:
                 num = match.group(1)
                 name = match.group(2)
-                description = item_desc[len(match.group(0)):]
-                
-                # Add the item name with number
-                pdf.set_font('DejaVu', 'B', 10)
-                pdf.cell(190, 8, f"{num}. {name}", 0, 1, 'L')
-                
-                # Add the description
-                pdf.set_font('DejaVu', '', 9)
-                
-                # Calculate required height for the description
-                description_length = len(description)
-                chars_per_line = 50  # Very conservative estimate
-                description_lines = max(1, description_length / chars_per_line)
-                description_height = max(5, description_lines * 4)  # Minimum 5mm, 4mm per line
-                
-                # Add extra padding for longer descriptions
-                if description_lines > 3:
-                    description_height += 2
-                
-                pdf.multi_cell(180, description_height, description, 0, 'L')
-                pdf.ln(4)
+                # Find the corresponding item in the checklist items
+                for checklist_item in unique_checklist_items:
+                    if name.lower() in checklist_item.lower():
+                        item_to_desc_map[checklist_item] = item_desc
+                        break
+        
+        # Table header
+        pdf.set_font('DejaVu', 'B', 10)
+        pdf.cell(20, 8, 'Item #', 1, 0, 'C')
+        pdf.cell(40, 8, 'Status', 1, 0, 'C')
+        pdf.cell(130, 8, 'Detailed Requirement', 1, 1, 'L')
+        
+        # Add each detailed description with status
+        item_number = 1
+        for item in unique_checklist_items:
+            # Get the status from results
+            result = analysis_data['analysis_results'].get(item, {})
+            status = result.get('status', 'present' if item not in analysis_data['missing_items'] else 'missing')
+            
+            # Find the detailed description for this item
+            detailed_desc = ""
+            if item in item_to_desc_map:
+                detailed_desc = item_to_desc_map[item]
             else:
-                # If not in expected format, just add as-is
-                pdf.multi_cell(180, 8, item_desc, 0, 'L')
-                pdf.ln(4)
+                # If no match found, use the item text itself
+                detailed_desc = f"{item_number}. {item}"
+            
+            # Get item number and name from description
+            match = re.match(r'^(\d+)\.\s+(.+?):', detailed_desc)
+            if match:
+                num = match.group(1)
+                name = match.group(2)
+                description = detailed_desc[len(match.group(0)):]
+            else:
+                num = str(item_number)
+                name = item
+                description = ""
+                
+            # Set position for item row
+            y_position = pdf.get_y()
+            
+            # Calculate heights for multiline cells
+            item_height = 10  # Base height
+            
+            # For description, calculate based on text length
+            description_text = f"{name}: {description}"
+            description_length = len(description_text)
+            chars_per_line = 45  # Characters per line estimate
+            desc_lines = max(1, description_length / chars_per_line)
+            description_height = max(item_height, desc_lines * 5)  # At least 10mm, 5mm per line
+            
+            # Add extra padding for longer descriptions
+            if desc_lines > 3:
+                description_height += 5
+            if desc_lines > 6:
+                description_height += 5
+                
+            # Draw item number cell
+            pdf.set_font('DejaVu', 'B', 9)
+            pdf.rect(pdf.get_x(), y_position, 20, description_height)
+            # Center item number text
+            pdf.set_xy(pdf.get_x() + (20 - pdf.get_string_width(num)) / 2, y_position + 2)
+            pdf.cell(20, 5, num, 0, 0, 'C')
+            
+            # Draw status cell with color coding
+            pdf.set_xy(pdf.get_x() + 20 - pdf.get_string_width(num) / 2, y_position)
+            
+            # Set color based on status
+            if status == 'na':
+                pdf.set_text_color(100, 100, 100)  # Gray for N/A
+                status_text = 'NOT APPLICABLE'
+            elif status == 'present':
+                pdf.set_text_color(0, 128, 0)  # Green for present
+                status_text = 'PRESENT'
+            else:
+                pdf.set_text_color(255, 0, 0)  # Red for missing
+                status_text = 'MISSING'
+                
+            pdf.rect(pdf.get_x(), y_position, 40, description_height)
+            # Center status text vertically
+            pdf.set_xy(pdf.get_x() + (40 - pdf.get_string_width(status_text)) / 2, y_position + description_height/2 - 2)
+            pdf.cell(40, 5, status_text, 0, 0, 'C')
+            pdf.set_text_color(0, 0, 0)  # Reset to black
+            
+            # Draw description cell
+            pdf.set_xy(pdf.get_x() + 40 - (40 - pdf.get_string_width(status_text)) / 2, y_position)
+            pdf.rect(pdf.get_x(), y_position, 130, description_height)
+            
+            # Format description text - Item name in bold, then details
+            pdf.set_xy(pdf.get_x() + 3, y_position + 2)  # Add internal padding
+            pdf.set_font('DejaVu', 'B', 9)
+            pdf.cell(124, 5, name, 0, 1, 'L')
+            
+            # Add the description text
+            pdf.set_xy(pdf.get_x() + 3, pdf.get_y())
+            pdf.set_font('DejaVu', '', 8)
+            
+            # Format the description to fit the cell width
+            wrapped_text = ""
+            if description:
+                words = description.split()
+                line = ""
+                for word in words:
+                    if pdf.get_string_width(line + word) < 124:
+                        line += word + " "
+                    else:
+                        wrapped_text += line + "\n"
+                        line = word + " "
+                wrapped_text += line
+                
+                # Write the wrapped text
+                pdf.multi_cell(124, 4, wrapped_text, 0, 'L')
+            
+            # Move to next row position
+            pdf.set_xy(pdf.get_x(), y_position + description_height)
             
             # Check for page break if needed
             if pdf.get_y() > 270:
                 pdf.add_page()
-                pdf.set_font('DejaVu', 'B', 12)
-                pdf.cell(190, 8, 'Detailed Checklist Descriptions (Continued)', 0, 1, 'L')
-                pdf.ln(3)
+                # Repeat the table header
+                pdf.set_font('DejaVu', 'B', 10)
+                pdf.cell(20, 8, 'Item #', 1, 0, 'C')
+                pdf.cell(40, 8, 'Status', 1, 0, 'C')
+                pdf.cell(130, 8, 'Detailed Requirement', 1, 1, 'L')
+            
+            item_number += 1
+        
+        # Add summary at the end
+        pdf.ln(10)
+        pdf.set_font('DejaVu', 'B', 12)
+        pdf.cell(190, 10, 'Overall Compliance Summary', 0, 1, 'L')
+        pdf.set_font('DejaVu', '', 10)
+        
+        # Count different statuses
+        present_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
+                           (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
+        na_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
+        missing_count = total_items - present_count - na_count
+        
+        # Calculate compliance percentage (excluding N/A items)
+        applicable_items = total_items - na_count
+        compliance_percentage = (present_count / applicable_items * 100) if applicable_items > 0 else 100
+        
+        pdf.cell(95, 8, f'Total Requirements: {total_items}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Applicable Requirements: {applicable_items}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Requirements Present: {present_count}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Requirements Missing: {missing_count}', 1, 1, 'L')
+        pdf.cell(95, 8, f'Requirements N/A: {na_count}', 1, 0, 'L')
+        pdf.cell(95, 8, f'Compliance Rate: {compliance_percentage:.1f}%', 1, 1, 'L')
 
         # Create temporary file and save
         import tempfile

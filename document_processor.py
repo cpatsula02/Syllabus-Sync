@@ -1066,41 +1066,106 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             if policies and enhanced_context:
                 enhanced_context += f"\n\nNote: The document appears to contain policies for: {', '.join(policies)}."
         
-        # Parse the additional context to identify "not applicable" items
+        # Parse the additional context to identify "not applicable" items with enhanced detection
         not_applicable_items = {}
         if additional_context:
             # List of keywords and phrases that indicate an item is not applicable
             na_phrases = [
                 "not applicable", "n/a", "na ", "doesn't apply", "does not apply", 
                 "not included", "not required", "no final", "no exam", "no midterm",
-                "no group", "no participation", "no textbook", "not needed"
+                "no group", "no participation", "no textbook", "not needed",
+                "exempt from", "waived", "excluded", "not relevant", "not part of",
+                "ignored", "skipped", "omitted"
             ]
             
-            # Check each checklist item against the additional context
+            # Define specific item keywords that might be mentioned in additional context
+            item_specific_keywords = {
+                "final exam": ["final", "exam", "examination", "culminating assessment"],
+                "group": ["group", "team", "collaborative", "group work", "group project"],
+                "participation": ["participation", "class participation", "engagement"],
+                "textbook": ["textbook", "text", "book", "reading", "course material"],
+                "midterm": ["midterm", "test", "quiz", "mid-term"],
+                "take home": ["take home", "takehome", "take-home"],
+                "due date": ["due date", "deadline", "submission date"],
+                "assignment": ["assignment", "homework", "task"],
+                "schedule": ["schedule", "calendar", "timetable", "weekly"],
+                "instructor": ["instructor", "professor", "teacher", "faculty"],
+                "link": ["link", "url", "website", "web"],
+                "grade distribution": ["grade distribution", "grade table", "assessment weight"]
+            }
+            
+            context_lower = additional_context.lower()
+            
+            # First pass: Check each checklist item against the additional context
             for item in checklist_items:
                 item_lower = item.lower()
-                context_lower = additional_context.lower()
                 
-                # Check if the item is mentioned along with a phrase indicating it's not applicable
+                # Check if the item is explicitly mentioned as not applicable
                 for phrase in na_phrases:
                     # Look for patterns like "no final exam" or "final exam: not applicable"
-                    for keyword in item_lower.split():
-                        if len(keyword) > 3:  # Only consider meaningful keywords
-                            if f"{keyword}.*{phrase}" in context_lower or f"{phrase}.*{keyword}" in context_lower:
-                                not_applicable_items[item] = True
-                                break
+                    if any(re.search(f"{phrase}.*{keyword}", context_lower) or 
+                           re.search(f"{keyword}.*{phrase}", context_lower) 
+                           for keyword in item_lower.split() if len(keyword) > 3):
+                        not_applicable_items[item] = True
+                        break
                 
-                # Special case checks for specific items
-                if "final exam" in item_lower and any(phrase in context_lower for phrase in 
-                                                    ["no final", "no exam", "without final", "exempt from final"]):
-                    not_applicable_items[item] = True
+                # If not already marked as N/A, check for specific item patterns
+                if item not in not_applicable_items:
+                    # Check each category of item
+                    for category, keywords in item_specific_keywords.items():
+                        if any(keyword in item_lower for keyword in category.split()):
+                            # If this category is in the item, check if it's mentioned as N/A
+                            for phrase in na_phrases:
+                                for keyword in keywords:
+                                    pattern1 = f"{phrase}.*{keyword}"
+                                    pattern2 = f"{keyword}.*{phrase}"
+                                    
+                                    if (re.search(pattern1, context_lower) or re.search(pattern2, context_lower)):
+                                        not_applicable_items[item] = True
+                                        break
                 
-                if "group" in item_lower and any(phrase in context_lower for phrase in 
-                                               ["no group work", "not a group", "individual only"]):
-                    not_applicable_items[item] = True
+            # Second pass: Additional special cases based on context phrasing
+            for item in checklist_items:
+                if item in not_applicable_items:
+                    continue  # Already marked as N/A
                     
-                if "participation" in item_lower and "no participation" in context_lower:
-                    not_applicable_items[item] = True
+                item_lower = item.lower()
+                
+                # Special case 1: Final Exam-related items
+                if any(term in item_lower for term in ["final exam", "final", "exam weight"]):
+                    if any(phrase in context_lower for phrase in [
+                        "no final", "no exam", "without final", "exempt from final",
+                        "final exam is not", "final not included", "no final assessment",
+                        "course has no final", "course doesn't have a final",
+                        "course does not have final", "not having a final"
+                    ]):
+                        not_applicable_items[item] = True
+                
+                # Special case 2: Group Work-related items
+                if any(term in item_lower for term in ["group", "team", "collaborative"]):
+                    if any(phrase in context_lower for phrase in [
+                        "no group work", "not a group", "individual only",
+                        "no group component", "no team", "no collaborative",
+                        "all individual work", "all work is individual",
+                        "course has no group", "course doesn't have group"
+                    ]):
+                        not_applicable_items[item] = True
+                
+                # Special case 3: Participation-related items
+                if "participation" in item_lower:
+                    if any(phrase in context_lower for phrase in [
+                        "no participation", "participation not", "no class participation",
+                        "participation is not", "participation isn't", "no participation component"
+                    ]):
+                        not_applicable_items[item] = True
+                        
+                # Special case 4: Textbook-related items
+                if any(term in item_lower for term in ["textbook", "course material", "reading"]):
+                    if any(phrase in context_lower for phrase in [
+                        "no textbook", "no required text", "no course material", 
+                        "no readings", "no required readings"
+                    ]):
+                        not_applicable_items[item] = True
 
         # Process using AI if permitted, otherwise use traditional matching
         try:
