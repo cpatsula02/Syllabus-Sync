@@ -6,12 +6,25 @@ This API analyzes course outlines against 26 institutional compliance requiremen
 
 The API uses the OpenAI Chat Completions API to perform comprehensive contextual analysis of the document against all 26 checklist items. The analysis is based entirely on contextual understanding of the document, NOT pattern matching - the system looks for concepts and requirements rather than specific keywords or patterns.
 
+### Enhanced Anti-Pattern Matching Directives
+
+The system has been explicitly designed to avoid relying on simplistic pattern matching by incorporating six critical directives:
+
+1. Do not rely on exact keyword matches or specific section headers
+2. Never assume presence based on headers alone
+3. Analyze the actual content for compliance, not just section titles
+4. Evaluate whether the substance/meaning of each checklist item is present, regardless of terminology
+5. Verify that the content substantially fulfills the requirement's criteria in a meaningful way
+6. Focus on compliance with the requirement's purpose, not just matching terminology
+
+### Triple-Checking Process
+
 A unique triple-checking process is implemented for each checklist item:
 1. First pass: Initial contextual scan focusing on obvious mentions and relevant sections
 2. Second pass: Deeper analysis looking for implicit, indirect or related information
 3. Third pass: Final verification and critical evaluation of the evidence found
 
-Only after all three passes does the system finalize its determination and confidence level.
+Only after all three passes does the system finalize its determination and confidence level, with each result marked with a "triple_checked" field set to true.
 
 To ensure reliable performance and prevent timeouts, the implementation:
 
@@ -139,7 +152,8 @@ curl -X POST http://localhost:5000/api/analyze-course-outline \
     "confidence": 0.9,
     "explanation": "Course objectives are listed and numbered.",
     "evidence": "Learning Objectives:\n1. Understand basic psychological theories and concepts\n2. Apply critical thinking to psychological research",
-    "method": "ai_general_analysis"
+    "method": "ai_general_analysis",
+    "triple_checked": true
   },
   ...
 ]

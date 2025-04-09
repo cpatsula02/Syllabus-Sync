@@ -158,6 +158,12 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         determine if the requirement is present in any form. Consider synonyms, related phrases, and contextual 
         indicators that fulfill the requirement's intent, even when exact keywords are absent.
         
+        CRITICAL: Even when section headers match checklist items exactly, you must analyze the actual CONTENT 
+        for compliance. Never assume presence based on headers alone - verify that the content substantially fulfills
+        the requirement's criteria in a meaningful way. Evaluate whether the substance/meaning of each checklist item 
+        is present, regardless of terminology used. Focus on compliance with the requirement's purpose, not just 
+        matching terminology.
+        
         You MUST provide your response as a valid JSON object. Structure your JSON response with these exact keys:
         - "results": an array of JSON objects, one for each checklist item analyzed
         
@@ -190,6 +196,11 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         4. Consider related concepts, synonyms, and implicit information in the document
         5. Look for information embedded anywhere in the document, even in unexpected sections
         6. Do not rely on exact keyword matches or specific section headers
+        7. IMPORTANT: Even when section headers match checklist items exactly, you must analyze the actual CONTENT for compliance
+        8. Never assume presence based on headers alone - verify that the actual content fulfills the requirement
+        9. Evaluate whether the substance/meaning of each checklist item is present, regardless of terminology used
+        10. Verify that the content substantially fulfills the requirement's criteria in a meaningful way
+        11. Focus on compliance with the requirement's purpose, not just matching terminology
         
         THREE-PASS ANALYSIS REQUIREMENT:
         For EACH checklist item, you MUST perform THREE complete passes through the document:
