@@ -4,6 +4,7 @@ import os
 import io
 import logging
 import re
+import socket
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents, extract_text
 import urllib.request
@@ -115,7 +116,6 @@ def validate_links(text):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        try:
             if 'checklist' not in request.form or 'outline' not in request.files:
                 return jsonify({'error': 'Both checklist and outline are required'}), 400
 
@@ -360,8 +360,8 @@ def index():
                 except Exception as e:
                     app.logger.error(f"Error during cleanup: {str(e)}")
 
-        # For GET requests, simply render the template
-        return render_template('index.html')
+    # For GET requests, simply render the template
+    return render_template('index.html')
 
 @app.route('/get-match-details', methods=['GET'])
 def get_match_details():
