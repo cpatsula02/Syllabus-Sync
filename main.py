@@ -13,10 +13,10 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Check if OpenAI API key is available
+# Configure OpenAI integration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-ENABLE_OPENAI = False  # Always disabled to prevent API timeouts
-logger.info("OpenAI API integration is disabled to prevent server timeouts")
+ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
+logger.info(f"OpenAI integration {'enabled' if ENABLE_OPENAI else 'disabled - no API key found'}")
 
 # Initialize Flask app
 app = Flask(__name__)

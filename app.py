@@ -14,12 +14,12 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# OpenAI API integration is disabled to prevent server timeouts
+# Configure OpenAI integration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-ENABLE_OPENAI = False  # Always disabled to prevent timeouts
+ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
 
-# Log that we're running in fallback mode
-logger.info("OpenAI API integration is permanently disabled to prevent server timeouts")
+# Log OpenAI integration status
+logger.info(f"OpenAI integration {'enabled' if ENABLE_OPENAI else 'disabled - no API key found'}")
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
