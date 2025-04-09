@@ -64,7 +64,7 @@ if openai_available:
             try:
                 # Force update the environment variable to ensure it's available
                 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-                client = OpenAI(api_key=OPENAI_API_KEY)
+                client = OpenAI(api_key=OPENAI_API_KEY, timeout=300.0)
                 # Make a tiny API call to validate the key works
                 logging.info("Validating OpenAI API key with a simple model call...")
                 try:
@@ -1040,7 +1040,7 @@ def analyze_checklist_item_with_retry(item: str, document_text: str, max_attempt
                 OPENAI_API_KEY = "sk-private-key-do-not-share"
                 logging.warning("Using fallback API key in analyze_checklist_item_with_retry")
             
-            api_client = OpenAI(api_key=OPENAI_API_KEY)
+            api_client = OpenAI(api_key=OPENAI_API_KEY, timeout=300.0)
             
             # Make actual API call with error handling
             response = api_client.chat.completions.create(

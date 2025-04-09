@@ -23,7 +23,7 @@ else:
 # Initialize OpenAI client with longer timeout
 client = OpenAI(
     api_key=OPENAI_API_KEY,
-    timeout=600.0,  # 10-minute timeout (increased for detailed checklist items)
+    timeout=300.0,  # 5-minute timeout (balanced for performance and reliability)
     max_retries=3   # Increased retries
 ) if OPENAI_API_KEY else None
 
@@ -304,7 +304,7 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     response_format={"type": "json_object"},
                     temperature=0.2,  # Slightly increased to encourage generous interpretations
                     max_tokens=2500,  # Reduced tokens to ensure faster completion
-                    timeout=60.0  # Explicit 60-second timeout to prevent hanging
+                    timeout=300.0  # Explicit 300-second (5 minute) timeout to allow for thorough analysis
                 )
             except Exception as openai_error:
                 logger.error(f"OpenAI API error in batch {batch_idx+1}: {str(openai_error)}")

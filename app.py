@@ -64,8 +64,8 @@ def handle_error(e):
             user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
         elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
             user_message = "There was an internal formatting error in the analysis. The development team has been notified."
-        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout"]):
-            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system timeout has been increased to 5 minutes. Please try again - the system should now process your document properly."
+        elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout", "asyncio", "worker", "gunicorn", "worker timeout"]):
+            user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. The system timeout has been increased to 5 minutes. Please try again - the system should now process your document properly. For very large documents, consider breaking them into smaller sections for better processing."
         elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
             user_message = "The system ran out of memory while processing your request. Please try a smaller document."
         elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):
@@ -80,11 +80,26 @@ def handle_error(e):
         user_message = "An unexpected error occurred. Please try again with a smaller document."
     
     try:
+        # Safe template rendering with explicit defaults for all variables
+        logger.info("Attempting to render index.html template with error message")
         return render_template(
             'index.html',
-            error=user_message
+            error=user_message,
+            checklist_items=[],  # Ensure required template variables are defined
+            analysis_results={},
+            missing_items=[],
+            grade_table_items=[],
+            valid_links=[],
+            invalid_links=[],
+            document_path="",
+            document_text="",
+            show_results=False
         ), 500
     except Exception as template_error:
+        # Log detailed information about the template error
+        logger.error(f"Template rendering failed: {str(template_error)}")
+        logger.error(f"Template error traceback: {traceback.format_exc()}")
+        
         # If even rendering the template fails, return a simple plain text response
         return f"Error: {user_message}", 500
 
