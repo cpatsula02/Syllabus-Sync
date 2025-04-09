@@ -1,0 +1,38 @@
+Hi! I need help improving the accuracy of my course outline compliance checker. The system is currently missing several checklist items that are actually present in the document due to overly strict pattern matching or phrasing mismatches.
+
+Please implement the following improvements:
+
+1. **Enable AI Verification (Not Just Pattern Matching):**
+   - For each checklist item, scan the document **3–5 times using semantic analysis**, not just exact phrase search.
+   - Use AI-based understanding to detect reworded or paraphrased content.
+
+2. **Lower Confidence Threshold:**
+   - Reduce the match confidence requirement (in openai_helper.py or equivalent) from 0.9 to 0.6–0.7.
+   - This allows the system to better recognize varied formats and alternate wording.
+
+3. **Expand Keyword Matching:**
+   - Add common synonyms and alternative phrasings for each checklist item (e.g., “submit to D2L” = assignment submission instructions, “make-up exams” = missed assessment policy).
+   - Let the system recognize embedded or indirect language.
+
+4. **Improve Explanation Quality:**
+   - Do not use generic explanations like “Consider adding clear and explicit content...” for missing items.
+   - Instead, give a specific explanation of what was searched for, what was found, and what content is missing.
+   - Include a **custom suggestion** on how the user could write the missing content.
+
+5. **Use a Yellow Box for Missing Items:**
+   - At the top of the output, show a yellow box that includes bullet-pointed missing checklist items and a brief summary of what’s missing.
+   - This should be prominent and appear before the full results.
+
+6. **Ensure the System Scans All External Links:**
+   - Checklist item 25 requires the system to identify all links (e.g., D2L, Calendly, external sites) and determine if they appear functional.
+   - Please ensure the AI checks for formatting, presence of “http/https,” and if possible, attempts basic link validation.
+
+7. **Let Me Select the Number of AI Verification Passes:**
+   - Please allow me to choose how many times the system verifies each item (3, 5, or 7 scans), in case one pass misses embedded content.
+
+8. **Use “N/A” Where Applicable:**
+   - If a course doesn’t include a final exam or group project, the system should mark those items as “N/A” instead of “No.”
+
+Once this is implemented, I expect a more reliable and human-like compliance check that works even when course outlines vary in layout, structure, and wording.
+
+Thanks!
