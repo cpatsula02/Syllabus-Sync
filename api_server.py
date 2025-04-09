@@ -44,9 +44,11 @@ def api_analyze_course_outline():
     - A JSON array of 26 items, each with:
       - present: boolean indicating if the item is present in the outline
       - confidence: number between 0.0 and 1.0
-      - explanation: brief explanation
+      - explanation: brief explanation (prefixed with "[2nd Analysis]" if from second-chance analysis)
       - evidence: direct quote from the outline, or empty string if not found
       - method: always "ai_general_analysis"
+      - triple_checked: boolean indicating if the item was analyzed using multiple passes (always true)
+      - second_chance: boolean indicating if this result came from a second-chance analysis after an initial failure
     """
     try:
         document_text = ""
@@ -122,7 +124,16 @@ curl -X POST http://localhost:5000/api/analyze-course-outline \\
   -F "outline=@/path/to/course_outline.pdf"</pre>
                 
                 <h3>Response Format</h3>
-                <p>The API returns a JSON array of 26 objects, one for each checklist item.</p>
+                <p>The API returns a JSON array of 26 objects, one for each checklist item with the following properties:</p>
+                <ul style="list-style-type: none; padding-left: 20px; line-height: 1.5;">
+                    <li><code>present</code>: boolean - indicates if the item is present in the outline</li>
+                    <li><code>confidence</code>: number - between 0.0 and 1.0, representing analysis confidence</li>
+                    <li><code>explanation</code>: string - brief explanation (prefixed with "[2nd Analysis]" if from second-chance analysis)</li>
+                    <li><code>evidence</code>: string - direct quote from the outline, or empty string if not found</li>
+                    <li><code>method</code>: string - always "ai_general_analysis"</li>
+                    <li><code>triple_checked</code>: boolean - indicates if the item was analyzed using multiple passes</li>
+                    <li><code>second_chance</code>: boolean - indicates if this result came from a second-chance analysis</li>
+                </ul>
             </div>
         </body>
     </html>

@@ -26,15 +26,18 @@ A unique triple-checking process is implemented for each checklist item:
 
 Only after all three passes does the system finalize its determination and confidence level, with each result marked with a "triple_checked" field set to true.
 
-### Automatic Second-Chance Analysis
+### Enhanced Automatic Second-Chance Analysis with API Failure Recovery
 
-The system implements an intelligent second-chance analysis for items that initially fail:
+The system implements an intelligent second-chance analysis with robust retry mechanisms for items that initially fail, with special handling for API failures:
 
-1. After the initial analysis, the system identifies any failed items with errors or missing information
-2. A focused, item-specific analysis is performed for each failed item with a more tailored prompt
-3. Results from the second-chance analysis are clearly marked with a prefix in the explanation field
-4. If the second-chance analysis succeeds, it replaces the original failed result
-5. All second-chance analyses are logged for transparency and tracked with the "second_chance" boolean field
+1. After the initial analysis, the system identifies any failed items with errors, API failures, or missing information
+2. A focused, item-specific analysis is performed for each failed item with a more tailored prompt, including the original error
+3. Each second-chance analysis includes multiple retry attempts (up to 3) with increased timeouts to ensure completion
+4. Advanced JSON validation and type conversion ensure consistent output formats even with varying API responses
+5. Results from the second-chance analysis are clearly marked with a prefix in the explanation field
+6. The system never reports an API failure as a missing/present item - it always attempts to recover through retries
+7. If all retry attempts fail, a structured placeholder result indicates the need for manual review
+8. All second-chance analyses are logged for transparency and tracked with the "second_chance" boolean field
 
 To ensure reliable performance and prevent timeouts, the implementation:
 
@@ -85,7 +88,9 @@ The API returns a JSON array with 26 items, each corresponding to one of the ins
     "confidence": 0.0-1.0,
     "explanation": "Brief explanation of why the requirement is met or not",
     "evidence": "Direct quote from the document supporting the determination",
-    "method": "ai_general_analysis"
+    "method": "ai_general_analysis",
+    "triple_checked": true,
+    "second_chance": true|false
   },
   ...
 ]
@@ -156,7 +161,8 @@ curl -X POST http://localhost:5000/api/analyze-course-outline \
     "explanation": "Instructor's email is provided and ends with 'ucalgary.ca'.",
     "evidence": "Email: john.smith@ucalgary.ca",
     "method": "ai_general_analysis",
-    "triple_checked": true
+    "triple_checked": true,
+    "second_chance": false
   },
   {
     "present": true,
@@ -164,7 +170,17 @@ curl -X POST http://localhost:5000/api/analyze-course-outline \
     "explanation": "Course objectives are listed and numbered.",
     "evidence": "Learning Objectives:\n1. Understand basic psychological theories and concepts\n2. Apply critical thinking to psychological research",
     "method": "ai_general_analysis",
-    "triple_checked": true
+    "triple_checked": true,
+    "second_chance": false
+  },
+  {
+    "present": false,
+    "confidence": 0.85,
+    "explanation": "[2nd Analysis] Group projects are mentioned but documentation lacks specific guidelines and first deadline information.",
+    "evidence": "Group Project: Students will work in groups of 4-5 on a research project.",
+    "method": "ai_general_analysis",
+    "triple_checked": true,
+    "second_chance": true
   },
   ...
 ]

@@ -509,9 +509,11 @@ def api_analyze_course_outline():
     - A JSON array of 26 items, each with:
       - present: boolean indicating if the item is present in the outline
       - confidence: number between 0.0 and 1.0
-      - explanation: brief explanation
+      - explanation: brief explanation (prefixed with "[2nd Analysis]" if from second-chance analysis)
       - evidence: direct quote from the outline, or empty string if not found
       - method: always "ai_general_analysis"
+      - triple_checked: boolean indicating if the item was analyzed using multiple passes (always true)
+      - second_chance: boolean indicating if this result came from a second-chance analysis after an initial failure
     """
     try:
         document_text = ""

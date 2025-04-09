@@ -323,11 +323,19 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     # Identify failed items for second-chance analysis
     failed_item_indices = []
     for idx, item in enumerate(results_array):
-        # Check for error states or missing results that need retry
-        if (not item.get("present", False) and 
+        # Check for error states, API failures, or missing results that need retry
+        if ((not item.get("present", False) and 
             ("fail" in item.get("explanation", "").lower() or 
              "error" in item.get("explanation", "").lower() or
-             "missing" in item.get("explanation", "").lower())):
+             "missing" in item.get("explanation", "").lower())) or
+            # Also retry all API failures, missing fields, or invalid results
+            "api" in item.get("explanation", "").lower() or
+            "timeout" in item.get("explanation", "").lower() or
+            item.get("method", "") == "" or
+            "analysis failed" in item.get("explanation", "").lower() or
+            "analysis missing" in item.get("explanation", "").lower()):
+            
+            logger.info(f"Item {idx+1} failed and needs second-chance analysis: {item.get('explanation', 'No explanation')}")
             failed_item_indices.append(idx)
     
     # Perform second-chance analysis on failed items
@@ -342,14 +350,24 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                 
                 # Create a more focused prompt specifically for this failed item
                 try:
-                    system_message = """
+                    # Get original error explanation for more targeted retry
+                    original_error = results_array[failed_idx].get("explanation", "")
+                    
+                    # Generate a more tailored system message based on the original error
+                    system_message = f"""
                     You are an expert academic policy compliance checker for the University of Calgary.
                     
                     You will be analyzing ONE specific checklist item that failed in the initial analysis.
-                    Perform an extremely careful analysis to determine if this requirement is present in any form.
+                    The previous attempt failed with this error: "{original_error}"
+                    
+                    This is a SECOND-CHANCE ANALYSIS to fix this error. Perform an extremely careful and thorough 
+                    analysis to determine if this requirement is present in any form within the course outline.
                     
                     Focus on contextual understanding, not exact keyword matches. Look for related concepts, synonyms, 
                     and implicit information that fulfills the requirement's intent, even when the exact terms are absent.
+                    
+                    Carefully examine the ENTIRE document for ANY mention or implication related to this requirement.
+                    Look beyond section headers and search for content that addresses the requirement's substance.
                     
                     Your entire response MUST be pure JSON with the following exact fields:
                     - "present": boolean value (true or false, lowercase)
@@ -359,7 +377,8 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     - "method": string value, always set to "ai_general_analysis"
                     - "triple_checked": boolean value, always set to true
                     
-                    Be strict and thorough. If evidence is unclear or ambiguous, mark as false.
+                    MAKE ABSOLUTELY SURE your response is complete, valid JSON. If you determine the requirement is not 
+                    present, clearly explain the rationale and still return all fields with proper values.
                     """
                     
                     user_message = f"""
@@ -379,25 +398,77 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     YOUR RESPONSE MUST BE VALID JSON with the fields: present, confidence, explanation, evidence, method, and triple_checked.
                     """
                     
-                    # Make the focused OpenAI API call for this specific item
-                    retry_response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": user_message}
-                        ],
-                        response_format={"type": "json_object"},
-                        temperature=0.1,
-                        max_tokens=1000,
-                        timeout=60
-                    )
+                    # Make the focused OpenAI API call for this specific item with multiple retries
+                    max_retry_attempts = 3
+                    retry_success = False
+                    retry_text = ""
+                    retry_result = {}
                     
-                    retry_text = retry_response.choices[0].message.content.strip()
-                    retry_result = json.loads(retry_text)
+                    for retry_attempt in range(1, max_retry_attempts + 1):
+                        try:
+                            logger.info(f"Making second-chance API call for item #{failed_idx+1} (attempt {retry_attempt}/{max_retry_attempts})")
+                            
+                            retry_response = client.chat.completions.create(
+                                model="gpt-3.5-turbo",
+                                messages=[
+                                    {"role": "system", "content": system_message},
+                                    {"role": "user", "content": user_message}
+                                ],
+                                response_format={"type": "json_object"},
+                                temperature=0.1,
+                                max_tokens=1000,
+                                timeout=90  # Longer timeout for retries
+                            )
+                            
+                            retry_text = retry_response.choices[0].message.content.strip()
+                            
+                            # Validate JSON structure before parsing
+                            if not retry_text.startswith('{') or not retry_text.endswith('}'):
+                                logger.warning(f"Invalid JSON response format in second-chance analysis (attempt {retry_attempt})")
+                                continue
+                                
+                            retry_result = json.loads(retry_text)
+                            retry_success = True
+                            logger.info(f"Second-chance API call successful for item #{failed_idx+1} on attempt {retry_attempt}")
+                            break
+                            
+                        except Exception as retry_error:
+                            logger.warning(f"Error in second-chance API call (attempt {retry_attempt}): {str(retry_error)}")
+                            # Sleep briefly before the next retry
+                            time.sleep(2)
                     
-                    # Ensure the retry result has all required fields
+                    # If all retries failed, create a placeholder result that indicates the need for manual review
+                    if not retry_success:
+                        logger.error(f"All second-chance API retries failed for item #{failed_idx+1}")
+                        retry_result = {
+                            "present": False,  # Default to false when analysis fails
+                            "confidence": 0.5,
+                            "explanation": f"Second-chance analysis failed after {max_retry_attempts} attempts. Please review manually.",
+                            "evidence": "",
+                            "method": "ai_general_analysis",
+                            "triple_checked": True
+                        }
+                    
+                    # Ensure the retry result has all required fields and handle type conversions
                     required_fields = ["present", "confidence", "explanation", "evidence", "method", "triple_checked"]
                     is_valid = all(field in retry_result for field in required_fields)
+                    
+                    # Convert types if necessary (in case the AI returned strings for boolean values)
+                    if is_valid:
+                        # Handle 'present' field - convert to boolean
+                        if isinstance(retry_result["present"], str):
+                            retry_result["present"] = retry_result["present"].lower() in ('true', 'yes', '1')
+                            
+                        # Handle 'confidence' field - convert to float
+                        if isinstance(retry_result["confidence"], str):
+                            try:
+                                retry_result["confidence"] = float(retry_result["confidence"])
+                            except:
+                                retry_result["confidence"] = 0.5
+                            
+                        # Handle 'triple_checked' field - convert to boolean
+                        if isinstance(retry_result["triple_checked"], str):
+                            retry_result["triple_checked"] = retry_result["triple_checked"].lower() in ('true', 'yes', '1')
                     
                     if is_valid:
                         # Add a note about this being from a second-chance analysis

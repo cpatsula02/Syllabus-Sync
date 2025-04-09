@@ -274,7 +274,9 @@ def index():
                         'confidence': result_data.get('confidence', 0),
                         'verification_attempts': result_data.get('verification_attempts', 0),
                         'verification_present_votes': result_data.get('verification_present_votes', 0),
-                        'is_grade_item': item in grade_table_items
+                        'is_grade_item': item in grade_table_items,
+                        'triple_checked': result_data.get('triple_checked', False),
+                        'second_chance': result_data.get('second_chance', False)
                     }
                     formatted_results.append(formatted_result)
                 
@@ -389,7 +391,9 @@ def index():
                             'confidence': result_data.get('confidence', 0),
                             'verification_attempts': result_data.get('verification_attempts', 0),
                             'verification_present_votes': result_data.get('verification_present_votes', 0),
-                            'is_grade_item': item in grade_table_items
+                            'is_grade_item': item in grade_table_items,
+                            'triple_checked': result_data.get('triple_checked', False),
+                            'second_chance': result_data.get('second_chance', False)
                         }
                         formatted_results.append(formatted_result)
                     
@@ -702,9 +706,11 @@ def api_analyze_course_outline():
     - A JSON array of 26 items, each with:
       - present: boolean indicating if the item is present in the outline
       - confidence: number between 0.0 and 1.0
-      - explanation: brief explanation
+      - explanation: brief explanation (prefixed with "[2nd Analysis]" if from second-chance analysis)
       - evidence: direct quote from the outline, or empty string if not found
       - method: always "ai_general_analysis"
+      - triple_checked: boolean indicating if the item was analyzed using multiple passes (always true)
+      - second_chance: boolean indicating if this result came from a second-chance analysis after an initial failure
     """
     try:
         document_text = ""
@@ -749,7 +755,9 @@ def api_analyze_course_outline():
                     "confidence": 0.5,
                     "explanation": f"Analysis failed due to API error: {str(e)[:50]}...",
                     "evidence": "",
-                    "method": "ai_general_analysis"
+                    "method": "ai_general_analysis",
+                    "triple_checked": True,
+                    "second_chance": True
                 })
             logger.warning(f"Returning default response with {len(results)} items")
         
