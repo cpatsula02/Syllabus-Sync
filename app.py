@@ -407,7 +407,7 @@ def download_pdf():
     """Generate a PDF report of the analysis results"""
     try:
         # Get session data
-        print("Starting PDF generation...")
+        print("Starting PDF generation with detailed checklist table...")
         analysis_data = session.get('analysis_data', {})
         if not analysis_data or not analysis_data.get('checklist_items'):
             print("ERROR: No analysis data found in session")
@@ -781,8 +781,29 @@ def download_pdf():
             with open('enhanced_checklist.txt', 'r') as file:
                 content = file.read().strip()
                 print(f"Read {len(content)} characters from enhanced_checklist.txt")
-                enhanced_checklist = content.split('\n\n')
+                # Split the content by the pattern of a number followed by a period at the start of a line
+                # This is more reliable than splitting by blank lines
+                enhanced_checklist = []
+                lines = content.split('\n')
+                current_item = ""
+                
+                for line in lines:
+                    # If the line starts with a number and period (item number), it's a new item
+                    if re.match(r'^\d+\.', line):
+                        # Save the previous item if it exists
+                        if current_item:
+                            enhanced_checklist.append(current_item.strip())
+                        current_item = line
+                    else:
+                        # Continue with the current item
+                        current_item += "\n" + line
+                
+                # Add the last item
+                if current_item:
+                    enhanced_checklist.append(current_item.strip())
+                
                 print(f"Parsed {len(enhanced_checklist)} checklist items")
+                print(f"Sample first item: {enhanced_checklist[0][:100]}...")
         except Exception as e:
             print(f"ERROR loading enhanced checklist: {str(e)}")
             logger.error(f"Error loading enhanced checklist: {str(e)}")
@@ -825,6 +846,10 @@ def download_pdf():
         processed_items = set()
         enhanced_items = []
         
+        print(f"DEBUG: Total enhanced checklist items: {len(enhanced_checklist)}")
+        print(f"DEBUG: Enhanced checklist first item: {enhanced_checklist[0][:100]}")
+        print(f"DEBUG: Enhanced checklist last item: {enhanced_checklist[-1][:100]}")
+        
         # First pass to match existing items
         for item_desc in enhanced_checklist:
             print(f"First pass processing: {item_desc[:50]}...")
@@ -848,7 +873,8 @@ def download_pdf():
                             description = item_desc[description_start:].strip()
                         else:
                             description = ""
-                            
+                        
+                        print(f"    DEBUG: Adding enhanced item '{name}' with status '{status}' and description length {len(description)}")
                         enhanced_items.append((num, name, description, status, checklist_item))
                         processed_items.add(checklist_item)
                         found_match = True
@@ -864,7 +890,8 @@ def download_pdf():
                         description = item_desc[description_start:].strip()
                     else:
                         description = ""
-                        
+                    
+                    print(f"    DEBUG: Adding unmatched item '{name}' with status 'missing' and description length {len(description)}")    
                     enhanced_items.append((num, name, description, 'missing', None))
             else:
                 print(f"  NO REGEX MATCH for: {item_desc[:50]}...")
