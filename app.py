@@ -303,7 +303,7 @@ def index():
                         "explanation": result.get("explanation", ""),
                         "evidence": result.get("evidence", ""),
                         "is_grade_item": is_grade_item,
-                        "method": result.get("method", "pattern_matching"),
+                        "method": result.get("method", "ai_general_analysis"),
                         "confidence": result.get("confidence", None),
                         "status": status
                     })
@@ -321,7 +321,7 @@ def index():
 
                 for item in checklist_items:
                     result = analysis_results.get(item, {})
-                    method = result.get("method", "pattern_matching")
+                    method = result.get("method", "ai_general_analysis")
 
                     # Count occurrences of each method
                     if method in analysis_methods:
@@ -423,7 +423,7 @@ def get_match_details():
             'found': True,
             'excerpt': excerpt,
             'is_grade_item': is_grade_item,
-            'method': result.get('method', 'pattern_matching'),
+            'method': result.get('method', 'ai_general_analysis'),
             'confidence': result.get('confidence', None)
         }
 
@@ -501,7 +501,7 @@ def download_pdf():
 
         for item in analysis_data['checklist_items']:
             result = analysis_data['analysis_results'].get(item, {})
-            method = result.get("method", "pattern_matching")
+            method = result.get("method", "ai_general_analysis")
 
             # Count occurrences of each method
             if method in analysis_methods:
@@ -678,7 +678,7 @@ def download_pdf():
                     pdf.set_text_color(100, 100, 100)  # Gray
 
                     # Add method information
-                    method = result.get('method', 'pattern_matching').replace('_', ' ').title()
+                    method = result.get('method', 'ai_general_analysis').replace('_', ' ').title()
                     confidence = result.get('confidence', None)
                     confidence_str = f" (Confidence: {int(confidence * 100)}%)" if confidence else ""
 
