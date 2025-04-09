@@ -14,24 +14,33 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 # Configure OpenAI integration with detailed validation
+# CRITICAL: This application REQUIRES OpenAI API for analysis as per user requirements
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
+ENABLE_OPENAI = True  # CRITICAL: Force OpenAI API to be used exclusively (no pattern matching fallbacks allowed)
 
-# Keep OpenAI integration enabled as requested, but with improved timeout handling
-# We'll use proper timeout controls in openai_helper.py instead of disabling API
+# OpenAI API status for displaying in UI
+OPENAI_API_STATUS = "unavailable"
+OPENAI_API_STATUS_MESSAGE = ""
 
 # Add API key validation for proper format (for future debugging)
 if OPENAI_API_KEY:
     # Check if key has valid format (starts with sk- and has sufficient length)
     if len(OPENAI_API_KEY) < 20 or not OPENAI_API_KEY.startswith("sk-"):
-        logger.warning("WARNING: OpenAI API key present but appears to be invalid format (should start with 'sk-' and be longer)")
+        logger.critical("CRITICAL ERROR: OpenAI API key present but appears to be invalid format (should start with 'sk-')")
+        OPENAI_API_STATUS = "invalid"
+        OPENAI_API_STATUS_MESSAGE = "API key has invalid format (must start with 'sk-')"
     else:
         logger.info("OpenAI API key validated with correct format")
-    
-    logger.info("OpenAI integration ENABLED - will try AI verification with improved timeout handling")
-    logger.info("Using more reliable processing with improved error handling")
+        OPENAI_API_STATUS = "available"
+        OPENAI_API_STATUS_MESSAGE = "Valid OpenAI API key detected"
 else:
-    logger.warning("OPENAI_API_KEY environment variable not found - pattern matching only mode will be used")
+    logger.critical("CRITICAL ERROR: No OpenAI API key found in environment variables")
+    logger.critical("This application REQUIRES a valid OPENAI_API_KEY to function correctly")
+    OPENAI_API_STATUS = "missing"
+    OPENAI_API_STATUS_MESSAGE = "No API key found. This application requires a valid OpenAI API key."
+    # Since we've forced ENABLE_OPENAI to True, we should still log this warning
+    logger.warning("OPENAI_API_KEY environment variable not found - but we'll still try to use OpenAI API exclusively")
+    logger.warning("This will likely cause API authentication errors - please set a valid OPENAI_API_KEY")
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -295,17 +304,28 @@ def index():
                 # Check if it's an API key error
                 error_message = str(api_error).lower()
                 if 'api key' in error_message or 'apikey' in error_message or 'authentication' in error_message:
-                    flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
-                    # Force fallback methods with defensive error handling
+                    # CRITICAL: As per user requirements, we DON'T fallback to pattern matching
+                    # Instead, we report the API error directly
+                    flash("ERROR: OpenAI API authentication failed. As requested, we're not using pattern matching fallback.")
+                    # We are not forcing fallback methods anymore
+                    # CRITICAL: As per user requirements, we DON'T process documents without OpenAI API
+                    # Instead, we return a custom error response
+                    logger.error("OpenAI API required but authentication failed. Not using fallback as per requirements.")
+                    
+                    # Create placeholder items and results to show API error
+                    checklist_items = ["OpenAI API Authentication Failed"]
+                    results = {
+                        "OpenAI API Authentication Failed": {
+                            'present': False,
+                            'confidence': 0,
+                            'explanation': "Cannot process without OpenAI API as per requirements. Please check API key and try again.",
+                            'evidence': "",
+                            'method': 'api_error'
+                        }
+                    }
+                    
                     try:
-                        checklist_items, results = process_documents(
-                            checklist_path=checklist_path,
-                            outline_path=outline_path,
-                            api_attempts=0,  # Force no API usage
-                            additional_context=additional_context
-                        )
-                        
-                        # Additional validation of results
+                        # Additional validation of results (rarely needed with our approach)
                         if not isinstance(results, dict):
                             logger.error(f"Invalid results type: {type(results)}. Creating empty results.")
                             results = {}
@@ -315,11 +335,11 @@ def index():
                                     'confidence': 0,
                                     'explanation': "Error processing this item.",
                                     'evidence': "",
-                                    'method': 'fallback_error_recovery'
+                                    'method': 'api_error'
                                 }
                     except Exception as fallback_error:
-                        logger.exception(f"Fallback processing failed: {str(fallback_error)}")
-                        flash(f"An error occurred during document analysis: {str(fallback_error)}")
+                        logger.exception(f"Error handling API failure: {str(fallback_error)}")
+                        flash(f"An error occurred during API error handling: {str(fallback_error)}")
                         return redirect(request.url)
                     
                     # Continue with results processing
@@ -413,7 +433,10 @@ def index():
                 logger.error(f"Error during cleanup: {str(e)}")
     
     # Handle GET request
-    return render_template('index.html')
+    # Pass API status to the template
+    return render_template('index.html', 
+                          openai_api_status=OPENAI_API_STATUS,
+                          openai_api_message=OPENAI_API_STATUS_MESSAGE)
 
 @app.route('/get-match-details', methods=['GET'])
 def get_match_details():

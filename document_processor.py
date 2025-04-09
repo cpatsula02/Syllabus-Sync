@@ -1322,9 +1322,11 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
                     logging.info("Falling back to pattern matching")
             
-            # If OpenAI is disabled or failed, use pattern matching
-            if not ENABLE_OPENAI or not any(result.get('method', '') != 'initialization' for result in results.values()):
-                logging.info("Using traditional pattern matching for analysis")
+            # IMPORTANT: As per user requirements, we now FORCE EXCLUSIVE OpenAI API usage
+            # We should NOT use pattern matching unless there's a critical error
+            # This code is intentionally bypassed - pattern matching should NOT be used
+            if False:  # Intentionally disabled the pattern matching fallback
+                logging.info("Pattern matching is DISABLED as per user requirements")
                 
             # Process each item with pattern matching if needed
             for item in checklist_items:

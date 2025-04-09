@@ -86,19 +86,43 @@
             </div>
             <div class="card-footer">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-info-circle text-primary me-2"></i>
                             <span class="small">Supports PDF and DOCX formats</span>
                         </div>
                     </div>
-                    <div class="col-md-6 text-md-end">
+                    <div class="col-md-4 text-center">
+                        <div class="d-flex align-items-center justify-content-center">
+                            {% if openai_api_status == "available" %}
+                            <i class="fas fa-robot text-success me-2"></i>
+                            <span class="small">OpenAI API: <span class="badge bg-success">Available</span></span>
+                            {% elif openai_api_status == "invalid" %}
+                            <i class="fas fa-robot text-warning me-2"></i>
+                            <span class="small">OpenAI API: <span class="badge bg-warning text-dark">Invalid Format</span></span>
+                            {% else %}
+                            <i class="fas fa-robot text-danger me-2"></i>
+                            <span class="small">OpenAI API: <span class="badge bg-danger">Missing</span></span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-md-end">
                         <div class="d-flex align-items-center justify-content-md-end">
                             <i class="fas fa-lock text-primary me-2"></i>
                             <span class="small">Your documents are processed securely</span>
                         </div>
                     </div>
                 </div>
+                {% if openai_api_status != "available" %}
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <div class="alert alert-warning mb-0 py-2 small">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            {{ openai_api_message }} This system requires a valid OpenAI API key to function correctly.
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
 

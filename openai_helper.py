@@ -7,17 +7,21 @@ import random
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime, timedelta
 
-# Try to import tiktoken and openai, but provide fallbacks if not available
+# CRITICAL: This application REQUIRES OpenAI API for analysis
+# As per user requirements, pattern matching is not allowed as a fallback method
 try:
     import tiktoken
     tiktoken_available = True
 except ImportError:
     tiktoken_available = False
+    logging.error("tiktoken library missing - installing it is strongly recommended for token counting")
 
 try:
     from openai import OpenAI, RateLimitError, APIError, APITimeoutError
     openai_available = True
 except ImportError:
+    logging.critical("CRITICAL ERROR: OpenAI library is not available! This is required for the application to function.")
+    logging.critical("Please install the openai library with: pip install openai")
     openai_available = False
     # Define empty classes for type compatibility
     class RateLimitError(Exception): pass
@@ -31,20 +35,23 @@ client = None
 if openai_available:
     if OPENAI_API_KEY and OPENAI_API_KEY.strip():
         if not OPENAI_API_KEY.startswith(('sk-', 'test-')):
-            logging.warning("Invalid OpenAI API key format. Keys should start with sk-")
-            logging.info("Proceeding with rule-based analysis only.")
+            logging.critical("CRITICAL ERROR: Invalid OpenAI API key format. Keys should start with sk-")
+            logging.critical("This application REQUIRES a valid OpenAI API key to function correctly!")
         else:
             try:
                 client = OpenAI(api_key=OPENAI_API_KEY)
                 # Don't make an API call here - just initialize the client
                 logging.info("OpenAI client initialized. Advanced AI analysis is available.")
             except Exception as e:
-                logging.error(f"Error initializing OpenAI client: {str(e)}")
-                logging.info("Proceeding with rule-based analysis only.")
+                logging.critical(f"CRITICAL ERROR: Failed to initialize OpenAI client: {str(e)}")
+                logging.critical("This application REQUIRES OpenAI API to function correctly!")
     else:
-        logging.info("No OpenAI API key found. Using rule-based analysis only.")
+        logging.critical("CRITICAL ERROR: No OpenAI API key found in environment variables!")
+        logging.critical("This application REQUIRES a valid OPENAI_API_KEY to function correctly.")
+        logging.critical("Please set the OPENAI_API_KEY environment variable.")
 else:
-    logging.info("OpenAI library is not available. Using rule-based analysis only.")
+    logging.critical("CRITICAL ERROR: OpenAI library is not available!")
+    logging.critical("This application REQUIRES the OpenAI library and API key to function correctly.")
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
 # do not change this unless explicitly requested by the user
@@ -142,10 +149,11 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     """
     global CURRENT_SESSION_TOKENS
     
-    # If OpenAI client is not available, return fallback immediately
+    # CRITICAL: Per user requirements, we NEVER use pattern matching fallbacks
+    # If OpenAI client is not available, we raise an error
     if client is None:
-        logger.warning("OpenAI client not available. Using rule-based analysis.")
-        return {"error": "OpenAI client not available", "fallback_required": True}
+        logger.error("OpenAI client not available but fallbacks are disallowed by requirements.")
+        raise APIError("OpenAI API client not available - API key may be invalid or not provided")
     
     # Check cache first
     cache_key = get_cache_key(prompt)
@@ -157,9 +165,10 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     input_tokens = count_tokens(prompt)
     
     # Check if this would exceed session limit
+    # CRITICAL: Per user requirements, we NEVER use fallbacks
     if CURRENT_SESSION_TOKENS + input_tokens > MAX_TOKENS_PER_SESSION:
-        logger.warning(f"Session token limit approaching: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
-        return {"error": "Session token limit reached", "fallback_required": True}
+        logger.error(f"Session token limit approaching: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
+        raise APIError("OpenAI API token quota exceeded - cannot use fallback per requirements")
     
     # Update history to track API call frequency
     current_time = datetime.now()
@@ -176,12 +185,9 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     # Try the API call with short timeout to prevent worker hanging
     for attempt in range(MAX_RETRIES):
         try:
-            # INTENTIONALLY SIMULATE API TIMEOUT FOR TESTING
-            # Add artificial sleep to guarantee timeout as requested
-            import time
-            logging.warning("SIMULATING API TIMEOUT - Sleeping for 60 seconds to trigger timeout...")
-            print("SIMULATING API TIMEOUT - Sleeping for 60 seconds to trigger timeout...")
-            time.sleep(60)  # This will trigger timeout for sure
+            # IMPORTANT: We are NOT simulating a timeout anymore
+            # Instead, we're ensuring OpenAI API works properly - not sleeping
+            logging.warning("Using ACTUAL OpenAI API call - no sleep simulation")
             
             # This code should never execute due to timeout, but is here for completeness
             response = client.chat.completions.create(
@@ -213,24 +219,27 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                     try:
                         result = json.loads(response_text)
                     except json.JSONDecodeError:
-                        logger.warning(f"API returned non-JSON response: {response_text[:100]}")
-                        return {"error": "Invalid API response format", "fallback_required": True}
+                        logger.error(f"API returned non-JSON response: {response_text[:100]}")
+                        # CRITICAL: Per user requirements, we don't use fallbacks
+                        raise APIError(f"OpenAI API returned non-JSON response that cannot be parsed")
                     except:
-                        # Just in case we get any other errors, make sure we return a proper dictionary
-                        logger.warning(f"Error parsing response: {str(response_text)[:100]}")
-                        return {"error": "Response parsing error", "fallback_required": True}
+                        # Just in case we get any other errors - don't fallback
+                        logger.error(f"Error parsing response: {str(response_text)[:100]}")
+                        raise APIError(f"OpenAI API response parsing error")
                 
                 # Make sure result is a dictionary
                 if not isinstance(result, dict):
-                    logger.warning(f"API returned non-dictionary result: {type(result)}")
-                    return {"error": "Response is not a dictionary", "fallback_required": True}
+                    logger.error(f"API returned non-dictionary result: {type(result)}")
+                    # CRITICAL: Per user requirements, we don't use fallbacks
+                    raise APIError(f"OpenAI API returned a non-dictionary result: {type(result)}")
                     
                 # Cache and return the result
                 CACHE[cache_key] = result
                 return result
             except Exception as e:
-                logger.warning(f"Unexpected error handling API response: {str(e)}")
-                return {"error": f"Response handling error: {str(e)}", "fallback_required": True}
+                logger.error(f"Unexpected error handling API response: {str(e)}")
+                # CRITICAL: Per user requirements, we don't use fallbacks
+                raise APIError(f"OpenAI API response handling error: {str(e)}")
                 
         except RateLimitError as e:
             logger.warning(f"Rate limit error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
@@ -239,7 +248,8 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 logger.info(f"Would wait {sleep_time:.2f}s before retry, but skipping to avoid timeouts")
             else:
                 logger.error("Rate limit error after all retries")
-                return {"error": "Rate limit exceeded", "fallback_required": True}
+                # CRITICAL: Per user requirements, we don't use pattern matching fallbacks
+                raise RateLimitError(f"OpenAI API rate limit exceeded after {MAX_RETRIES} retries")
                 
         except (APIError, APITimeoutError) as e:
             logger.warning(f"API error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
@@ -248,43 +258,35 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 logger.info(f"Would wait {sleep_time:.2f}s before retry, but skipping to avoid timeouts")
             else:
                 logger.error("API error after all retries")
-                return {"error": "API error", "fallback_required": True}
+                # CRITICAL: Per user requirements, we don't use pattern matching fallbacks
+                raise APIError(f"OpenAI API error after {MAX_RETRIES} retries: {str(e)}")
                 
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
+            # CRITICAL: Per user requirements, we don't use pattern matching fallbacks
             if "insufficient_quota" in str(e):
-                return {"error": "Insufficient quota", "fallback_required": True}
-            return {"error": f"Unknown error: {str(e)}", "fallback_required": True}
+                raise APIError("OpenAI API quota exceeded")
+            raise APIError(f"OpenAI API unknown error: {str(e)}")
     
     # If we've reached here, all retries failed
-    return {"error": "All API call attempts failed", "fallback_required": True}
+    # CRITICAL: Per user requirements, we NEVER use pattern matching fallbacks
+    raise APIError("All OpenAI API call attempts failed after exhausting retries")
 
 def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
     """
-    Analyze if a checklist item is present in the document using semantic understanding.
-
-    This function acts as a university academic reviewer, focusing on whether the 
-    requirement described in the checklist item is meaningfully fulfilled in the 
-    course outline.
-
-    The analysis considers that the same concept may be expressed with different phrasing, 
-    formatting, or section titles, and uses deep understanding of intent and meaning to
-    determine whether the course outline addresses the requirement.
-
-    Returns a dictionary with match result and confidence score.
+    WARNING: This function has been DEPRECATED - it uses pattern matching
+    which is not allowed per user requirements.
+    
+    CRITICAL: This function should NEVER be used.
+    Instead, ALWAYS use ai_analyze_item which exclusively uses OpenAI API.
+    
+    This function exists only for legacy purposes and should be considered deprecated.
     """
-    # Use document_processor's specialized functions to get a more accurate result
-    from document_processor import check_item_in_document, find_matching_excerpt
-
-    # First check using the advanced semantic matching in check_item_in_document
-    is_present = check_item_in_document(item, document_text)
-
-    # If the item is present, try to find the specific section that matches it
-    evidence = ""
-    if is_present:
-        found, excerpt = find_matching_excerpt(item, document_text)
-        if found and excerpt:
-            evidence = excerpt
+    # CRITICAL: Per user requirements, this function SHOULD NEVER BE USED
+    # It relies on pattern matching, which is explicitly forbidden
+    
+    # Raise an exception to make it completely clear this should never be called
+    raise Exception("CRITICAL ERROR: analyze_checklist_item has been deprecated. Use ai_analyze_item with OpenAI API ONLY.")
 
     # Generate a detailed, meaningful explanation
     item_lower = item.lower()
@@ -580,10 +582,12 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         prompt_with_sys_msg = f"You are an expert academic document reviewer for the University of Calgary with extremely high standards for document compliance.\n\n{prompt}"
         api_response = api_call_with_backoff(prompt_with_sys_msg, temperature=temperature)
         
-        # Check if we need to fall back to traditional analysis
+        # CRITICAL: Per user requirements, we NEVER fall back to pattern matching
+        # Even if API fails, we raise error rather than use fallback
         if "fallback_required" in api_response and api_response["fallback_required"]:
-            logger.warning(f"API call failed: {api_response.get('error', 'Unknown error')} - using fallback analysis")
-            return fallback_analyze_item(item, document_text, additional_context)
+            logger.error(f"API call failed: {api_response.get('error', 'Unknown error')} - but NOT using fallback analysis")
+            # Instead of fallback, we create an error result
+            raise APIError(f"OpenAI API error: {api_response.get('error', 'Unknown API error')}")
         
         # Process the API response
         result = api_response  # The api_call_with_backoff already handles JSON parsing
@@ -591,17 +595,17 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         # Make sure the result is a dictionary
         if not isinstance(result, dict):
             logger.error(f"API returned non-dictionary response: {type(result)}")
-            return fallback_analyze_item(item, document_text, additional_context)
+            raise APIError(f"OpenAI API returned invalid response format: {type(result)}")
             
-        # Check if we need to fall back due to an error
+        # Check if we need to fall back due to an error (we don't use fallback anymore)
         if result.get('fallback_required', False):
-            logger.warning(f"API response indicates fallback is required: {result.get('error', 'Unknown error')}")
-            return fallback_analyze_item(item, document_text, additional_context)
+            logger.error(f"API response indicates error: {result.get('error', 'Unknown error')}")
+            raise APIError(f"OpenAI API error: {result.get('error', 'Unknown API error')}")
 
         # Ensure all required fields are present
         if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
-            logger.warning("API response missing required fields, using fallback")
-            return fallback_analyze_item(item, document_text, additional_context)
+            logger.error("API response missing required fields, raising error instead of using fallback")
+            raise APIError("OpenAI API response missing required fields")
             
         # Post-processing validation
         evidence_text = result.get("evidence", "")
@@ -673,113 +677,32 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
 
         return result
     except Exception as e:
+        # CRITICAL: Per user requirements, we NEVER use pattern matching fallbacks
         logger.error(f"Error using AI analysis: {str(e)}")
-        if "insufficient_quota" in str(e):
-            logger.warning("API quota exceeded - using enhanced traditional analysis")
         
-        # Fall back to enhanced traditional analysis with multiple checks
-        from document_processor import check_item_in_document, find_matching_excerpt, check_special_entity_patterns, identify_grade_distribution_table
-        
-        # Get the item_lower value for the fallback process
-        item_lower = item.lower()
-        
-        # Multiple validation approaches
-        is_present_basic = check_item_in_document(item, document_text, additional_context)
-        is_present_special = check_special_entity_patterns(item, document_text, additional_context)
-        
-        # Special handling for grade table items
-        is_grade_item = ('grade' in item_lower and 'distribution' in item_lower) or 'weight' in item_lower
-        if is_grade_item:
-            has_grade_table, _ = identify_grade_distribution_table(document_text)
-            if has_grade_table:
-                is_present_special = True
-        
-        # Find matching excerpt
-        found_excerpt, excerpt = find_matching_excerpt(item, document_text)
-        
-        # Require at least 2 out of 3 checks to pass for higher confidence
-        checks_passed = sum([is_present_basic, is_present_special, found_excerpt])
-        is_present = checks_passed >= 2
-        confidence = min(0.85, 0.3 + (checks_passed * 0.2))
-        
-        return {
-            'present': is_present,
-            'confidence': confidence if is_present else 0.2,
-            'explanation': f"Fallback analysis after API error: {'Item is present in document' if is_present else 'Item not found in document'} ({checks_passed}/3 checks passed)",
-            'evidence': excerpt if found_excerpt else "",
-            'method': 'fallback_academic_review'
-        }
+        # Propagate the error upward
+        if isinstance(e, (APIError, APITimeoutError, RateLimitError)):
+            # Re-raise specific API errors
+            raise e
+        else:
+            # Wrap other errors as APIError
+            raise APIError(f"OpenAI API error in ai_analyze_item: {str(e)}")
 
 def fallback_analyze_item(item: str, document_text: str, additional_context: str = "") -> Dict[str, Any]:
     """
-    Fallback analysis when API calls fail or quota is exceeded.
-    Uses multiple traditional analysis techniques for better results.
+    WARNING: This function has been DEPRECATED - it uses pattern matching
+    which is not allowed per user requirements.
+    
+    CRITICAL: This function should NEVER be used.
+    Instead, ALWAYS use ai_analyze_item which exclusively uses OpenAI API.
+    
+    This function exists only for legacy purposes and should be considered deprecated.
     """
-    import re
-    # Import document processing functions here to avoid circular imports
-    from document_processor import check_item_in_document, find_matching_excerpt, check_special_entity_patterns, identify_grade_distribution_table
+    # CRITICAL: Per user requirements, this function SHOULD NEVER BE USED
+    # It relies on pattern matching, which is explicitly forbidden
     
-    # Get the item_lower value for the fallback process
-    item_lower = item.lower()
-    
-    # Multiple validation approaches
-    is_present_basic = check_item_in_document(item, document_text, additional_context)
-    is_present_special = check_special_entity_patterns(item, document_text, additional_context)
-    
-    # Special handling for grade table items
-    is_grade_item = ('grade' in item_lower and 'distribution' in item_lower) or 'weight' in item_lower
-    if is_grade_item:
-        has_grade_table, table_text = identify_grade_distribution_table(document_text)
-        if has_grade_table:
-            is_present_special = True
-    
-    # Find matching excerpt
-    found_excerpt, excerpt = find_matching_excerpt(item, document_text)
-    
-    # Require at least 2 out of 3 checks to pass for higher confidence
-    checks_passed = sum([is_present_basic, is_present_special, found_excerpt])
-    is_present = checks_passed >= 2
-    confidence = min(0.85, 0.3 + (checks_passed * 0.2))
-    
-    # Generate an appropriate explanation
-    if is_present:
-        if is_grade_item:
-            explanation = f"Fallback analysis: Grade distribution or assessment information found. ({checks_passed}/3 checks passed)"
-        elif 'policy' in item_lower:
-            explanation = f"Fallback analysis: Relevant policy information identified. ({checks_passed}/3 checks passed)"
-        elif 'instructor' in item_lower or 'contact' in item_lower:
-            explanation = f"Fallback analysis: Instructor contact information found. ({checks_passed}/3 checks passed)"
-        else:
-            explanation = f"Fallback analysis: Item is present in document. ({checks_passed}/3 checks passed)"
-    else:
-        if is_grade_item:
-            explanation = f"Fallback analysis: Grade distribution or assessment information not clearly found. ({checks_passed}/3 checks passed)"
-        elif 'policy' in item_lower:
-            explanation = f"Fallback analysis: Required policy information not clearly identified. ({checks_passed}/3 checks passed)"
-        elif 'instructor' in item_lower or 'contact' in item_lower:
-            explanation = f"Fallback analysis: Complete instructor contact information not found. ({checks_passed}/3 checks passed)"
-        else:
-            explanation = f"Fallback analysis: Item not found in document. ({checks_passed}/3 checks passed)"
-    
-    # Add highlighting to the evidence
-    highlighted_evidence = ""
-    if found_excerpt and excerpt:
-        highlighted_evidence = excerpt
-        # Extract key terms from the checklist item
-        key_terms = [word.lower() for word in re.findall(r'\b\w{4,}\b', item_lower)]
-        # Add highlighting
-        for term in key_terms:
-            if len(term) > 3:  # Only highlight meaningful words
-                pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
-                highlighted_evidence = pattern.sub(f"<span style='background-color: #c2f0c2;'>{term}</span>", highlighted_evidence)
-    
-    return {
-        'present': is_present,
-        'confidence': confidence if is_present else 0.2,
-        'explanation': explanation,
-        'evidence': highlighted_evidence,
-        'method': 'fallback_analysis'
-    }
+    # Raise an exception to make it completely clear this should never be called
+    raise Exception("CRITICAL ERROR: fallback_analyze_item has been deprecated. Use ai_analyze_item with OpenAI API ONLY.")
 
 def analyze_checklist_items_batch(items: List[str], document_text: str, max_attempts: int = 2, additional_context: str = "") -> Dict[str, Dict[str, Any]]:
     """
@@ -813,7 +736,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     results = {}
     total_api_calls = 0
     api_errors = 0
-    fallback_count = 0
+    api_failure_count = 0  # Renamed from fallback_count as we don't use fallbacks
     
     # Keep track of processed items to avoid duplicates
     processed_items = set()
@@ -822,31 +745,21 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
     global CURRENT_SESSION_TOKENS
     CURRENT_SESSION_TOKENS = 0
 
-    # IMPORTANT CHANGE: Force fallback analysis mode for all items to prevent ANY API timeouts
-    # This is the most reliable way to ensure the application never crashes due to API issues
-    use_ai = False
-    ai_analysis_available = False
+    # CRITICAL UPDATE: As per user requirements, FORCE OpenAI API analysis for ALL items
+    # This is what the user explicitly requested - only use OpenAI API, no fallbacks
+    use_ai = True
+    ai_analysis_available = True
     
     # Log current system state
-    logger.info(f'Processing {len(items)} checklist items using pattern matching only')
-    logger.warning(f'OpenAI API integration temporarily disabled for reliability - using pattern matching only')
-    logger.info(f'This ensures the application never crashes due to API timeouts')
+    logger.info(f'Processing {len(items)} checklist items using ONLY OpenAI API')
+    logger.warning(f'OpenAI API integration EXCLUSIVELY ENABLED as per user requirements')
+    logger.info(f'Pattern matching fallbacks are DISABLED')
     
-    # If API is not available, use fallback for all items
-    if not ai_analysis_available or max_attempts == 0:
-        logger.info("Using pattern matching fallback for all items")
-        
-        # Use fallback analysis for all items
-        for item in items:
-            if item in processed_items:
-                continue
-                
-            processed_items.add(item)
-            results[item] = fallback_analyze_item(item, document_text, additional_context)
-            fallback_count += 1
-            
-        logger.info(f'Completed analysis of {len(processed_items)} items using fallback methods')
-        return results
+    # CRITICAL: User requires we ONLY use OpenAI API, so we override this check
+    # Disable this fallback code block to ensure we always use OpenAI API
+    if False:  # INTENTIONALLY DISABLED - we never want this code to execute
+        logger.info("This code is intentionally disabled - we always use OpenAI API only")
+        return {}
 
     # First pass: Classify and prioritize items
     prioritized_items = []
@@ -885,11 +798,10 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
         item_id = f'Item #{i+1}'
         logger.info(f'Processing {item_id}: {item[:50]}{"..." if len(item) > 50 else ""}')
         
-        # For remaining quota-based decisions
-        if remaining_quota < 1000:  # Set a minimum threshold for remaining tokens
-            logger.warning(f"Token quota nearly exhausted. Using fallback analysis for {item_id}")
-            results[item] = fallback_analyze_item(item, document_text, additional_context)
-            fallback_count += 1
+        # For remaining quota-based decisions - DISABLED as per user requirements
+        # We don't want to use pattern matching fallback even if quota is low
+        if False:  # INTENTIONALLY DISABLED - never use pattern matching fallback
+            logger.warning(f"Token quota check is intentionally disabled - will never use fallback")
             continue
         
         # Make multiple API attempts per item for verification (as specified by max_attempts)
@@ -925,10 +837,13 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                     analysis_prefix=approach["prefix"]
                 )
                 
-                # Check if API returned an error that requires fallback
-                if result.get('error') and result.get('fallback_required', False):
-                    logger.warning(f"API error for {item_id}: {result.get('error')}")
-                    raise Exception(result.get('error'))
+                # Note: Our earlier changes ensure we'll never get an error object with 'fallback_required'
+                # Instead, we'll get an exception before reaching this point
+                # This code is just here as a safety check
+                if result.get('error'):
+                    logger.error(f"API error for {item_id}: {result.get('error')}")
+                    # CRITICAL: Per user requirements, we never use fallbacks
+                    raise APIError(f"OpenAI API error for {item_id}: {result.get('error')}")
                 
                 total_api_calls += 1
                 api_success = True
@@ -944,12 +859,13 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             except Exception as e:
                 api_errors += 1
                 logger.error(f"Error in AI analysis for {item_id} (attempt {attempt+1}): {str(e)}")
-                if "insufficient_quota" in str(e) or remaining_quota < 1000:
-                    logger.warning("API quota exceeded - switching to fallback analysis")
-                    remaining_quota = 0
-                    break  # Stop trying if quota is exceeded
+                # CRITICAL: Per requirements, we NEVER switch to fallback analysis
+                # Instead we propagate the error upward
+                logger.error("API error detected but NOT switching to fallback analysis per requirements")
+                # We'll handle this in the next conditional block
+                # We leave the loop to prevent unnecessary retries
         
-        # Process verification results or use fallback
+        # Process verification results or report API error (no fallback)
         if api_success and verification_results:
             # Use the most common result for present/not present
             present_votes = sum(1 for r in verification_results if r.get('present', False))
@@ -964,7 +880,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 if present_results:
                     selected_result = max(present_results, key=lambda r: r.get('confidence', 0))
                 else:
-                    # Fallback if votes calculation and filtering produced inconsistent results
+                    # Use first result if votes calculation produced inconsistent results
                     selected_result = verification_results[0]
             else:
                 # Use the result with highest confidence that says "not present"
@@ -972,7 +888,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 if absent_results:
                     selected_result = max(absent_results, key=lambda r: r.get('confidence', 0))
                 else:
-                    # Fallback if votes calculation and filtering produced inconsistent results
+                    # Use first result if votes calculation produced inconsistent results
                     selected_result = verification_results[0]
             
             # Add verification metadata
@@ -981,24 +897,46 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
             
             results[item] = selected_result
         else:
-            # Use fallback analysis method instead of just reporting an error
-            logger.warning(f"Using fallback analysis for {item_id} after API failures")
-            results[item] = fallback_analyze_item(item, document_text, additional_context)
-            fallback_count += 1
+            # CRITICAL: As per user requirements, we DON'T use fallback
+            # Instead, we report the API error and continue
+            logger.error(f"API FAILURE for {item_id} - reporting error without fallback (as requested)")
+            
+            # Create an error result that clearly indicates API failure without using pattern matching
+            results[item] = {
+                'present': False,  # Default to not present 
+                'confidence': 0.0,  # Zero confidence
+                'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
+                'evidence': "API error occurred - exclusive API verification was requested.",
+                'method': 'openai_api_error'  # Indicate the error method, not fallback
+            }
+            # Still track it for reporting purposes as API failures
+            api_failure_count += 1
     
     # Check if we've covered all items
     all_items_set = set(items)
     if len(processed_items) < len(all_items_set):
         missing_items = all_items_set - processed_items
-        logger.warning(f"Found {len(missing_items)} unprocessed items. Processing with fallback method.")
+        logger.warning(f"Found {len(missing_items)} unprocessed items. Reporting as API errors rather than using fallback.")
         
         for item in missing_items:
-            results[item] = fallback_analyze_item(item, document_text, additional_context)
-            fallback_count += 1
+            # CRITICAL: As per user requirements, we don't use fallback_analyze_item
+            # Instead, we report API error for these missing items
+            logger.error(f"API FAILURE for missing item '{item[:30]}...' - reporting error without fallback (as requested)")
+            
+            # Create an error result that clearly indicates API failure without using pattern matching
+            results[item] = {
+                'present': False,  # Default to not present 
+                'confidence': 0.0,  # Zero confidence
+                'explanation': "Item not processed by OpenAI API. As requested, we're not using pattern matching fallback.",
+                'evidence': "Item was not processed - exclusive API verification was requested.",
+                'method': 'openai_api_missing'  # Indicate it was missing from API processing
+            }
+            # Still track it for reporting purposes as API failures
+            api_failure_count += 1
     
     # Log final usage stats
     logger.info(f"Analysis complete. Total API calls made: {total_api_calls}")
-    logger.info(f"Fallback method used for {fallback_count} items")
+    logger.info(f"API failures reported for {api_failure_count} items")
     logger.info(f"Total tokens used: {CURRENT_SESSION_TOKENS}/{MAX_TOKENS_PER_SESSION}")
     logger.info(f"Total items analyzed: {len(results)}/{len(items)}")
     
