@@ -160,7 +160,27 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         is generally addressed. Be generous in your assessment - if the document makes any reasonable attempt to 
         address the item, consider it present.
         
-        GUIDANCE: When section headers match checklist items, this is a strong indicator the content is present.
+        DOCUMENT STRUCTURE ANALYSIS - BE EXTREMELY DILIGENT WITH:
+        
+        1. BULLETED LISTS: Carefully analyze all bulleted or numbered lists throughout the document
+           - These often contain critical policy information in condensed format
+           - Pay special attention to indented sub-bullets that may contain detailed requirements
+        
+        2. HEADERS & SUBHEADERS: Thoroughly examine all section headers and subheaders
+           - Check for policy information embedded within these structural elements
+           - Headers often signal the presence of important checklist items
+        
+        3. TABLES: Meticulously scan all tables within the document
+           - Grade distribution tables often contain assessment weights and dates
+           - Schedule tables may contain due dates, exam information, and other critical details
+           - Even small tables may contain crucial policy information
+        
+        4. POLICY STATEMENTS: Carefully identify policy statements and directives
+           - Look for language indicating rules, requirements, or guidelines
+           - Policy statements may be embedded within larger sections
+           - Pay attention to conditional statements (e.g., "If... then...")
+        
+        GENERAL GUIDANCE: When section headers match checklist items, this is a strong indicator the content is present.
         If the course outline appears to be professionally prepared, give the benefit of the doubt for borderline
         items. Focus on finding evidence that requirements are met rather than finding reasons they are not met.
         Be lenient with your assessment and err on the side of marking items as present when there's any reasonable evidence.
@@ -190,17 +210,24 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         CHECKLIST ITEMS TO ANALYZE:
         {json.dumps(batch_items, indent=2)}
         
-        ANALYSIS GUIDELINES:
-        1. Use contextual understanding and be flexible in your evaluation
-        2. For each item, review its description before analyzing
-        3. Look for information that generally meets the requirement's intent
-        4. Consider related concepts, synonyms, and implied information
-        5. Examine the entire document for relevant content
-        6. When section headers match checklist items, this is a strong indicator of compliance
-        7. Be generous in your assessment - if the document makes a reasonable attempt to address the item, consider it present
-        8. For professional course outlines, give the benefit of the doubt for borderline items
-        9. Focus on finding evidence of compliance rather than reasons for non-compliance
-        10. Err on the side of marking items as present when there's any reasonable evidence
+        ANALYSIS GUIDELINES - BE EXTREMELY DILIGENT WITH:
+        
+        1. DOCUMENT STRUCTURE ANALYSIS:
+           - BULLETED LISTS: Analyze ALL numbered/bulleted lists (often contain key policy information)
+           - TABLES: Thoroughly scan ALL tables (grade tables often have weights, dates, requirements)
+           - HEADERS & SUBHEADERS: Check ALL section headings (often signal presence of requirements)
+           - POLICY STATEMENTS: Identify ALL policy statements, even within other sections
+        
+        2. GENERAL ANALYSIS APPROACH:
+           - Use contextual understanding and be flexible in your evaluation
+           - For each item, review its description before analyzing
+           - Look for information that generally meets the requirement's intent
+           - Consider related concepts, synonyms, and implied information
+           - Examine the entire document for relevant content
+           - Be generous in your assessment - if the document makes a reasonable attempt to address the item, consider it present
+           - For professional course outlines, give the benefit of the doubt for borderline items
+           - Focus on finding evidence of compliance rather than reasons for non-compliance
+           - Err on the side of marking items as present when there's any reasonable evidence
         
         EFFICIENT THREE-PASS ANALYSIS REQUIREMENT:
         For EACH checklist item, use the following optimized approach:
@@ -369,9 +396,26 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     This is a SECOND-CHANCE ANALYSIS. Use a generous and flexible approach to determine if the 
                     requirement might be present in any form within the course outline.
                     
-                    Be very lenient - look for any hint, mention, or implication that might remotely satisfy this requirement.
-                    Consider section headers, paragraph content, bullet points, tables, and any text that could reasonably
-                    be interpreted as addressing this requirement.
+                    BE EXTREMELY DILIGENT IN EXAMINING:
+                    
+                    1. BULLETED LISTS: Carefully analyze all bulleted/numbered lists throughout the document
+                       - These often contain critical policy information in condensed format
+                       - Pay special attention to indented sub-bullets that may contain detailed requirements
+                    
+                    2. TABLES: Meticulously scan all tables within the document
+                       - Grade distribution tables often contain assessment weights and dates
+                       - Schedule tables may contain due dates, exam information, and crucial details
+                       - Even small tables may contain policy information relevant to this requirement
+                    
+                    3. HEADERS & SUBHEADERS: Thoroughly examine all section headers/subheaders
+                       - Check for policy information embedded within structural elements
+                       - Headers often signal the presence of key requirements
+                    
+                    4. POLICY STATEMENTS: Carefully identify any policy statements or directives
+                       - Look for conditional statements that might address this requirement
+                       - Policy information may be embedded within larger sections
+                    
+                    Be extremely lenient - look for any hint, mention, or implication that might satisfy this requirement.
                     
                     For professional course outlines, make a strong assumption that standard academic requirements are 
                     likely met, even if not explicitly stated. Err on the side of marking items as present if there's 
