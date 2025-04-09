@@ -8,6 +8,7 @@ import socket
 from fpdf import FPDF  # Import FPDF from fpdf2 package
 from document_processor import process_documents, extract_text
 import urllib.request
+from api_analysis import analyze_course_outline
 
 # Configure logging with more detailed output
 logging.basicConfig(level=logging.DEBUG, 
@@ -1008,6 +1009,61 @@ def get_enhanced_checklist():
     except Exception as e:
         logger.error(f"Error loading simplified checklist: {str(e)}")
         return "Error loading checklist", 500
+
+@app.route('/api/analyze-course-outline', methods=['POST'])
+def api_analyze_course_outline():
+    """
+    API endpoint that analyzes a course outline against the 26 hardcoded checklist items.
+    
+    Expected request format:
+    - multipart/form-data with a file field named 'outline'
+    OR
+    - application/json with a 'document_text' field containing the text of the course outline
+    
+    Returns:
+    - A JSON array of 26 items, each with:
+      - present: boolean indicating if the item is present in the outline
+      - confidence: number between 0.0 and 1.0
+      - explanation: brief explanation
+      - evidence: direct quote from the outline, or empty string if not found
+      - method: always "ai_general_analysis"
+    """
+    try:
+        document_text = ""
+        
+        # Check if the request contains a file
+        if 'outline' in request.files:
+            outline = request.files['outline']
+            
+            if outline.filename == '':
+                return jsonify({'error': 'No file selected'}), 400
+                
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            outline_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(outline.filename))
+            outline.save(outline_path)
+            
+            # Extract text from the file
+            document_text = extract_text(outline_path)
+            
+        # Check if the request contains JSON data with document_text
+        elif request.is_json and 'document_text' in request.json:
+            document_text = request.json['document_text']
+        else:
+            return jsonify({'error': 'No outline file or document text provided'}), 400
+            
+        if not document_text.strip():
+            return jsonify({'error': 'Empty document text'}), 400
+            
+        # Perform the analysis
+        logger.info("Starting course outline analysis via API")
+        results = analyze_course_outline(document_text)
+        logger.info(f"Analysis complete, returned {len(results)} results")
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        logger.exception(f"Error analyzing course outline: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     try:
