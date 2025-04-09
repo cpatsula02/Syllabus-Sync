@@ -266,6 +266,7 @@ def extract_section(document_text: str, keywords: List[str], context_lines: int 
 def improved_check_item(item: str, document_text: str) -> Tuple[bool, str, float]:
     """
     Improved pattern matching to check if an item is present in the document.
+    Enhanced with advanced heuristics and more flexible matching thresholds.
     
     Args:
         item: The checklist item
@@ -276,25 +277,109 @@ def improved_check_item(item: str, document_text: str) -> Tuple[bool, str, float
     """
     # Get enhanced keywords
     keywords = get_enhanced_keywords(item)
+    item_lower = item.lower()
     
-    # Count matching keywords
-    matches = sum(1 for keyword in keywords if keyword.lower() in document_text.lower())
+    # Modified matching logic with weighted keywords and phrase matching
+    total_score = 0
+    max_score = len(keywords)
+    matched_keywords = []
     
-    # Calculate match ratio
-    match_ratio = matches / len(keywords) if keywords else 0
+    # First pass: exact keyword matching with importance weighting
+    for keyword in keywords:
+        # Give higher weight to longer, more specific keywords
+        weight = min(1.0, 0.4 + (len(keyword) / 20))
+        
+        if keyword.lower() in document_text.lower():
+            total_score += weight
+            matched_keywords.append(keyword)
+    
+    # Second pass: phrase matching for important concepts
+    # Extract 2-3 word phrases from the item
+    words = item_lower.split()
+    if len(words) >= 3:
+        # Extract key phrases (2-3 words)
+        phrases = []
+        for i in range(len(words) - 1):
+            phrases.append(f"{words[i]} {words[i+1]}")
+        for i in range(len(words) - 2):
+            phrases.append(f"{words[i]} {words[i+1]} {words[i+2]}")
+        
+        # Check for phrase matches with higher weight
+        for phrase in phrases:
+            if len(phrase) > 6 and phrase not in ["with the", "does the", "in the", "for the", "of the"]:
+                if phrase in document_text.lower():
+                    total_score += 0.5  # Phrases are strong indicators
+                    matched_keywords.append(phrase)
+    
+    # Calculate final match ratio
+    match_ratio = total_score / max_score if max_score > 0 else 0
     
     # Extract relevant section
     relevant_section = extract_section(document_text, keywords)
     
-    # Determine presence based on match ratio
-    is_present = match_ratio >= 0.5  # Lower threshold for better recall
+    # Variable threshold based on item content
+    # Lower threshold for policies that might be embedded in other sections
+    base_threshold = 0.4  # Lower overall threshold for better recall
+    if "policy" in item_lower or "rule" in item_lower or "procedure" in item_lower:
+        threshold = base_threshold - 0.1  # Even lower for policies (0.3)
+    elif "email" in item_lower or "contact" in item_lower:
+        threshold = base_threshold - 0.05  # Lower for contact info (0.35)
+    else:
+        threshold = base_threshold
+    
+    # Determine presence based on adjusted threshold
+    is_present = match_ratio >= threshold
+    
+    # For important items, double-check with alternative methods if not found
+    if not is_present and (
+        "email" in item_lower or 
+        "policy" in item_lower or 
+        "textbook" in item_lower or 
+        "reading" in item_lower
+    ):
+        # Alternative detection using exact phrase search
+        key_phrases = []
+        if "email" in item_lower:
+            key_phrases = ["contact", "email", "reach out"]
+        elif "late policy" in item_lower:
+            key_phrases = ["late", "after the deadline", "overdue", "penalty"]
+        elif "missed" in item_lower:
+            key_phrases = ["miss", "absence", "cannot attend", "unable to"]
+        elif "textbook" in item_lower or "reading" in item_lower:
+            key_phrases = ["book", "text", "reading", "literature", "resource"]
+        
+        # Check if any key phrase is present in a relevant context
+        for phrase in key_phrases:
+            if phrase in document_text.lower():
+                # Confirm it's in a relevant context by looking at surrounding text
+                pattern = r'(?i)(?:[^\n]*' + re.escape(phrase) + r'[^\n]*\n){1,3}'
+                contexts = re.findall(pattern, document_text)
+                for context in contexts:
+                    # Check for topical relevance
+                    if (
+                        ("contact" in context.lower() and phrase == "email") or
+                        ("policy" in context.lower() and phrase in ["late", "miss", "absence"]) or
+                        (any(word in context.lower() for word in ["required", "recommended", "course"]) 
+                         and phrase in ["book", "text", "reading"])
+                    ):
+                        is_present = True
+                        match_ratio = 0.55  # Just above threshold to indicate found by alternative method
+                        matched_keywords.append(phrase)
+                        break
     
     # Create evidence with highlighted matches
     evidence = relevant_section
-    for keyword in keywords:
-        if keyword in evidence.lower():
+    for keyword in set(matched_keywords):  # Use set to avoid duplicate highlighting
+        if keyword.lower() in evidence.lower():
             pattern = re.compile(re.escape(keyword), re.IGNORECASE)
             evidence = pattern.sub(f'<mark>{keyword}</mark>', evidence)
+    
+    # Add diagnostic information to evidence
+    if not evidence:
+        evidence = f"No relevant section found. Searched for keywords: {', '.join(keywords[:5])}..."
+    
+    # Add match statistics
+    evidence += f"\n\nMatch ratio: {match_ratio:.2f} (threshold: {threshold:.2f})"
     
     return is_present, evidence, match_ratio
 
@@ -363,11 +448,23 @@ def check_special_cases(item: str, document_text: str) -> Tuple[bool, str, float
     """
     item_lower = item.lower()
     
-    # Check for instructor email
+    # Check for instructor email - enhanced to detect absence more reliably
     if "instructor" in item_lower and "email" in item_lower:
+        # Two-stage verification for email: 
+        # 1. Look for explicit email pattern
         email = extract_email(document_text)
         if email:
             return True, f"Found instructor email: {email}", 0.95
+        
+        # 2. If no email pattern found, check if there's an instructor section without email
+        instructor_section_pattern = r'(?i)(instructor|professor|faculty|lecturer|teacher)[^\n]*\n(?:[^\n@]*\n){0,5}'
+        instructor_section_match = re.search(instructor_section_pattern, document_text)
+        
+        if instructor_section_match:
+            section_text = instructor_section_match.group(0)
+            # If we find an instructor section but no email, it's likely missing
+            if '@' not in section_text and '.ca' not in section_text:
+                return False, f"Found instructor section but no email containing '@' or '.ca': {section_text[:150]}...", 0.9
     
     # Check for grade table
     if "grade distribution" in item_lower and "table" in item_lower:
@@ -388,6 +485,85 @@ def check_special_cases(item: str, document_text: str) -> Tuple[bool, str, float
                     return True, f"Group work is {percentage}%, which is 40% or less", 0.9
                 else:
                     return False, f"Group work is {percentage}%, which exceeds 40%", 0.9
+    
+    # Check for late policy with enhanced detection
+    if "late policy" in item_lower:
+        # Look for specific sections or phrases about late submissions
+        late_policy_patterns = [
+            r'(?i)(late\s*(?:submission|work|assignment)s?)[^.]*\.',  # Sentences about late submissions
+            r'(?i)((?:penalt|deduct|reduc|mark down).*late)[^.]*\.',  # Sentences about penalties for lateness
+            r'(?i)((?:grace|extension).*period)[^.]*\.',             # Sentences about grace periods
+            r'(?i)(\d+%\s*(?:per|each|every)\s*(?:day|hour|week))[^.]*\.'  # Percentage penalties per time unit
+        ]
+        
+        for pattern in late_policy_patterns:
+            match = re.search(pattern, document_text)
+            if match:
+                context = document_text[max(0, match.start() - 100):min(len(document_text), match.end() + 100)]
+                return True, f"Found late policy: {context}", 0.9
+        
+        # If no specific pattern found, check if "late" appears in a policy-like context
+        policy_sections = re.findall(r'(?i)(?:policy|policies|rule|guideline)[^\n]*\n(?:[^\n]*\n){0,10}', document_text)
+        for section in policy_sections:
+            if "late" in section.lower():
+                return True, f"Found policy section mentioning 'late': {section[:200]}...", 0.8
+        
+        # Explicitly return False with evidence if we've searched and found nothing
+        return False, "No late policy found despite searching for specific patterns and policy sections.", 0.85
+    
+    # Check for missed assessment policy with enhanced detection
+    if "missed assessment" in item_lower or "missed assignment policy" in item_lower:
+        # Look for specific patterns related to missed assessments
+        missed_patterns = [
+            r'(?i)(miss(?:ed|ing)?\s*(?:assessment|assignment|exam|quiz|test)s?)[^.]*\.',  # Sentences about missing assessments
+            r'(?i)(absence|absent|unable to attend|cannot attend)[^.]*\.',  # Sentences about absences
+            r'(?i)(medical\s*(?:note|documentation|certificate))[^.]*\.',   # Medical documentation
+            r'(?i)(accommodat(?:ion|e))[^.]*\.',                            # Accommodation references
+            r'(?i)(make-?up\s*(?:exam|test|assignment))[^.]*\.'            # Make-up assessments
+        ]
+        
+        for pattern in missed_patterns:
+            match = re.search(pattern, document_text)
+            if match:
+                context = document_text[max(0, match.start() - 100):min(len(document_text), match.end() + 100)]
+                return True, f"Found missed assessment policy: {context}", 0.9
+        
+        # Check policy sections for mentions of missed work
+        policy_sections = re.findall(r'(?i)(?:policy|policies|rule|guideline)[^\n]*\n(?:[^\n]*\n){0,10}', document_text)
+        for section in policy_sections:
+            if any(word in section.lower() for word in ["miss", "absence", "unable", "defer", "extension"]):
+                return True, f"Found policy section related to missed work: {section[:200]}...", 0.8
+        
+        # Explicitly return False with evidence if we've searched and found nothing
+        return False, "No missed assessment policy found despite searching for specific patterns and policy sections.", 0.85
+    
+    # Check for textbooks with enhanced detection
+    if "textbook" in item_lower or "reading" in item_lower or "materials" in item_lower:
+        # Look for specific textbook sections
+        textbook_patterns = [
+            r'(?i)(textbook|required readings?|required materials?|course materials?)[^\n]*\n(?:[^\n]*\n){0,20}',
+            r'(?i)(readings?|materials?)[^.]*required[^.]*\.',
+            r'(?i)(books?|publications?|literature)[^.]*\.'
+        ]
+        
+        for pattern in textbook_patterns:
+            matches = re.findall(pattern, document_text)
+            for match in matches:
+                # Check if the match mentions authors, titles, or publishers
+                if any(indicator in match.lower() for indicator in [
+                    "author", "title", "publisher", "press", "publication", "edition", 
+                    "recommended", "required", "chapter", "pages", "eds", "et al", 
+                    "www", "http", "isbn", "available", "purchase"]):
+                    return True, f"Found textbook/readings section: {match[:300]}...", 0.9
+        
+        # If none of the specific patterns matched well, do a broader search
+        if re.search(r'(?i)(textbook|book|reading|publication|literature|resource)[s]?', document_text):
+            context = extract_section(document_text, CHECKLIST_KEYWORDS["textbooks"], 8)
+            # Look for publisher/author patterns in the context
+            if any(indicator in context.lower() for indicator in [
+                "author", "publication", "press", "edition", "publisher", 
+                "vol", "pages", "pp", "chapter", "isbn"]):
+                return True, f"Found possible textbook reference: {context[:300]}...", 0.75
     
     # Indicate no special handling - return False instead of None to fix type error
     return False, "", 0.0
