@@ -170,7 +170,7 @@ def index():
 
                     # OpenAI is always disabled to prevent timeouts, use traditional pattern matching
                     results = {}
-                    
+
                     # Skip API calls entirely to prevent timeouts
                     logger.info("OpenAI analysis is disabled to prevent server timeouts. Using traditional pattern matching...")
                     results = analysis_results
@@ -409,7 +409,7 @@ def download_pdf():
         # Get session data
         print("Starting PDF generation with detailed checklist table...")
         analysis_data = session.get('analysis_data', {})
-        
+
         # Import the detailed checklist table module
         from detailed_checklist_table import add_detailed_checklist_table
         if not analysis_data or not analysis_data.get('checklist_items'):
@@ -449,14 +449,14 @@ def download_pdf():
         # Count the different statuses (present, missing, not applicable)
         total_items = len(analysis_data['checklist_items'])
         missing_items = len(analysis_data['missing_items'])
-        
+
         # Count not applicable items
         na_items = 0
         for item in analysis_data['checklist_items']:
             result = analysis_data['analysis_results'].get(item, {})
             if result.get('status', '') == 'na':
                 na_items += 1
-                
+
         present_items = total_items - missing_items - na_items
 
         # Calculate API usage statistics for the PDF report
@@ -622,7 +622,7 @@ def download_pdf():
             else:
                 pdf.set_text_color(255, 0, 0)  # Red for missing
                 status_text = 'Missing'
-                
+
             pdf.rect(pdf.get_x(), y_position, 50, row_height)
 
             # Center status text vertically and horizontally
@@ -672,7 +672,7 @@ def download_pdf():
 
         # Add the detailed checklist table with full item descriptions
         print("Adding detailed checklist table...")
-        
+
         # Read the detailed checklist file
         detailed_checklist_items = []
         try:
@@ -685,7 +685,7 @@ def download_pdf():
                 lines = content.split('\n')
                 print(f"Split content into {len(lines)} lines")
                 current_item = ""
-                
+
                 for line in lines:
                     # If the line starts with a number and period (item number), it's a new item
                     if re.match(r'^\d+\.', line):
@@ -698,17 +698,17 @@ def download_pdf():
                     else:
                         # Continue with the current item
                         current_item += "\n" + line
-                
+
                 # Add the last item
                 if current_item:
                     detailed_checklist_items.append(current_item.strip())
                     print(f"Added final item: {current_item[:50]}...")
-                    
+
                 print(f"Loaded {len(detailed_checklist_items)} detailed checklist items")
                 if detailed_checklist_items:
                     print(f"First item: {detailed_checklist_items[0][:100]}")
                     print(f"Last item: {detailed_checklist_items[-1][:100]}")
-                
+
             # Add the detailed checklist table to the PDF
             print("Calling add_detailed_checklist_table...")
             add_detailed_checklist_table(pdf, analysis_data, detailed_checklist_items)
@@ -718,7 +718,7 @@ def download_pdf():
             import traceback
             print(traceback.format_exc())
             # Continue with the rest of the PDF even if this fails
-        
+
         # Add a new page for the Quick Overview
         pdf.add_page()
         pdf.set_font('DejaVu', 'B', 16)
@@ -726,7 +726,7 @@ def download_pdf():
         pdf.ln(5)
 
         # Header for items table
-        pdf.set_font('DejaVu', 'B', 10)
+        pdf.set_font('DejaVu','B', 10)
         pdf.cell(150, 8, 'Checklist Item', 1, 0, 'L')
         pdf.cell(30, 8, 'Status', 1, 1, 'C')
 
@@ -770,7 +770,7 @@ def download_pdf():
 
             # Print status in its own box
             pdf.set_xy(x_pos + 150, y_pos)
-            
+
             # Set color based on status
             if status == 'na':
                 pdf.set_text_color(100, 100, 100)  # Gray for N/A
@@ -781,7 +781,7 @@ def download_pdf():
             else:
                 pdf.set_text_color(255, 0, 0)  # Red for missing
                 status_text = 'Missing'
-                
+
             pdf.rect(x_pos + 150, y_pos, 30, row_height)
 
             # Center status text vertically and horizontally
@@ -808,63 +808,55 @@ def download_pdf():
                            (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
         na_items = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
         missing_items = total_items - present_items - na_items
-        
+
         pdf.cell(63, 8, f'Total Items: {total_items}', 1, 0, 'L')
         pdf.cell(63, 8, f'Present: {present_items}', 1, 0, 'L')
         pdf.cell(64, 8, f'Missing: {missing_items} / N/A: {na_items}', 1, 1, 'L')
-        
-        print("Detailed checklist table has already been added via the external module.")
-        # Set these variables to avoid reference errors later
-        alternate_row = False
-        name = ""
-        description = ""
-        num = ""
-        status = ""
-        
+
         # Add summary at the end
         pdf.add_page()
         pdf.set_font('DejaVu', 'B', 16)
         pdf.cell(190, 10, 'Compliance Summary Report', 0, 1, 'C')
         pdf.ln(3)
-        
+
         # Add summary explanation
         pdf.set_font('DejaVu', '', 10)
         pdf.multi_cell(190, 5, 'This report summarizes the compliance status of the course outline against the University of Calgary checklist requirements. The compliance rate is calculated only for applicable items, excluding those marked as N/A.', 0, 'L')
         pdf.ln(5)
-        
+
         # Count different statuses
         present_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'present' or 
                            (item not in analysis_data['missing_items'] and analysis_data['analysis_results'].get(item, {}).get('status', '') != 'na'))
         na_count = sum(1 for item in unique_checklist_items if analysis_data['analysis_results'].get(item, {}).get('status', '') == 'na')
         missing_count = total_items - present_count - na_count
-        
+
         # Calculate compliance percentage (excluding N/A items)
         applicable_items = total_items - na_count
         compliance_percentage = (present_count / applicable_items * 100) if applicable_items > 0 else 100
-        
+
         # Create a professional summary section
         # Draw header
         pdf.set_fill_color(220, 230, 241)  # Light blue background
         pdf.set_font('DejaVu', 'B', 12)
         pdf.cell(190, 12, 'Course Outline Compliance Statistics', 1, 1, 'C', True)
-        
+
         # Create a table for statistics
         pdf.set_font('DejaVu', '', 10)
-        
+
         # Row 1: Total and Applicable
         pdf.set_fill_color(245, 245, 245)  # Light gray
         pdf.cell(95, 10, f'Total Requirements: {total_items}', 1, 0, 'L', True)
         pdf.cell(95, 10, f'Applicable Requirements: {applicable_items}', 1, 1, 'L', True)
-        
+
         # Row 2: Present and Missing
         pdf.set_fill_color(255, 255, 255)  # White
         pdf.cell(95, 10, f'Requirements Present: {present_count}', 1, 0, 'L', True)
         pdf.cell(95, 10, f'Requirements Missing: {missing_count}', 1, 1, 'L', True)
-        
+
         # Row 3: N/A and Rate
         pdf.set_fill_color(245, 245, 245)  # Light gray
         pdf.cell(95, 10, f'Requirements N/A: {na_count}', 1, 0, 'L', True)
-        
+
         # Set compliance rate color based on percentage
         if compliance_percentage >= 90:
             pdf.set_text_color(0, 128, 0)  # Green for high compliance
@@ -872,25 +864,25 @@ def download_pdf():
             pdf.set_text_color(255, 140, 0)  # Orange for medium compliance
         else:
             pdf.set_text_color(255, 0, 0)  # Red for low compliance
-            
+
         pdf.set_font('DejaVu', 'B', 10)
         pdf.cell(95, 10, f'Compliance Rate: {compliance_percentage:.1f}%', 1, 1, 'L', True)
         pdf.set_text_color(0, 0, 0)  # Reset to black
-        
+
         # Add visual compliance meter
         pdf.ln(10)
         pdf.set_font('DejaVu', 'B', 12)
         pdf.cell(190, 10, 'Visual Compliance Indicator', 0, 1, 'L')
-        
+
         # Draw progress bar background
         bar_width = 180
         bar_height = 20
         pdf.set_fill_color(220, 220, 220)  # Light gray background
         pdf.rect(15, pdf.get_y(), bar_width, bar_height, 'F')  # 'F' means filled rectangle
-        
+
         # Draw progress bar fill based on compliance percentage
         filled_width = min(bar_width * (compliance_percentage / 100), bar_width)
-        
+
         # Set color based on percentage
         if compliance_percentage >= 90:
             pdf.set_fill_color(0, 180, 0)  # Green for high compliance
@@ -898,13 +890,13 @@ def download_pdf():
             pdf.set_fill_color(255, 140, 0)  # Orange for medium compliance
         else:
             pdf.set_fill_color(255, 0, 0)  # Red for low compliance
-            
+
         pdf.rect(15, pdf.get_y(), filled_width, bar_height, 'F')  # 'F' means filled rectangle
-        
+
         # Add percentage text on top of the bar
         pdf.set_font('DejaVu', 'B', 12)
         pdf.set_text_color(255, 255, 255)  # White text
-        
+
         # Center the text on the filled portion if it's wide enough
         if filled_width > 40:
             pdf.set_xy(15 + (filled_width / 2) - 20, pdf.get_y() + (bar_height / 2) - 3)
@@ -914,14 +906,14 @@ def download_pdf():
             pdf.set_xy(15 + bar_width + 5, pdf.get_y() + (bar_height / 2) - 3)
             pdf.set_text_color(0, 0, 0)  # Black text
             pdf.cell(40, 6, f'{compliance_percentage:.1f}%', 0, 0, 'L')
-        
+
         pdf.set_text_color(0, 0, 0)  # Reset to black
-        
+
         # Add compliance recommendation
         pdf.ln(30)
         pdf.set_font('DejaVu', 'B', 12)
         pdf.cell(190, 10, 'Compliance Recommendation:', 0, 1, 'L')
-        
+
         recommendation_text = ""
         if compliance_percentage >= 90:
             recommendation_text = "This course outline is highly compliant with the University of Calgary's requirements. Minor improvements may still be beneficial for the few missing items."
@@ -929,10 +921,10 @@ def download_pdf():
             recommendation_text = "This course outline meets most of the University of Calgary's requirements, but needs attention to several missing items. Please review the missing requirements and update accordingly."
         else:
             recommendation_text = "This course outline requires significant improvements to meet the University of Calgary's requirements. Please carefully review all missing items and update the outline accordingly."
-        
+
         pdf.set_font('DejaVu', '', 10)
         pdf.multi_cell(190, 5, recommendation_text, 0, 'L')
-        
+
         # Add a note about N/A items
         if na_count > 0:
             pdf.ln(5)
