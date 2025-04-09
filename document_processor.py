@@ -1187,8 +1187,8 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 # Check if the item is explicitly mentioned as not applicable
                 for phrase in na_phrases:
                     # Look for patterns like "no final exam" or "final exam: not applicable"
-                    if any(re.search(f"{phrase}.*{keyword}", context_lower) or 
-                           re.search(f"{keyword}.*{phrase}", context_lower) 
+                    if any(re.search(re.escape(phrase) + ".*" + re.escape(keyword), context_lower) or 
+                           re.search(re.escape(keyword) + ".*" + re.escape(phrase), context_lower) 
                            for keyword in item_lower.split() if len(keyword) > 3):
                         not_applicable_items[item] = True
                         break
@@ -1201,8 +1201,8 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             # If this category is in the item, check if it's mentioned as N/A
                             for phrase in na_phrases:
                                 for keyword in keywords:
-                                    pattern1 = f"{phrase}.*{keyword}"
-                                    pattern2 = f"{keyword}.*{phrase}"
+                                    pattern1 = re.escape(phrase) + ".*" + re.escape(keyword)
+                                    pattern2 = re.escape(keyword) + ".*" + re.escape(phrase)
 
                                     if (re.search(pattern1, context_lower) or re.search(pattern2, context_lower)):
                                         not_applicable_items[item] = True

@@ -197,10 +197,15 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 # Set socket timeout to prevent hanging connections
                 socket.setdefaulttimeout(40)  # Set socket timeout slightly less than API timeout
                 
+                # For json_object response_format, we need to include "json" in the message
+                json_prompt = prompt
+                if "json" not in prompt.lower():
+                    json_prompt = f"{prompt}\n\nIMPORTANT: Return your assessment in valid JSON format."
+                    
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": json_prompt}
                     ],
                     response_format={"type": "json_object"},
                     temperature=temperature,  # Use the provided temperature parameter
