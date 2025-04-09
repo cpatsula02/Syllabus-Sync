@@ -121,15 +121,23 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     logger.info(f"Document length: {len(document_excerpt)} characters")
     
     # Define functions to create standard structured response objects
-    def create_result_item(present, confidence, explanation, evidence=""):
+    def create_result_item(present, confidence, explanation, evidence="", method="ai_general_analysis", second_chance=False):
         """Create a properly formatted result item"""
+        # Ensure evidence is a string to avoid type errors
+        if evidence is None:
+            evidence_str = ""
+        else:
+            evidence_str = str(evidence)
+            
         return {
-            "present": present,
-            "confidence": confidence,
-            "explanation": explanation[:147] + "..." if len(explanation) > 150 else explanation,
-            "evidence": evidence,
-            "method": "ai_general_analysis",
-            "triple_checked": True
+            "present": bool(present),
+            "confidence": float(confidence),
+            "explanation": str(explanation)[:147] + "..." if len(str(explanation)) > 150 else str(explanation),
+            "evidence": evidence_str,
+            "method": str(method),
+            "triple_checked": True,
+            "second_chance": bool(second_chance),
+            "verification_attempts": 1 if method != "pattern_matching_fallback" else 0
         }
     
     # Initialize results array with default values
@@ -585,7 +593,72 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         if "second_chance" not in item:
             item["second_chance"] = False
     
-    logger.info(f"Final result: {len(results_array)} items, after OpenAI analysis")
-    logger.info(f"Items marked as present: {sum(1 for item in results_array if item['present'])}")
+    # Get count before pattern matching
+    ai_items_present = sum(1 for item in results_array if item['present'])
+    logger.info(f"Items marked as present by AI analysis: {ai_items_present}")
+    
+    # Find items that AI analysis couldn't detect and try pattern matching fallback
+    still_missing_indices = [idx for idx, item in enumerate(results_array) if not item['present']]
+    
+    if still_missing_indices:
+        from document_processor import check_item_in_document, find_matching_excerpt, extract_policy_type
+        
+        logger.info(f"Trying pattern matching fallback for {len(still_missing_indices)} items still missing after AI analysis")
+        
+        # Try pattern matching on items still missing
+        for missing_idx in still_missing_indices:
+            item_text = detailed_checklist_items[missing_idx] if missing_idx < len(detailed_checklist_items) else f"Item {missing_idx+1}"
+            logger.info(f"Pattern matching for item #{missing_idx+1}: {item_text[:50]}...")
+            
+            try:
+                # First try to find a matching excerpt using pattern matching
+                found, excerpt = find_matching_excerpt(item_text, document_excerpt)
+                
+                if found:
+                    # Create a result item for the pattern-matched item
+                    pattern_result = create_result_item(
+                        present=True,
+                        confidence=0.7,  # Lower confidence for pattern matching
+                        explanation=f"[Pattern Matching] This requirement was identified using pattern matching after AI analysis did not detect it.",
+                        evidence=str(excerpt) if excerpt else "",
+                        method="pattern_matching_fallback",
+                        second_chance=False
+                    )
+                    
+                    # Replace the original failed result
+                    results_array[missing_idx] = pattern_result
+                    logger.info(f"Pattern matching for item #{missing_idx+1} successfully found a match")
+                else:
+                    # Try a more general approach with the check_item_in_document function
+                    try:
+                        is_present = check_item_in_document(item_text, document_excerpt)
+                        if is_present:
+                            # Create a result for the general pattern match
+                            pattern_result = create_result_item(
+                                present=True,
+                                confidence=0.6,  # Even lower confidence for general pattern
+                                explanation=f"[Pattern Matching] This requirement was identified using basic pattern matching as a final verification.",
+                                evidence="",  # No specific excerpt found
+                                method="pattern_matching_fallback",
+                                second_chance=False
+                            )
+                            
+                            # Replace the original failed result
+                            results_array[missing_idx] = pattern_result
+                            logger.info(f"Basic pattern matching for item #{missing_idx+1} found a match")
+                    except Exception as pattern_error:
+                        logger.error(f"Error in basic pattern matching for item #{missing_idx+1}: {str(pattern_error)}")
+            
+            except Exception as excerpt_error:
+                logger.error(f"Error in pattern matching for item #{missing_idx+1}: {str(excerpt_error)}")
+    
+    # Get final count after pattern matching
+    final_items_present = sum(1 for item in results_array if item['present'])
+    pattern_matched_items = final_items_present - ai_items_present
+    
+    logger.info(f"Final result: {len(results_array)} items analyzed")
+    logger.info(f"Items marked as present by AI: {ai_items_present}")
+    logger.info(f"Items marked as present by pattern matching: {pattern_matched_items}")
+    logger.info(f"Total items marked as present: {final_items_present}")
     
     return results_array

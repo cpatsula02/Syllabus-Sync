@@ -54,7 +54,7 @@
                     <div class="alert alert-light border p-3">
                         <h6 class="mb-2 fw-bold"><i class="fas fa-brain me-2 text-primary"></i>AI-Powered Analysis Using OpenAI API</h6>
                         <div class="alert alert-primary">
-                            <i class="fas fa-robot me-2"></i><strong>OpenAI API is being used exclusively</strong> for all checklist verifications. Pattern matching fallbacks are completely disabled.
+                            <i class="fas fa-robot me-2"></i><strong>OpenAI API is used as the primary analysis method</strong> for all checklist verifications. Pattern matching is used as a fallback only when AI analysis doesn't identify an item.
                         </div>
                         <div class="alert alert-info mt-2">
                             <i class="fas fa-info-circle me-2"></i><strong>Implementation Details:</strong> Each checklist item is processed using OpenAI's GPT model with strict JSON response formatting and validation. The system makes independent API calls for each checklist item to ensure reliable results.
@@ -111,7 +111,7 @@
                 
                 <div class="alert alert-info mb-3">
                     <i class="fas fa-robot me-2"></i>
-                    <strong>OpenAI API-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis using the OpenAI API exclusively. Each item was processed using OpenAI's GPT model with strict JSON response requirements to ensure accurate results and minimize false negatives.
+                    <strong>Hybrid Analysis Approach:</strong> These missing items were identified through a thorough multi-perspective analysis that first uses OpenAI's API for advanced semantic understanding, and then uses pattern matching as a secondary verification method only when needed. This combined approach provides both deep contextual analysis and robust pattern recognition.
                 </div>
 
                 <!-- Yellow box with bullet-pointed missing items -->
