@@ -6,13 +6,34 @@ import pdfplumber
 import docx
 
 def extract_text_from_pdf(file_path: str) -> str:
-    """Extract text content from a PDF file."""
+    """Extract text content from a PDF file with enhanced extraction of tables and structured content."""
     try:
         with pdfplumber.open(file_path) as pdf:
-            text = ""
+            full_text = ""
+            
+            # Process each page
             for page in pdf.pages:
-                text += page.extract_text() or ""
-            return text
+                # Extract main text
+                page_text = page.extract_text() or ""
+                
+                # Extract tables separately to ensure we don't miss tabular data
+                tables = page.extract_tables()
+                tables_text = ""
+                
+                for table in tables:
+                    for row in table:
+                        # Join non-empty cells with tabs to preserve table structure
+                        row_text = "\t".join([str(cell) if cell is not None else "" for cell in row])
+                        tables_text += row_text + "\n"
+                
+                # Combine page text and tables text
+                full_text += page_text + "\n" + tables_text + "\n\n"
+            
+            # Normalize whitespace to make text processing more reliable
+            normalized_text = re.sub(r'\s+', ' ', full_text).strip()
+            
+            logging.info(f"Extracted {len(normalized_text)} characters from PDF")
+            return normalized_text
     except Exception as e:
         logging.error(f"Error extracting text from PDF: {str(e)}")
         return ""

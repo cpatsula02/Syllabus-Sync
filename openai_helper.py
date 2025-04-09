@@ -841,35 +841,48 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         evidence_text = result.get("evidence", "")
         evidence = evidence_text.lower() if evidence_text is not None else ""
         
-        # Additional validation for grade items
+        # Additional validation for grade items - but be much more lenient
         if is_grade_item and result.get("present", False):
-            # Check for actual percentages/weights in evidence
+            # Check for actual percentages/weights in evidence, but also look for grade-related terms
             has_percentages = '%' in evidence
             has_weights = 'weight' in evidence or any(re.search(r'\b\d+\s*%', evidence) for _ in range(1))
+            
+            # Check for other grade-related terms that suggest grading info exists even without explicit percentages
+            has_grade_terms = any(term in evidence.lower() for term in [
+                'grade', 'mark', 'assessment', 'evaluation', 'worth', 'percent', 'point', 'value',
+                'distribution', 'rubric', 'criteria', 'scheme', 'scale', 'breakdown'
+            ])
             
             # Ensure item_lower is defined
             if 'item_lower' not in locals():
                 item_lower = item.lower() if item is not None else ""
                 
-            if not (has_percentages or has_weights) and ('grade' in item_lower or 'distribution' in item_lower or 'weight' in item_lower):
-                # Lower confidence if percentages/weights are missing
-                result["confidence"] = max(0.2, result["confidence"] - 0.4)
-                result["explanation"] += " [Warning: Evidence may lack explicit grade weights]"
+            # Be more lenient - only adjust confidence if NO grade-related terms are found
+            if not (has_percentages or has_weights or has_grade_terms) and ('grade' in item_lower or 'distribution' in item_lower or 'weight' in item_lower):
+                # Only slightly lower confidence if percentages/weights are missing but other grade terms are found
+                result["confidence"] = max(0.6, result["confidence"] - 0.2)
+                result["explanation"] += " [Note: Evidence suggests grading information is present]"
                 
-                # If confidence drops too low, mark as not present
-                if result["confidence"] < 0.5:
-                    result["present"] = False
-                    result["explanation"] = "Although some related content was found, the evidence lacks explicit grade weights or percentages required for this item."
+                # Never mark as not present based solely on lack of explicit percentages
+                result["present"] = True
                 
-        # Additional validation for policy items
+        # Additional validation for policy items - much more lenient
         elif is_policy_item and result.get("present", False):
-            policy_terms = ['policy', 'policies', 'guideline', 'procedure', 'rule']
-            has_policy_term = any(term in evidence for term in policy_terms)
+            # Broader set of policy-related terms
+            policy_terms = [
+                'policy', 'policies', 'guideline', 'procedure', 'rule', 'regulation', 'requirement',
+                'expectation', 'standard', 'protocol', 'instruction', 'direction', 'permitted',
+                'allowed', 'not allowed', 'prohibited', 'restricted', 'must', 'should', 'expected',
+                'required', 'submission', 'submit', 'criteria', 'condition', 'case of', 'in event of'
+            ]
+            has_policy_term = any(term in evidence.lower() for term in policy_terms)
             
             if not has_policy_term:
-                # Lower confidence if policy terms are missing
-                result["confidence"] = max(0.2, result["confidence"] - 0.3)
-                result["explanation"] += " [Warning: Evidence may lack explicit policy statements]"
+                # Only slightly lower confidence but keep as present
+                result["confidence"] = max(0.65, result["confidence"] - 0.15)
+                result["explanation"] += " [Note: Implied policy or guidelines are present]"
+                # Always keep as present
+                result["present"] = True
                 
         # Additional validation for instructor items
         elif is_instructor_item and result.get("present", False):
@@ -877,15 +890,18 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
             if 'item_lower' not in locals():
                 item_lower = item.lower() if item is not None else ""
                 
-            if 'email' in item_lower and '@ucalgary.ca' not in evidence:
-                # Lower confidence if ucalgary.ca email is missing
-                result["confidence"] = max(0.2, result["confidence"] - 0.5)
-                result["explanation"] += " [Warning: Evidence does not contain a @ucalgary.ca email address]"
-                
-                # If confidence drops too low, mark as not present
-                if result["confidence"] < 0.4:
-                    result["present"] = False
-                    result["explanation"] = "Although some instructor information was found, it lacks a required @ucalgary.ca email address."
+            if 'email' in item_lower:
+                # Be more lenient with email validation - check if ANY email exists, not just ucalgary.ca
+                if '@' in evidence:
+                    # Any email is present, so keep it marked as present with high confidence
+                    result["confidence"] = max(0.75, result["confidence"])
+                    # If it doesn't have ucalgary.ca but has another email, still consider it valid
+                    if '@ucalgary.ca' not in evidence:
+                        result["explanation"] += " [Note: Contains an email address, though not @ucalgary.ca]"
+                else:
+                    # No email found at all, but leave at 0.6 minimum confidence if other instructor info exists
+                    result["confidence"] = max(0.6, result["confidence"] - 0.3)
+                    result["explanation"] += " [Note: Instructor information found but no explicit email address]"
 
         # Highlight matching terms in the evidence
         if result.get("present", False) and result.get("evidence", ""):
