@@ -202,14 +202,16 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         9. Focus on finding evidence of compliance rather than reasons for non-compliance
         10. Err on the side of marking items as present when there's any reasonable evidence
         
-        THREE-PASS ANALYSIS REQUIREMENT:
-        For EACH checklist item, you MUST perform THREE complete passes through the document:
+        EFFICIENT THREE-PASS ANALYSIS REQUIREMENT:
+        For EACH checklist item, use the following optimized approach:
         - FIRST PASS: Initial scan for headings, subheadings, and obvious mentions
-        - SECOND PASS: Deeper contextual analysis looking for related concepts and key words
-        - THIRD PASS: Final verification with a flexible, generous interpretation
+          * If the item is CLEARLY present with high confidence (>0.8), accept this result and stop
+        - SECOND PASS (only if needed): Deeper contextual analysis looking for related concepts and key words
+          * If the item is found to be present with reasonable confidence (>0.7), accept and stop
+        - THIRD PASS (only if still uncertain): Final verification with a flexible, generous interpretation
         
-        Only after all three passes should you finalize your determination and confidence level.
-        If the three passes yield different results, use the most favorable finding.
+        This optimized approach prioritizes efficiency - when an item is clearly present, 
+        don't waste time with additional passes. This produces more confident results for definite matches.
         
         For professional course outlines, give the benefit of the doubt and be lenient in your assessment.
         If there's any reasonable interpretation that could support the presence of a requirement, 
@@ -396,10 +398,12 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     CHECKLIST ITEM TO ANALYZE:
                     {item_to_retry}
                     
-                    Perform THREE careful passes through the document:
+                    Use this EFFICIENT analysis approach:
                     - FIRST PASS: Scan for headings, subheadings, and obvious mentions
-                    - SECOND PASS: Look for contextual understanding, related concepts, and key words
-                    - THIRD PASS: Final verification with a very generous interpretation
+                      * If clearly present with high confidence (>0.8), accept and stop
+                    - SECOND PASS (if needed): Look for contextual understanding and related concepts
+                      * If found with reasonable confidence (>0.7), accept and stop
+                    - THIRD PASS (only if still uncertain): Final verification with very generous interpretation
                     
                     Be extremely flexible in your analysis - consider any vague mentions, section headings, 
                     or related content that might satisfy the requirement. For professional course outlines,
