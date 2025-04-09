@@ -10,28 +10,28 @@ def extract_text_from_pdf(file_path: str) -> str:
     try:
         with pdfplumber.open(file_path) as pdf:
             full_text = ""
-            
+
             # Process each page
             for page in pdf.pages:
                 # Extract main text
                 page_text = page.extract_text() or ""
-                
+
                 # Extract tables separately to ensure we don't miss tabular data
                 tables = page.extract_tables()
                 tables_text = ""
-                
+
                 for table in tables:
                     for row in table:
                         # Join non-empty cells with tabs to preserve table structure
                         row_text = "\t".join([str(cell) if cell is not None else "" for cell in row])
                         tables_text += row_text + "\n"
-                
+
                 # Combine page text and tables text
                 full_text += page_text + "\n" + tables_text + "\n\n"
-            
+
             # Normalize whitespace to make text processing more reliable
             normalized_text = re.sub(r'\s+', ' ', full_text).strip()
-            
+
             logging.info(f"Extracted {len(normalized_text)} characters from PDF")
             return normalized_text
     except Exception as e:
@@ -93,77 +93,55 @@ def extract_checklist_items(text: str) -> List[str]:
                 item = re.sub(r'^[\*\-\+•]\s*', '', line).strip()
                 if item and item not in items:
                     items.append(item)
-        
+
         return items
     except Exception as e:
         logging.error(f"Error extracting checklist items: {str(e)}")
         return []
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
-        """Stub for pattern matching function - not used"""
-        return False
+def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
+    """Stub for pattern matching function - not used"""
+    return False
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def extract_core_concepts(text):
-        """Stub for extract_core_concepts - not used"""
-        return []
+def extract_core_concepts(text):
+    """Stub for extract_core_concepts - not used"""
+    return []
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def extract_document_sections(document_text):
-        """Stub for extract_document_sections - not used"""
-        return {}
+def extract_document_sections(document_text):
+    """Stub for extract_document_sections - not used"""
+    return {}
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def sections_are_related(section_title, item_concepts):
-        """Stub for sections_are_related - not used"""
-        return False
+def sections_are_related(section_title, item_concepts):
+    """Stub for sections_are_related - not used"""
+    return False
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def content_contains_concepts(section_content, item_concepts, threshold=0.5):
-        """Stub for content_contains_concepts - not used"""
-        return False
+def content_contains_concepts(section_content, item_concepts, threshold=0.5):
+    """Stub for content_contains_concepts - not used"""
+    return False
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def extract_policy_type(item_text):
-        """Stub for extract_policy_type - not used"""
-        return None
+def extract_policy_type(item_text):
+    """Stub for extract_policy_type - not used"""
+    return None
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def find_original_text(lowercase_text, original_document):
-        """Stub for find_original_text - not used"""
-        return ""
+def find_original_text(lowercase_text, original_document):
+    """Stub for find_original_text - not used"""
+    return ""
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def find_best_keyword_section(document_text, keywords):
-        """Stub for find_best_keyword_section - not used"""
-        return ""
+def find_best_keyword_section(document_text, keywords):
+    """Stub for find_best_keyword_section - not used"""
+    return ""
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def check_special_entity_patterns(item, document, additional_context=""):
-        """Stub for check_special_entity_patterns - not used"""
-        return False
+def check_special_entity_patterns(item, document, additional_context=""):
+    """Stub for check_special_entity_patterns - not used"""
+    return False
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def find_matching_excerpt(item, document_text):
-        """Stub for find_matching_excerpt - not used"""
-        return False, ""
+def find_matching_excerpt(item, document_text):
+    """Stub for find_matching_excerpt - not used"""
+    return False, ""
 
-# PATTERN MATCHING COMPLETELY DISABLED
-if False:  # This code will never execute
-    def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
-        """Stub for identify_grade_distribution_table - always returns no table found"""
-        return False, ""
+def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
+    """Stub for identify_grade_distribution_table - always returns no table found"""
+    return False, ""
 
 def extract_checklist_items_strict(text: str) -> List[str]:
     """
@@ -187,7 +165,7 @@ def extract_checklist_items_strict(text: str) -> List[str]:
             has_numbered_items = True
         elif re.match(r'^[a-zA-Z][\.\)]\s+\w+', line):
             has_lettered_items = True
-        elif re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s+\w+', line):
+        elif re.match(r'^[\*\-\+•]\s+\w+', line):
             has_bulleted_items = True
 
     for line in lines:
@@ -244,10 +222,23 @@ def load_enhanced_checklist() -> Dict[str, str]:
         logging.error(f"Error loading enhanced checklist: {str(e)}")
         return {}
 
+def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
+    """
+    This function is deprecated. Use ai_analyze_item instead which uses OpenAI API exclusively.
+    """
+    raise Exception("CRITICAL ERROR: Use ai_analyze_item for OpenAI API-only analysis")
+
+def fallback_analyze_item(item: str, document_text: str, additional_context: str = "") -> Dict[str, Any]:
+    """
+    This function is deprecated. Use ai_analyze_item instead which uses OpenAI API exclusively.
+    """
+    raise Exception("CRITICAL ERROR: Use ai_analyze_item for OpenAI API-only analysis")
+
+
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
     """
     Document processing that exclusively uses the OpenAI API for analysis.
-    
+
     THIS FUNCTION HAS BEEN MODIFIED FOR EXCLUSIVE OpenAI API USAGE:
     - Uses OpenAI API with strict timeout handling (60 seconds max)
     - NEVER uses pattern matching (as per strict user requirements)
@@ -260,16 +251,16 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     # This longer timeout accommodates more in-depth analysis while preventing worker termination
     # Ensure we have the OS module imported
     import os
-    
+
     # Initialize empty variables that will be filled later
     # This ensures these variables always exist even if an exception occurs
     checklist_items = []
     checklist_text = ""
     outline_text = ""
-    
+
     # Add debugging log
     logging.error(f"DEBUG: Starting process_documents with api_attempts={api_attempts}")
-    
+
     try:
         # Validate file paths
         if not os.path.exists(checklist_path):
@@ -302,7 +293,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
         # Add insights about grade table to additional context if found
         enhanced_context = additional_context
-        
+
         # Parse the additional context to identify "not applicable" items with enhanced detection
         not_applicable_items = {}
         if additional_context:
@@ -430,15 +421,15 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             if ENABLE_OPENAI:
                 # Set up timeout to prevent hanging
                 import signal
-                
+
                 def timeout_handler(signum, frame):
                     raise TimeoutError("OpenAI API request timed out")
-                
+
                 # Set a timeout for OpenAI requests (longer timeout as requested by user)
                 logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
                 signal.signal(signal.SIGALRM, timeout_handler)
                 signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (300 seconds)
-                
+
                 try:
                     # Try the OpenAI API with timeout protection
                     ai_results = analyze_checklist_items_batch(
@@ -447,10 +438,10 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         max_attempts=api_attempts, 
                         additional_context=enhanced_context
                     )
-                    
+
                     # Cancel the alarm since we're done
                     signal.alarm(0)
-                    
+
                     # Check if we received a proper dictionary result
                     if isinstance(ai_results, dict):
                         logging.info(f"Successfully received AI results with {len(ai_results)} items")
@@ -461,7 +452,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                                 logging.error(f"AI results contain invalid value type: {type(value)} for key {key}")
                                 valid_results = False
                                 break
-                        
+
                         if valid_results:
                             results = ai_results
                             logging.info("Successfully using OpenAI API results")
@@ -474,7 +465,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     signal.alarm(0)
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
                     logging.error("API failed - returning error to user (NO pattern matching fallback used)")
-            
+
             # Check if any items are marked as not applicable
             for item in checklist_items:
                 # Check if this item is marked as not applicable
@@ -494,7 +485,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
         except Exception as e:
             # Return error to user when OpenAI API fails - NO PATTERN MATCHING FALLBACK
             logging.exception(f"Error with OpenAI processing - returning error to user (NO pattern matching fallback): {str(e)}")
-            
+
             # Create proper error response with appropriate messaging - NO PATTERN MATCHING
             results = {}
             for item in checklist_items:
@@ -505,22 +496,22 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     'evidence': "",
                     'method': 'ai_general_analysis'  # Consistent method name even for error cases
                 }
-            
+
             # Return checklist items and analysis results
             return checklist_items, results
 
     except Exception as e:
         logging.exception(f"Error processing documents: {str(e)}")
-        
+
         # Create a properly structured empty results dictionary
         empty_results = {}
-        
+
         # Make sure checklist_items is a valid list
         if not checklist_items or not isinstance(checklist_items, list):
             # Create a default single-item list if we don't have valid checklist items
             logging.error("DEBUG: No valid checklist items found during error handling")
             default_items = ["Error processing checklist"]
-            
+
             # Create a default result with explicit OpenAI API error method
             for item in default_items:
                 empty_results[item] = {
