@@ -1275,7 +1275,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     item_lower = item.lower()
                     
                     # Determine which detailed checklist item to reference
-                    detailed_requirement = None
+                    detailed_requirement = ""
                     for item_num, description in detailed_checklist.items():
                         # Extract the first part before the colon to match with our item
                         title_match = re.match(r'^(.*?):', description)

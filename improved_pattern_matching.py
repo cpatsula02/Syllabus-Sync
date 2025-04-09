@@ -268,7 +268,7 @@ def extract_section(document_text: str, keywords: List[str], context_lines: int 
     
     return '\n'.join(lines[start_idx:end_idx])
 
-def improved_check_item(item: str, document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
+def improved_check_item(item: str, document_text: str, validation_requirements: Dict = {}) -> Tuple[bool, str, float]:
     """
     Improved pattern matching to check if an item is present in the document.
     Enhanced with advanced heuristics and more flexible matching thresholds.
@@ -404,7 +404,7 @@ def extract_email(text: str) -> str:
         return match.group(0)
     return ""
 
-def check_midterm_quiz_info(document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
+def check_midterm_quiz_info(document_text: str, validation_requirements: Dict = {}) -> Tuple[bool, str, float]:
     """
     Enhanced detection of midterm, quiz, or test information with improved keyword recognition.
     This function supports various ways of referring to midterms such as "midterm exam", 
@@ -435,6 +435,8 @@ def check_midterm_quiz_info(document_text: str, validation_requirements: Dict = 
     
     # Find sections containing midterm/quiz terms
     assessment_sections = []
+    details_found = []  # Initialize here to avoid unbound variable issue
+    
     for term in midterm_terms:
         # Look for the term in context
         pattern = r'(?i)(?:[^\n]*' + re.escape(term) + r'[^\n]*\n){1,10}'
@@ -446,7 +448,6 @@ def check_midterm_quiz_info(document_text: str, validation_requirements: Dict = 
         combined_sections = '\n'.join(assessment_sections)
         
         # Count how many assessment details we can find
-        details_found = []
         for detail in assessment_details:
             if detail in combined_sections.lower():
                 details_found.append(detail)
@@ -538,7 +539,7 @@ def extract_grade_table(text: str) -> str:
     
     return table_text.strip()
 
-def check_special_cases(item: str, document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
+def check_special_cases(item: str, document_text: str, validation_requirements: Dict = {}) -> Tuple[bool, str, float]:
     """
     Handle special case checklist items with custom logic.
     
@@ -795,7 +796,7 @@ def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
     # If we've checked everything thoroughly and found nothing
     return False, "No instructor ucalgary.ca email found after thorough triple-verification process.", 0.95
 
-def enhanced_check_item_in_document(item: str, document_text: str, detailed_requirement: str = None) -> Tuple[bool, str, float]:
+def enhanced_check_item_in_document(item: str, document_text: str, detailed_requirement: str = "") -> Tuple[bool, str, float]:
     """
     Main function to check if a checklist item is satisfied in the document.
     Enhanced with multi-pass scanning, comprehensive checks, and detailed checklist requirements.
