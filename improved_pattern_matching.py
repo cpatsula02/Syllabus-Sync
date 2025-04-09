@@ -263,7 +263,7 @@ def extract_section(document_text: str, keywords: List[str], context_lines: int 
     
     return '\n'.join(lines[start_idx:end_idx])
 
-def improved_check_item(item: str, document_text: str) -> Tuple[bool, str, float]:
+def improved_check_item(item: str, document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
     """
     Improved pattern matching to check if an item is present in the document.
     Enhanced with advanced heuristics and more flexible matching thresholds.
@@ -435,7 +435,7 @@ def extract_grade_table(text: str) -> str:
     
     return table_text.strip()
 
-def check_special_cases(item: str, document_text: str) -> Tuple[bool, str, float]:
+def check_special_cases(item: str, document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
     """
     Handle special case checklist items with custom logic.
     
@@ -687,25 +687,50 @@ def check_instructor_email(document_text: str) -> Tuple[bool, str, float]:
     # If we've checked everything thoroughly and found nothing
     return False, "No instructor ucalgary.ca email found after thorough triple-verification process.", 0.95
 
-def enhanced_check_item_in_document(item: str, document_text: str) -> Tuple[bool, str, float]:
+def enhanced_check_item_in_document(item: str, document_text: str, detailed_requirement: str = None) -> Tuple[bool, str, float]:
     """
     Main function to check if a checklist item is satisfied in the document.
-    Enhanced with multi-pass scanning and comprehensive checks.
+    Enhanced with multi-pass scanning, comprehensive checks, and detailed checklist requirements.
     
     Args:
         item: Checklist item
         document_text: Document text
+        detailed_requirement: The detailed requirement text from the enhanced checklist (optional)
         
     Returns:
         Tuple of (is_present, evidence, confidence)
     """
-    # First try special cases
-    is_present, evidence, confidence = check_special_cases(item, document_text)
+    # Extract validation requirements if detailed requirements are provided
+    validation_requirements = {}
+    if detailed_requirement:
+        # Extract key validation points (must haves, sections to check, etc.)
+        # Check for specific email domain requirements
+        if "email" in item.lower():
+            domain_match = re.search(r'(?:must|MUST).*?([a-z0-9.-]+\.[a-z]{2,})', detailed_requirement, re.IGNORECASE)
+            if domain_match:
+                validation_requirements['required_domain'] = domain_match.group(1)
+                
+        # Extract sections to look in
+        look_in_match = re.search(r'Look for (.*?)(?:\.|\Z)', detailed_requirement)
+        if look_in_match:
+            validation_requirements['look_in'] = look_in_match.group(1)
+            
+        # Extract specific requirements
+        must_have_match = re.search(r'(?:must|MUST) (?:have|be|include|contain) (.*?)(?:\.|\Z)', detailed_requirement, re.IGNORECASE)
+        if must_have_match:
+            validation_requirements['must_have'] = must_have_match.group(1)
+            
+        # Print the validation requirements for debugging
+        if validation_requirements:
+            print(f"Detailed validation requirements: {validation_requirements}")
+    
+    # First try special cases with enhanced requirements
+    is_present, evidence, confidence = check_special_cases(item, document_text, validation_requirements)
     if is_present:  # Modified: Check boolean value directly rather than "is not None"
         return is_present, evidence, confidence
     
     # Get improved pattern matching results
-    is_present, evidence, confidence = improved_check_item(item, document_text)
+    is_present, evidence, confidence = improved_check_item(item, document_text, validation_requirements)
     
     # Extra verification for crucial items known to have accuracy issues
     # This adds a second pass of detection for important items

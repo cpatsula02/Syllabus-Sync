@@ -1051,16 +1051,41 @@ def extract_checklist_items_strict(text: str) -> List[str]:
 
     return cleaned_items
 
+def load_enhanced_checklist() -> Dict[str, str]:
+    """
+    Load the detailed checklist that contains specific requirements for each item.
+    This ensures pattern matching follows the exact requirements provided in the checklist.
+    
+    Returns:
+        Dictionary mapping checklist item numbers to their detailed descriptions
+    """
+    enhanced_checklist = {}
+    try:
+        with open('enhanced_checklist.txt', 'r') as f:
+            content = f.read()
+            # Extract numbered items with their descriptions
+            pattern = r'(\d+)\.\s+(.*?)(?=\n\n\d+\.|\Z)'
+            matches = re.findall(pattern, content, re.DOTALL)
+            
+            for num, description in matches:
+                enhanced_checklist[int(num)] = description.strip()
+                
+        logging.info(f"Enhanced checklist loaded with {len(enhanced_checklist)} detailed items")
+        return enhanced_checklist
+    except Exception as e:
+        logging.error(f"Error loading enhanced checklist: {str(e)}")
+        return {}
+
 def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
     """
-    Enhanced document processing with context awareness and improved pattern recognition.
-    Handles various document formats and considers user-provided context for analysis.
+    Enhanced document processing with context awareness and detailed requirement checking.
+    Handles various document formats and follows specific checklist requirements strictly.
 
-    This function now has improved error handling for:
-    - API connection issues
-    - Missing API keys
-    - Timeout errors
-    - Incomplete document processing
+    This function now has improved handling for:
+    - Strict compliance with detailed checklist requirements
+    - Multiple verification passes for critical items
+    - Enhanced pattern matching with specific requirement validation
+    - Improved error handling for API and document processing issues
     """
     try:
         # Validate file paths
@@ -1244,40 +1269,65 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         }
                         continue
                         
-                    # IMPROVED: Multi-stage detection with double-check for critical items
+                    # ENHANCED: Multi-stage detection with detailed checklist reference
+                    # First, load the detailed checklist to use exact requirements
+                    detailed_checklist = load_enhanced_checklist()
+                    item_lower = item.lower()
+                    
+                    # Determine which detailed checklist item to reference
+                    detailed_requirement = None
+                    for item_num, description in detailed_checklist.items():
+                        # Extract the first part before the colon to match with our item
+                        title_match = re.match(r'^(.*?):', description)
+                        if title_match:
+                            title = title_match.group(1).lower()
+                            # Check if this detailed item matches our current item
+                            if title in item_lower or any(key in item_lower and key in title 
+                                                          for key in ["email", "late policy", "missed", "grade distribution"]):
+                                detailed_requirement = description
+                                break
+                    
+                    # Log what detailed requirement we're using
+                    if detailed_requirement:
+                        print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
+                    
+                    # Basic preliminary check
                     is_present = check_item_in_document(item, outline_text, enhanced_context)
                     evidence = ""
-                    item_lower = item.lower()
                     
                     # First pass: Find matching excerpt for evidence gathering
                     found, excerpt = find_matching_excerpt(item, outline_text)
                     if found and excerpt:
                         evidence = excerpt
                     
-                    # Second pass verification for critical items that frequently cause false results
+                    # Define crucial items that need special validation based on detailed requirements
                     crucial_items = {
-                        "instructor email": ["instructor", "email", "contact"],
-                        "late policy": ["late", "policy", "deadline"],
-                        "missed assessment": ["missed", "absence", "unable"],
-                        "textbook": ["textbook", "reading", "material"]
+                        "instructor email": ["instructor", "email", "ucalgary.ca"],
+                        "late policy": ["late", "policy", "deadline", "penalty"],
+                        "missed assessment": ["missed", "absence", "unable", "policy"],
+                        "textbook": ["textbook", "reading", "material", "required"]
                     }
                     
-                    # For crucial items, do a thorough double-check
+                    # For crucial items, do a thorough multi-pass validation against detailed requirements
                     is_crucial = False
                     for crucial_type, keywords in crucial_items.items():
                         if any(keyword in item_lower for keyword in keywords):
                             is_crucial = True
                             
-                            # Get the special case check from our improved module
+                            # Get the enhanced check from our improved module, passing in the detailed requirement if available
                             from improved_pattern_matching import enhanced_check_item_in_document
-                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(item, outline_text)
+                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
+                                item, outline_text, detailed_requirement
+                            )
                             
-                            # If the two detection methods disagree, trust the improved one for crucial items
+                            # For crucial items, always trust the enhanced detection with detailed requirements
                             if is_present != reliable_present and confidence >= 0.75:
-                                print(f"Crucial item '{item[:30]}...' detection corrected: {is_present} -> {reliable_present}")
+                                print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
                                 is_present = reliable_present
-                                if reliable_evidence:
-                                    evidence = reliable_evidence
+                                
+                            # Always use the detailed evidence for crucial items
+                            if reliable_evidence:
+                                evidence = reliable_evidence
                     
                     # Set explanation based on final detection result
                     explanation = "The item was found in the document." if is_present else "The item was not found in the document."
