@@ -1251,7 +1251,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
 
-            # Use OpenAI if available
+            # Use OpenAI if available with enhanced timeout and error handling
             import os
             OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
             ENABLE_OPENAI = bool(OPENAI_API_KEY)
@@ -1269,14 +1269,29 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 }
 
             if ENABLE_OPENAI:
-                logging.info("Using OpenAI for analysis with fallback")
+                # Set up timeout to prevent hanging
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("OpenAI API request timed out")
+                
+                # Set a timeout for OpenAI requests
+                logging.info("Using OpenAI for analysis with fallback and 20-second timeout")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(20)  # Set alarm for 20 seconds
+                
                 try:
+                    # Try the OpenAI API with timeout protection
                     ai_results = analyze_checklist_items_batch(
                         checklist_items, 
                         outline_text, 
                         max_attempts=api_attempts, 
                         additional_context=enhanced_context
                     )
+                    
+                    # Cancel the alarm since we're done
+                    signal.alarm(0)
+                    
                     # Check if we received a proper dictionary result
                     if isinstance(ai_results, dict):
                         logging.info(f"Successfully received AI results with {len(ai_results)} items")
@@ -1290,102 +1305,108 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         
                         if valid_results:
                             results = ai_results
+                            logging.info("Successfully using OpenAI API results")
                         else:
                             logging.error("Invalid results structure detected, falling back to pattern matching")
                     else:
                         logging.warning(f"OpenAI analysis returned invalid results type: {type(ai_results)}, falling back to traditional pattern matching")
-                except Exception as e:
-                    logging.exception(f"Error in OpenAI processing: {str(e)}")
-                    logging.info("OpenAI API integration is disabled to prevent server timeouts")
-            else:
-                # Use traditional pattern matching for all items
+                except (TimeoutError, Exception) as e:
+                    # Cancel the alarm if there was an exception
+                    signal.alarm(0)
+                    logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
+                    logging.info("Falling back to pattern matching")
+            
+            # If OpenAI is disabled or failed, use pattern matching
+            if not ENABLE_OPENAI or not any(result.get('method', '') != 'initialization' for result in results.values()):
                 logging.info("Using traditional pattern matching for analysis")
-                for item in checklist_items:
-                    # Check if this item is marked as not applicable
-                    if item in not_applicable_items:
-                        results[item] = {
-                            'present': True,  # Mark as present since it's intentionally excluded
-                            'confidence': 0.9,
-                            'explanation': "This item is not applicable to this course.",
-                            'evidence': "Marked as not applicable in the additional context.",
-                            'method': 'context_analysis',
-                            'status': 'na'  # Special status for not applicable items
-                        }
-                        continue
-
-                    # ENHANCED: Multi-stage detection with detailed checklist reference
-                    # First, load the detailed checklist to use exact requirements
-                    detailed_checklist = load_enhanced_checklist()
-                    item_lower = item.lower()
-
-                    # Determine which detailed checklist item to reference
-                    detailed_requirement = ""
-                    for item_num, description in detailed_checklist.items():
-                        # Extract the first part before the colon to match with our item
-                        title_match = re.match(r'^(.*?):', description)
-                        if title_match:
-                            title = title_match.group(1).lower()
-                            # Check if this detailed item matches our current item
-                            if title in item_lower or any(key in item_lower and key in title 
-                                                          for key in ["email", "late policy", "missed", "grade distribution"]):
-                                detailed_requirement = description
-                                break
-
-                    # Log what detailed requirement we're using
-                    if detailed_requirement:
-                        print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
-
-                    # Basic preliminary check
-                    is_present = check_item_in_document(item, outline_text, enhanced_context)
-                    evidence = ""
-
-                    # First pass: Find matching excerpt for evidence gathering
-                    found, excerpt = find_matching_excerpt(item, outline_text)
-                    if found and excerpt:
-                        evidence = excerpt
-
-                    # Define crucial items that need special validation based on detailed requirements
-                    crucial_items = {
-                        "instructor email": ["instructor", "email", "ucalgary.ca"],
-                        "late policy": ["late", "policy", "deadline", "penalty"],
-                        "missed assessment": ["missed", "absence", "unable", "policy"],
-                        "textbook": ["textbook", "reading", "material", "required"]
-                    }
-
-                    # For crucial items, do a thorough multi-pass validation against detailed requirements
-                    is_crucial = False
-                    for crucial_type, keywords in crucial_items.items():
-                        if any(keyword in item_lower for keyword in keywords):
-                            is_crucial = True
-
-                            # Get the enhanced check from our improved module, passing in the detailed requirement if available
-                            from improved_pattern_matching import enhanced_check_item_in_document
-                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
-                                item, outline_text, detailed_requirement
-                            )
-
-                            # For crucial items, always trust the enhanced detection with detailed requirements
-                            if is_present != reliable_present and confidence >= 0.75:
-                                print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
-                                is_present = reliable_present
-
-                            # Always use the detailed evidence for crucial items
-                            if reliable_evidence:
-                                evidence = reliable_evidence
-
-                    # Set explanation based on final detection result
-                    explanation = "The item was found in the document." if is_present else "The item was not found in the document."
-
-                    # Use higher confidence for crucial items that got special verification
-                    confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
-
+                
+            # Process each item with pattern matching if needed
+            for item in checklist_items:
+                # Check if this item is marked as not applicable
+                if item in not_applicable_items:
                     results[item] = {
-                        'present': is_present,
-                        'confidence': confidence,
-                        'explanation': explanation,
-                        'evidence': evidence,
-                        'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
+                        'present': True,  # Mark as present since it's intentionally excluded
+                        'confidence': 0.9,
+                        'explanation': "This item is not applicable to this course.",
+                        'evidence': "Marked as not applicable in the additional context.",
+                        'method': 'context_analysis',
+                        'status': 'na'  # Special status for not applicable items
                     }
+                    continue
+
+                # ENHANCED: Multi-stage detection with detailed checklist reference
+                # First, load the detailed checklist to use exact requirements
+                detailed_checklist = load_enhanced_checklist()
+                item_lower = item.lower()
+
+                # Determine which detailed checklist item to reference
+                detailed_requirement = ""
+                for item_num, description in detailed_checklist.items():
+                    # Extract the first part before the colon to match with our item
+                    title_match = re.match(r'^(.*?):', description)
+                    if title_match:
+                        title = title_match.group(1).lower()
+                        # Check if this detailed item matches our current item
+                        if title in item_lower or any(key in item_lower and key in title 
+                                                      for key in ["email", "late policy", "missed", "grade distribution"]):
+                            detailed_requirement = description
+                            break
+
+                # Log what detailed requirement we're using
+                if detailed_requirement:
+                    print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
+
+                # Basic preliminary check
+                is_present = check_item_in_document(item, outline_text, enhanced_context)
+                evidence = ""
+
+                # First pass: Find matching excerpt for evidence gathering
+                found, excerpt = find_matching_excerpt(item, outline_text)
+                if found and excerpt:
+                    evidence = excerpt
+
+                # Define crucial items that need special validation based on detailed requirements
+                crucial_items = {
+                    "instructor email": ["instructor", "email", "ucalgary.ca"],
+                    "late policy": ["late", "policy", "deadline", "penalty"],
+                    "missed assessment": ["missed", "absence", "unable", "policy"],
+                    "textbook": ["textbook", "reading", "material", "required"]
+                }
+
+                # For crucial items, do a thorough multi-pass validation against detailed requirements
+                is_crucial = False
+                for crucial_type, keywords in crucial_items.items():
+                    if any(keyword in item_lower for keyword in keywords):
+                        is_crucial = True
+
+                        # Get the enhanced check from our improved module, passing in the detailed requirement if available
+                        from improved_pattern_matching import enhanced_check_item_in_document
+                        reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
+                            item, outline_text, detailed_requirement
+                        )
+
+                        # For crucial items, always trust the enhanced detection with detailed requirements
+                        if is_present != reliable_present and confidence >= 0.75:
+                            print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
+                            is_present = reliable_present
+
+                        # Always use the detailed evidence for crucial items
+                        if reliable_evidence:
+                            evidence = reliable_evidence
+
+                # Set explanation based on final detection result
+                explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+
+                # Use higher confidence for crucial items that got special verification
+                confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
+
+                results[item] = {
+                    'present': is_present,
+                    'confidence': confidence,
+                    'explanation': explanation,
+                    'evidence': evidence,
+                    'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
+                }
         except Exception as e:
             # Fallback completely to basic pattern matching if any errors
             logging.exception(f"Error with OpenAI processing, using basic fallback: {str(e)}")

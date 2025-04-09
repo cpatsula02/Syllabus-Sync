@@ -13,10 +13,22 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Configure OpenAI integration
+# Configure OpenAI integration with detailed validation
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
-logger.info(f"OpenAI integration {'enabled' if ENABLE_OPENAI else 'disabled - no API key found'}")
+
+# Add API key validation for proper format
+if OPENAI_API_KEY:
+    # Check if key has valid format (starts with sk- and has sufficient length)
+    if len(OPENAI_API_KEY) < 20 or not OPENAI_API_KEY.startswith("sk-"):
+        logger.warning("WARNING: OpenAI API key present but appears to be invalid format (should start with 'sk-' and be longer)")
+        logger.info("Will attempt to use the key but may encounter API errors")
+    else:
+        logger.info("OpenAI API key validated with correct format")
+    
+    logger.info("OpenAI integration ENABLED - will try to use AI verification")
+else:
+    logger.warning("OPENAI_API_KEY environment variable not found - pattern matching only mode will be used")
 
 # Initialize Flask app
 app = Flask(__name__)
