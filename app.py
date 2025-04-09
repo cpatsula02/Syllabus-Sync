@@ -333,8 +333,11 @@ def index():
                     verification_attempts = result.get("verification_attempts", 0)
                     total_verification_calls += verification_attempts
 
-                    # Count items that used AI (at least one successful call)
-                    if verification_attempts > 0:
+                    # Count items that used AI-based methods
+                    if 'ai_' in method or method == 'ai_general_analysis':
+                        api_calls_made += 1
+                    # Also count if verification attempts were made
+                    elif verification_attempts > 0:
                         api_calls_made += 1
 
                 return render_template('results.html', 
@@ -518,8 +521,11 @@ def download_pdf():
             verification_attempts = result.get("verification_attempts", 0)
             total_verification_calls += verification_attempts
 
-            # Count items that used AI (at least one successful verification)
-            if verification_attempts > 0:
+            # Count items that used AI-based methods
+            if 'ai_' in method or method == 'ai_general_analysis':
+                ai_analyzed_items += 1
+            # Also count if verification attempts were made
+            elif verification_attempts > 0:
                 ai_analyzed_items += 1
 
         # Quick summary statistics table

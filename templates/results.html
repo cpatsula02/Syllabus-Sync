@@ -78,18 +78,16 @@
                         <p class="mb-2">The document was analyzed using multiple complementary techniques:</p>
                         <div class="d-flex flex-wrap">
                             {% for method_name, count in analysis_methods.items() %}
-                            <div class="badge bg-{{ 'primary' if 'ai_' in method_name else 'secondary' }} me-2 mb-2 p-2">
-                                <i class="fas {{ 'fa-robot' if 'ai_' in method_name else 'fa-code' }} me-1"></i>
+                            <div class="badge bg-{{ 'primary' if 'ai_' in method_name else 'warning' if 'pattern' in method_name else 'secondary' }} me-2 mb-2 p-2">
+                                <i class="fas {{ 'fa-robot' if 'ai_' in method_name else 'fa-search' if 'pattern' in method_name else 'fa-code' }} me-1"></i>
                                 {{ method_name|replace('_', ' ')|title }}: {{ count }}
                             </div>
                             {% endfor %}
                         </div>
-                        {% if api_calls_made > 0 %}
                         <div class="bg-light p-2 mt-2 rounded">
                             <i class="fas fa-info-circle text-primary me-1"></i>
-                            <span class="small">AI-based analysis was used for {{ api_calls_made }} verifications, providing deep semantic understanding beyond keyword matching.</span>
+                            <span class="small"><strong>Hybrid Analysis:</strong> AI-based analysis was used for {{ api_calls_made }} item(s), with pattern matching as fallback for {{ total_count - api_calls_made }} item(s). This approach combines deep semantic understanding with robust pattern recognition.</span>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -165,7 +163,7 @@
                     <!-- Detection Method Information -->
                     <p class="mb-2 detection-method">
                         <strong>Detection Method:</strong> 
-                        <span class="badge bg-info">{{ result.method|replace('_', ' ')|title }}</span>
+                        <span class="badge bg-{{ 'primary' if 'ai_' in result.method else 'warning' if 'pattern' in result.method else 'info' }}">{{ result.method|replace('_', ' ')|title }}</span>
                         {% if result.confidence %}
                         <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
                         {% endif %}
@@ -198,7 +196,7 @@
                                 {% if 'ai_' in result.method %}
                                     <i class="fas fa-robot me-2 text-primary"></i><strong>AI Verification:</strong> The system analyzed this requirement using advanced AI models from <strong>multiple perspectives</strong> (instructor, student, and administrator viewpoints). This multi-angle analysis confirmed with {{ (result.confidence * 100)|int }}% confidence that the document contains content that satisfies this requirement.
                                 {% else %}
-                                    <i class="fas fa-search me-2 text-secondary"></i><strong>Pattern Analysis:</strong> The system detected specific keywords, patterns, and contextual clues related to this requirement, then validated the surrounding content to confirm this requirement is fully addressed.
+                                    <i class="fas fa-search me-2 text-warning"></i><strong>Pattern Matching Fallback:</strong> After AI analysis did not detect this item, the system used pattern matching techniques to find specific keywords, context clues, and semantic patterns related to this requirement, then validated the surrounding content to confirm it's addressed.
                                 {% endif %}
                                 </p>
                                 
@@ -216,7 +214,7 @@
                                 {% if 'ai_' in result.method %}
                                     <i class="fas fa-robot me-2 text-danger"></i><strong>AI Verification:</strong> Multiple AI analysis passes from different perspectives (instructor, student, and administrator viewpoints) were unable to locate content that satisfies this requirement. The system analyzed the entire document to find any direct or indirect way this requirement might be addressed.
                                 {% else %}
-                                    <i class="fas fa-search me-2 text-danger"></i><strong>Pattern Analysis:</strong> The system searched thoroughly for relevant keywords, patterns, phrases, and related concepts throughout the document but could not find sufficient evidence that this requirement is addressed.
+                                    <i class="fas fa-search me-2 text-danger"></i><strong>Pattern Matching Fallback:</strong> After AI analysis did not detect this item, the system used pattern matching to search for keywords, phrases, and semantic patterns, but couldn't find evidence that this requirement is addressed.
                                 {% endif %}
                                 </p>
                                 
