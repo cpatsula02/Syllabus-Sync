@@ -1394,7 +1394,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
                 results[item] = {
                     'present': is_present,
-                    'confidence': 0.8 ifis_crucial and is_present else (0.7 if is_present else 0.3),
+                    'confidence': 0.8 if is_crucial and is_present else (0.7 if is_present else 0.3),
                     'explanation': explanation,
                     'evidence': evidence,
                     'method': 'enhanced_fallback_detection' if is_crucial else 'basic_pattern_matching'
