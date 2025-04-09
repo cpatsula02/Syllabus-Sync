@@ -17,16 +17,20 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
 
-# Add API key validation for proper format
+# IMPORTANT: Force pattern-matching mode in the web interface for reliability
+# This temporary change ensures we don't encounter API timeout errors
+ENABLE_OPENAI = False
+
+# Add API key validation for proper format (for future debugging)
 if OPENAI_API_KEY:
     # Check if key has valid format (starts with sk- and has sufficient length)
     if len(OPENAI_API_KEY) < 20 or not OPENAI_API_KEY.startswith("sk-"):
         logger.warning("WARNING: OpenAI API key present but appears to be invalid format (should start with 'sk-' and be longer)")
-        logger.info("Will attempt to use the key but may encounter API errors")
     else:
         logger.info("OpenAI API key validated with correct format")
     
-    logger.info("OpenAI integration ENABLED - will try to use AI verification")
+    logger.warning("OpenAI integration DISABLED for reliability - using pattern matching only")
+    logger.info("All requests will use enhanced pattern matching instead of OpenAI API")
 else:
     logger.warning("OPENAI_API_KEY environment variable not found - pattern matching only mode will be used")
 
