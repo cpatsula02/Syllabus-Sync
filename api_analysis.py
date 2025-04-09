@@ -111,8 +111,13 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     # Load detailed checklist items for second-chance analysis
     detailed_checklist_items = load_detailed_checklist()
     
-    # Break document into manageable chunks if needed
-    max_doc_length = 12000  # Most outlines should fit within this limit
+    # Optimize document text for analysis
+    # First, clean up the text by removing excessive whitespace while preserving structure
+    document_text = re.sub(r'\n{3,}', '\n\n', document_text)  # Replace multiple newlines with double newline
+    document_text = re.sub(r' {2,}', ' ', document_text)      # Replace multiple spaces with single space
+    
+    # Then break document into manageable chunks if needed
+    max_doc_length = 8000  # Reduced text length to prevent timeouts
     document_excerpt = document_text[:max_doc_length]
     if len(document_text) > max_doc_length:
         document_excerpt += "..."
@@ -145,9 +150,9 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
     # Initialize results array with default values
     results_array = []
     
-    # Process items in smaller batches to prevent timeouts
-    # With detailed checklist items, smaller batches are better
-    batch_size = 3  # Reduced batch size to handle detailed descriptions
+    # Process items in very small batches to prevent timeouts
+    # With detailed checklist items, minimal batch size ensures processing completes
+    batch_size = 2  # Reduced to absolute minimum batch size to prevent timeouts
     num_batches = (len(CHECKLIST_ITEMS) + batch_size - 1) // batch_size
     
     logger.info(f"Processing document in {num_batches} batches of {batch_size} items each")
@@ -289,16 +294,17 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
             
             # Make the OpenAI API call with proper error handling
             try:
+                # Use a more manageable model with faster response times
                 response = client.chat.completions.create(
-                    model="gpt-4",  # Using gpt-4 for deeper text analysis and contextual understanding
+                    model="gpt-3.5-turbo-16k",  # Using 16k context model for better balance of speed and analysis quality
                     messages=[
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message}
                     ],
                     response_format={"type": "json_object"},
-                    temperature=0.1,
-                    max_tokens=4000  # Increased max tokens for more detailed analysis
-                    # Remove timeout parameter which is causing issues
+                    temperature=0.2,  # Slightly increased to encourage generous interpretations
+                    max_tokens=2500,  # Reduced tokens to ensure faster completion
+                    timeout=60.0  # Explicit 60-second timeout to prevent hanging
                 )
             except Exception as openai_error:
                 logger.error(f"OpenAI API error in batch {batch_idx+1}: {str(openai_error)}")

@@ -57,8 +57,8 @@ def handle_error(e):
         user_message = "OpenAI API error: The system encountered an issue with the AI analysis. This could be due to connection problems or API limitations. Please try again with a smaller document."
     elif "format" in error_message.lower() and any(term in error_message.lower() for term in ["specifier", "string format", "f-string"]):
         user_message = "There was an internal formatting error in the analysis. The development team has been notified."
-    elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit"]):
-        user_message = "The request timed out. Please try again with a smaller document or fewer checklist items."
+    elif any(term in error_message.lower() for term in ["timeout", "timed out", "time limit", "deadline", "read timeout", "socket timeout"]):
+        user_message = "Analysis timeout error: The in-depth AI analysis is taking longer than expected. We've reduced the batch size and improved handling for better performance. Please try again - the system should now process your document properly."
     elif any(term in error_message.lower() for term in ["memory", "ram", "buffer"]):
         user_message = "The system ran out of memory while processing your request. Please try a smaller document."
     elif any(term in error_message.lower() for term in ["file format", "parsing", "invalid file", "corrupt"]):

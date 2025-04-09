@@ -1083,7 +1083,7 @@ requires-dist = [
     { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
     { name = "fpdf", specifier = ">=1.7.2" },
     { name = "fpdf2", specifier = ">=2.8.2" },
-    { name = "gunicorn", specifier = ">=23.0.0" },
+    { name = "gunicorn", extras = ["gthread"], specifier = ">=23.0.0" },
     { name = "nltk", specifier = ">=3.9.1" },
     { name = "openai", specifier = ">=1.70.0" },
     { name = "pdfplumber", specifier = ">=0.11.6" },
