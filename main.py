@@ -1,13 +1,21 @@
-from flask import Flask, request, render_template, jsonify, redirect, flash, session, send_file
+from flask import Flask, request, render_template, jsonify, redirect, flash, session, send_file, url_for
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import io
+import json
 import logging
 import re
-from fpdf import FPDF  # Import FPDF from fpdf2 package
-from document_processor import process_documents, extract_text
 import urllib.request
+from datetime import datetime
+import traceback
+
+# Import custom modules
+from document_processor import process_documents, extract_text
 from api_analysis import analyze_course_outline
+from models import db, User, Document, Collaboration, Annotation, ChatMessage, AnalysisResult
 
 # Configure logging with more detailed output
 logging.basicConfig(level=logging.DEBUG, 
@@ -55,6 +63,34 @@ else:
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(24))
+
+# Set upload folder and maximum file size (16MB)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize the database
+db.init_app(app)
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Initialize Flask-SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60)
+
+# User loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Create database tables on startup
+with app.app_context():
+    db.create_all()
 
 # Set upload folder and maximum file size (16MB)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -132,6 +168,395 @@ def validate_links(text):
         'valid_urls': valid_urls,
         'invalid_urls': invalid_urls
     }
+
+# Authentication Routes
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        # Input validation
+        if not username or not email or not password:
+            flash('Please fill in all fields')
+            return redirect(url_for('register'))
+        
+        # Check if username or email already exists
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('register'))
+        
+        if User.query.filter_by(email=email).first():
+            flash('Email already exists')
+            return redirect(url_for('register'))
+        
+        # Create new user
+        new_user = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password)
+        )
+        
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Registration successful! Please log in.')
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error registering user: {str(e)}")
+            flash('An error occurred during registration')
+            return redirect(url_for('register'))
+    
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            flash('Login successful!')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('dashboard'))
+        
+        flash('Invalid username or password')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out')
+    return redirect(url_for('login'))
+
+# Collaboration Routes
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    # Get user's owned documents
+    owned_documents = Document.query.filter_by(owner_id=current_user.id).all()
+    
+    # Get documents the user has access to (collaborations)
+    collaborations = Collaboration.query.filter_by(user_id=current_user.id).all()
+    collaboration_documents = [collab.document for collab in collaborations]
+    
+    return render_template(
+        'dashboard.html',
+        owned_documents=owned_documents,
+        collaboration_documents=collaboration_documents
+    )
+
+@app.route('/document/<int:document_id>')
+@login_required
+def view_document(document_id):
+    document = Document.query.get_or_404(document_id)
+    
+    # Check if user has access to this document
+    if document.owner_id != current_user.id and not Collaboration.query.filter_by(
+        document_id=document_id, user_id=current_user.id).first():
+        flash('You do not have access to this document')
+        return redirect(url_for('dashboard'))
+    
+    # Get annotations
+    annotations = Annotation.query.filter_by(document_id=document_id).all()
+    
+    # Get analysis results if they exist
+    analysis_result = AnalysisResult.query.filter_by(document_id=document_id).first()
+    analysis_data = json.loads(analysis_result.results_json) if analysis_result else None
+    
+    # Get collaborators
+    collaborators = Collaboration.query.filter_by(document_id=document_id).all()
+    
+    return render_template(
+        'document.html',
+        document=document,
+        annotations=annotations,
+        analysis_data=analysis_data,
+        collaborators=collaborators,
+        document_id=document_id
+    )
+
+@app.route('/document/<int:document_id>/add_collaborator', methods=['POST'])
+@login_required
+def add_collaborator(document_id):
+    document = Document.query.get_or_404(document_id)
+    
+    # Check if user is the owner
+    if document.owner_id != current_user.id:
+        flash('Only the document owner can add collaborators')
+        return redirect(url_for('view_document', document_id=document_id))
+    
+    username = request.form.get('username')
+    access_level = request.form.get('access_level', 'viewer')
+    
+    # Find user by username
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        flash(f'User {username} not found')
+        return redirect(url_for('view_document', document_id=document_id))
+    
+    # Check if already a collaborator
+    existing_collab = Collaboration.query.filter_by(
+        document_id=document_id, user_id=user.id).first()
+    
+    if existing_collab:
+        # Update access level if different
+        if existing_collab.access_level != access_level:
+            existing_collab.access_level = access_level
+            db.session.commit()
+            flash(f'Updated access level for {username} to {access_level}')
+    else:
+        # Add new collaborator
+        new_collab = Collaboration(
+            document_id=document_id,
+            user_id=user.id,
+            access_level=access_level
+        )
+        db.session.add(new_collab)
+        db.session.commit()
+        flash(f'Added {username} as a collaborator with {access_level} access')
+    
+    return redirect(url_for('view_document', document_id=document_id))
+
+@app.route('/document/<int:document_id>/remove_collaborator/<int:collab_id>', methods=['POST'])
+@login_required
+def remove_collaborator(document_id, collab_id):
+    document = Document.query.get_or_404(document_id)
+    
+    # Check if user is the owner
+    if document.owner_id != current_user.id:
+        flash('Only the document owner can remove collaborators')
+        return redirect(url_for('view_document', document_id=document_id))
+    
+    collaboration = Collaboration.query.get_or_404(collab_id)
+    
+    # Make sure the collaboration is for this document
+    if collaboration.document_id != document_id:
+        flash('Invalid collaboration')
+        return redirect(url_for('view_document', document_id=document_id))
+    
+    removed_username = collaboration.user.username
+    db.session.delete(collaboration)
+    db.session.commit()
+    
+    flash(f'Removed {removed_username} as a collaborator')
+    return redirect(url_for('view_document', document_id=document_id))
+
+@app.route('/document/<int:document_id>/add_annotation', methods=['POST'])
+@login_required
+def add_annotation(document_id):
+    document = Document.query.get_or_404(document_id)
+    
+    # Check if user has access to add annotations
+    if document.owner_id != current_user.id:
+        collab = Collaboration.query.filter_by(
+            document_id=document_id, user_id=current_user.id).first()
+        if not collab or collab.access_level not in ['annotator', 'editor']:
+            flash('You do not have permission to add annotations')
+            return redirect(url_for('view_document', document_id=document_id))
+    
+    text = request.form.get('text')
+    position = request.form.get('position')  # JSON string with selection positions
+    
+    if not text or not position:
+        flash('Annotation text and position are required')
+        return redirect(url_for('view_document', document_id=document_id))
+    
+    # Create new annotation
+    new_annotation = Annotation(
+        document_id=document_id,
+        user_id=current_user.id,
+        text=text,
+        position=position
+    )
+    
+    db.session.add(new_annotation)
+    db.session.commit()
+    
+    # Emit event to all users viewing this document
+    socketio.emit(
+        'new_annotation',
+        {
+            'id': new_annotation.id,
+            'user_id': current_user.id,
+            'username': current_user.username,
+            'text': text,
+            'position': position,
+            'created_at': new_annotation.created_at.isoformat()
+        },
+        room=f'document_{document_id}'
+    )
+    
+    return redirect(url_for('view_document', document_id=document_id))
+
+# Socket.IO event handlers
+@socketio.on('connect')
+def handle_connect():
+    if current_user.is_authenticated:
+        logger.info(f'Client connected: User {current_user.username}')
+    else:
+        logger.info('Anonymous client connected')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    if current_user.is_authenticated:
+        logger.info(f'Client disconnected: User {current_user.username}')
+    else:
+        logger.info('Anonymous client disconnected')
+
+@socketio.on('join_document')
+def handle_join_document(data):
+    document_id = data.get('document_id')
+    if not document_id:
+        return
+    
+    room = f'document_{document_id}'
+    join_room(room)
+    
+    # Notify others that user joined
+    if current_user.is_authenticated:
+        emit('user_joined', {
+            'username': current_user.username,
+            'user_id': current_user.id,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=room, include_self=False)
+
+@socketio.on('leave_document')
+def handle_leave_document(data):
+    document_id = data.get('document_id')
+    if not document_id:
+        return
+    
+    room = f'document_{document_id}'
+    leave_room(room)
+    
+    # Notify others that user left
+    if current_user.is_authenticated:
+        emit('user_left', {
+            'username': current_user.username,
+            'user_id': current_user.id,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=room, include_self=False)
+
+@socketio.on('new_chat_message')
+def handle_new_chat_message(data):
+    if not current_user.is_authenticated:
+        return
+    
+    document_id = data.get('document_id')
+    message_text = data.get('message')
+    
+    if not document_id or not message_text:
+        return
+    
+    # Check if user has access to the document
+    document = Document.query.get(document_id)
+    if not document:
+        return
+    
+    if document.owner_id != current_user.id and not Collaboration.query.filter_by(
+        document_id=document_id, user_id=current_user.id).first():
+        return
+    
+    # Save the message
+    new_message = ChatMessage(
+        user_id=current_user.id,
+        document_id=document_id,
+        message=message_text
+    )
+    
+    db.session.add(new_message)
+    db.session.commit()
+    
+    # Broadcast to everyone in the room
+    room = f'document_{document_id}'
+    emit('chat_message', {
+        'id': new_message.id,
+        'username': current_user.username,
+        'user_id': current_user.id,
+        'message': message_text,
+        'timestamp': new_message.timestamp.isoformat()
+    }, room=room)
+
+@socketio.on('annotation_updated')
+def handle_annotation_updated(data):
+    if not current_user.is_authenticated:
+        return
+    
+    annotation_id = data.get('annotation_id')
+    new_text = data.get('text')
+    
+    if not annotation_id or not new_text:
+        return
+    
+    # Find the annotation
+    annotation = Annotation.query.get(annotation_id)
+    if not annotation:
+        return
+    
+    # Check if user has permission to edit
+    if annotation.user_id != current_user.id:
+        document = Document.query.get(annotation.document_id)
+        if not document or (document.owner_id != current_user.id and not Collaboration.query.filter_by(
+            document_id=document.id, user_id=current_user.id, access_level='editor').first()):
+            return
+    
+    # Update the annotation
+    annotation.text = new_text
+    annotation.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    # Broadcast the update
+    room = f'document_{annotation.document_id}'
+    emit('annotation_updated', {
+        'id': annotation.id,
+        'text': new_text,
+        'updated_at': annotation.updated_at.isoformat(),
+        'updated_by_username': current_user.username,
+        'updated_by_id': current_user.id
+    }, room=room)
+
+@socketio.on('delete_annotation')
+def handle_delete_annotation(data):
+    if not current_user.is_authenticated:
+        return
+    
+    annotation_id = data.get('annotation_id')
+    if not annotation_id:
+        return
+    
+    # Find the annotation
+    annotation = Annotation.query.get(annotation_id)
+    if not annotation:
+        return
+    
+    document_id = annotation.document_id
+    
+    # Check if user has permission to delete
+    if annotation.user_id != current_user.id:
+        document = Document.query.get(document_id)
+        if not document or (document.owner_id != current_user.id and not Collaboration.query.filter_by(
+            document_id=document_id, user_id=current_user.id, access_level='editor').first()):
+            return
+    
+    # Delete the annotation
+    db.session.delete(annotation)
+    db.session.commit()
+    
+    # Broadcast the deletion
+    room = f'document_{document_id}'
+    emit('annotation_deleted', {
+        'id': annotation_id,
+        'deleted_by_username': current_user.username,
+        'deleted_by_id': current_user.id
+    }, room=room)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -769,4 +1194,4 @@ def api_analyze_course_outline():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
