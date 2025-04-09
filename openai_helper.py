@@ -256,7 +256,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                     response_format={"type": "json_object"},  # Force JSON format - critical!
                     temperature=temperature,
                     max_tokens=150,   # Keep responses short
-                    timeout=30  # 30-second timeout to allow for completion
+                    timeout=300  # 300-second timeout (5 minutes) to allow for completion
                 )
             except Exception as api_error:
                 # Log the error more clearly
@@ -1052,7 +1052,7 @@ def analyze_checklist_item_with_retry(item: str, document_text: str, max_attempt
                 response_format={"type": "json_object"},
                 temperature=0.2,  # Slightly increased to encourage generous interpretations
                 max_tokens=500,   # Reduced tokens for quicker completion
-                timeout=90.0      # Extended timeout for individual item analysis (90 seconds)
+                timeout=300.0      # Extended timeout for individual item analysis (300 seconds / 5 minutes)
             )
             
             # Parse the response
