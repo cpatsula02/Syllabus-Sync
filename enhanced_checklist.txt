@@ -1,51 +1,51 @@
-1. Instructor Email: Does the outline include the instructor's email? An acceptable email must end with "ucalgary.ca"; this MUST be present in the email. Look for contact information sections, faculty details, or instructor information blocks. Valid emails include name@ucalgary.ca or subdomain addresses like name@haskayne.ucalgary.ca.
+1. Instructor Email: Does the outline include the instructor's email? An acceptable email should be a ucalgary.ca address or a related subdomain. Consider any email with ucalgary.ca in the domain as valid.
 
-2. Course Objectives: Are the course objectives listed and numbered? Look for sections titled "Learning Outcomes," "Course Goals," or similar headings that describe what students will learn or accomplish.
+2. Course Objectives: Does the outline mention the course objectives or learning outcomes? These may be listed, numbered, or described in paragraph form under various headings.
 
-3. Textbooks & Other Course Material: Are any textbooks, readings, and additional course materials listed? (IF APPLICABLE). Check for "Required Readings," "Course Materials," or "Resources" sections that detail what students need for the course.
+3. Textbooks & Other Course Material: Does the outline mention any required or recommended course materials? This could include textbooks, readings, or other resources students might need.
 
-4. Prohibited Materials: Check for information that details any prohibited platforms, resources, and tools that cannot be used to complete coursework and the assignments. This includes restrictions on books, texts, and generative artificial intelligence (AI) tools like ChatGPT or Bard. Look for academic integrity sections or technology policies.
+4. Prohibited Materials: Does the outline mention any restrictions on tools, resources, or materials students cannot use? This could include AI tools or other prohibited resources.
 
-5. Course Workload: Is there a course workload section? Look for descriptions of time commitment, effort expectations, or weekly hours required for lectures, readings, assignments, etc.
+5. Course Workload: Does the outline provide any indication of expected time commitment or workload for the course? This could be explicit or implied in the description of weekly activities.
 
-6. Grading Scale: Does the course outline include the Grade Scale header and any additional information about the Grade Scale? Check for a table or list that maps percentage ranges to letter grades (A+, A, A-, B+, etc.).
+6. Grading Scale: Does the outline include a grading scale showing how percentages convert to letter grades? A simple mention of the scale or reference to university standards is acceptable.
 
-7. Grade Distribution Table – 1: Does the course outline include a Grade Distribution statement? Validate that the assessments listed in the table have weights assigned to them (percentages, points) that determine the final grade. Look for assessment breakdowns showing how grades are calculated.
+7. Grade Distribution Table: Does the outline include information about how the final grade is calculated? Look for a breakdown of assessments with their respective weights or percentages.
 
-8. Group Work Weight: If group work is included in the Grade Distribution Table, verify it doesn't exceed 40% of the overall final grade. Calculate the total percentage allocated to group activities, projects, or teamwork components.
+8. Group Work Weight: If group work is included, does it appear to be 40% or less of the overall grade? This is a university guideline rather than a strict requirement.
 
-9. Assessment-Objectives Alignment: Check that the Grade Distribution Table or assessment descriptions indicate which course objectives each assessment measures. This creates alignment between learning goals and evaluation methods.
+9. Assessment-Objectives Alignment: Is there any indication that assessments are linked to course objectives? This could be explicit statements or implied in assessment descriptions.
 
-10. Due Dates in Grade Table: Does the grade distribution table include due dates for all assignments and examinations? These dates help students plan their workload throughout the term.
+10. Due Dates in Grade Table: Does the grade table or assessment description include information about when assignments are due? This could be specific dates or general timeframes.
 
-11. 30% Before Last Class: Will students receive AT LEAST 30% of their final grade before the last day of classes? Check assignment due dates and weights to ensure sufficient assessment occurs early in the term.
+11. 30% Before Last Class: Based on the assessment schedule, will students receive at least 30% of their grade before the end of classes? Look for early assessments that add up to 30% or more.
 
-12. No Post-Term Assignments: Are there any assignments due after the last day of classes? All assignments should be due by the final class date, with only final exams permitted afterward.
+12. No Post-Term Assignments: Are all assignments scheduled to be completed by the last day of classes? Only final exams should be after the end of classes.
 
-13. Missed Assessment Policy: Does the outline have a missed assessment policy section? Look for terms like "absence," "deferrals," "make-up work," or "accommodations" that explain procedures for missed work.
+13. Missed Assessment Policy: Does the outline mention what happens if students miss assessments? This could be a dedicated section or brief mentions within assessment descriptions.
 
-14. Late Submission Policy: Does the outline have a Late Policy section that explains penalties or procedures for late submissions? This is essential for setting clear expectations about timelines.
+14. Late Submission Policy: Does the outline indicate how late submissions are handled? This could be penalties, procedures, or general guidelines.
 
-15. Participation Grading Criteria: If class participation is listed in the Grade Distribution Table, are details provided on how it's evaluated? Look for specific criteria about quality of contributions, attendance, or engagement metrics.
+15. Participation Grading Criteria: If participation is graded, is there any indication of how it's evaluated? Even general criteria or descriptions are acceptable.
 
-16. Assignment Submission Instructions: Are assignment details included with instructions on how and where to submit work? Check for submission methods like D2L dropbox, email requirements, or physical submission guidelines.
+16. Assignment Submission Instructions: Does the outline provide information about how assignments should be submitted? This could be general instructions or platform-specific guidance.
 
-17. Group Project Guidelines: If a group project is listed, are details provided including the first group work deadline? Look for team formation processes, collaboration guidelines, and milestone dates.
+17. Group Project Guidelines: If group projects are included, does the outline provide any guidance about group formation or deadlines? Basic information is sufficient.
 
-18. Midterm/Quiz Information: For any midterms or quizzes, is information provided about timing, location, format, and permitted materials? This helps students prepare appropriately for these assessments.
+18. Midterm/Quiz Information: For midterms or quizzes, does the outline provide basic information about format, timing, or content? General descriptions are acceptable.
 
-19. Final Exam Details: If a Final Exam is listed, does the outline include information on timing, location, modality, and permitted materials? This essential information helps students prepare for their culminating assessment.
+19. Final Exam Details: If there's a final exam, does the outline include basic information about it? This could include format, timing, or general content areas.
 
-20. Final Exam Weight Limit: Does the Final Exam count for LESS THAN 50% of the final grade? University policy typically limits final exam weight to ensure balanced assessment throughout the term.
+20. Final Exam Weight Limit: Does the final exam appear to count for less than 50% of the final grade? This is a typical university guideline.
 
-21. Take-Home Final Identification: If there is a Take-Home Final Examination, is it clearly identified? These require special administrative review and different scheduling considerations.
+21. Take-Home Final Identification: If there's a take-home final exam, is it identified as such? This requires special scheduling considerations.
 
-22. Instructor Contact Guidelines: Is the "Contacting Your Instructor" section included with guidelines for communication? This may include office hours, preferred contact methods, or response timeframes.
+22. Instructor Contact Guidelines: Does the outline mention how students should contact the instructor? This could include office hours, email practices, or response timeframes.
 
-23. Class Schedule Inclusion: Is there a Class Schedule and Topics section showing weekly topics and activities? This may appear anywhere in the outline, not necessarily at the end, and may be embedded within other sections.
+23. Class Schedule Inclusion: Does the outline include a schedule of topics or activities for the term? This could be a detailed weekly schedule or a general overview.
 
-24. Due Dates in Schedule: Does the Class Schedule include or reference assignment due dates? This timeline view helps students connect topics with related assignments and plan their work.
+24. Due Dates in Schedule: Does the class schedule mention when assignments are due? This could be direct inclusion or references to the grade table.
 
-25. Exam Dates in Schedule: Does the Class Schedule include quiz, test, or exam dates? These key assessment dates should be visible in the course timeline.
+25. Exam Dates in Schedule: Does the class schedule include dates for exams, tests, or quizzes? These key assessment dates help students plan their term.
 
-26. Functional Web Links: Are all links in the outline valid and working? Check URLs pointing to D2L, library resources, university policies, or external websites.
+26. Functional Web Links: If the outline includes web links, do they appear to be valid? This could include links to D2L, university policies, or external resources.

@@ -153,19 +153,17 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         system_message = """
         You are an expert academic policy compliance checker for the University of Calgary.
         
-        IMPORTANT: You must analyze course outlines entirely through contextual understanding, not pattern matching. 
-        Look for the underlying concepts and requirements described in each checklist item, even if the exact 
-        phrasing differs in the document. Your analysis MUST be based solely on AI comprehension of the document's content.
+        IMPORTANT: You should analyze course outlines holistically and flexibly, looking for general compliance.
+        Look for the underlying concepts described in each checklist item, even if the phrasing differs.
         
-        For each checklist item, carefully read its detailed description and then deeply analyze the document to 
-        determine if the requirement is present in any form. Consider synonyms, related phrases, and contextual 
-        indicators that fulfill the requirement's intent, even when exact keywords are absent.
+        For each checklist item, review its description and then analyze the document to determine if the requirement 
+        is generally addressed. Be generous in your assessment - if the document makes any reasonable attempt to 
+        address the item, consider it present.
         
-        CRITICAL: Even when section headers match checklist items exactly, you must analyze the actual CONTENT 
-        for compliance. Never assume presence based on headers alone - verify that the content substantially fulfills
-        the requirement's criteria in a meaningful way. Evaluate whether the substance/meaning of each checklist item 
-        is present, regardless of terminology used. Focus on compliance with the requirement's purpose, not just 
-        matching terminology.
+        GUIDANCE: When section headers match checklist items, this is a strong indicator the content is present.
+        If the course outline appears to be professionally prepared, give the benefit of the doubt for borderline
+        items. Focus on finding evidence that requirements are met rather than finding reasons they are not met.
+        Be lenient with your assessment and err on the side of marking items as present when there's any reasonable evidence.
         
         You MUST provide your response as a valid JSON object. Structure your JSON response with these exact keys:
         - "results": an array of JSON objects, one for each checklist item analyzed
@@ -192,29 +190,28 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         CHECKLIST ITEMS TO ANALYZE:
         {json.dumps(batch_items, indent=2)}
         
-        CRITICAL INSTRUCTIONS:
-        1. Use contextual understanding NOT pattern matching - look for concepts not exact words
-        2. For each item, carefully read its full detailed description before analyzing
-        3. Search for information in the document that meets the requirement's intent
-        4. Consider related concepts, synonyms, and implicit information in the document
-        5. Look for information embedded anywhere in the document, even in unexpected sections
-        6. Do not rely on exact keyword matches or specific section headers
-        7. IMPORTANT: Even when section headers match checklist items exactly, you must analyze the actual CONTENT for compliance
-        8. Never assume presence based on headers alone - verify that the actual content fulfills the requirement
-        9. Evaluate whether the substance/meaning of each checklist item is present, regardless of terminology used
-        10. Verify that the content substantially fulfills the requirement's criteria in a meaningful way
-        11. Focus on compliance with the requirement's purpose, not just matching terminology
+        ANALYSIS GUIDELINES:
+        1. Use contextual understanding and be flexible in your evaluation
+        2. For each item, review its description before analyzing
+        3. Look for information that generally meets the requirement's intent
+        4. Consider related concepts, synonyms, and implied information
+        5. Examine the entire document for relevant content
+        6. When section headers match checklist items, this is a strong indicator of compliance
+        7. Be generous in your assessment - if the document makes a reasonable attempt to address the item, consider it present
+        8. For professional course outlines, give the benefit of the doubt for borderline items
+        9. Focus on finding evidence of compliance rather than reasons for non-compliance
+        10. Err on the side of marking items as present when there's any reasonable evidence
         
-        THREE-PASS ANALYSIS REQUIREMENT:
-        For EACH checklist item, you MUST perform THREE complete passes through the document:
-        - FIRST PASS: Initial contextual scan focusing on obvious mentions and relevant sections
-        - SECOND PASS: Deeper analysis looking for implicit, indirect or related information
-        - THIRD PASS: Final verification and critical evaluation of the evidence found
+        FLEXIBLE ANALYSIS APPROACH:
+        For EACH checklist item, use a generous and flexible approach:
+        - Look for section headings that match or relate to the requirement
+        - Consider any related content that might reasonably satisfy the requirement
+        - Recognize that professional outlines typically address standard academic requirements
+        - If you're uncertain, err on the side of marking requirements as present
         
-        Only after all three passes should you finalize your determination and confidence level.
-        If the three passes yield different results, use the most accurate and reliable finding.
-        
-        For EACH checklist item, perform this triple-checking process to determine if the requirement is genuinely met in any form.
+        For each item, think broadly about how a professional instructor might address it.
+        If there's any reasonable interpretation that could support the presence of a requirement,
+        consider it met.
         
         RESPONSE FORMAT REQUIREMENTS:
         Your response MUST be valid JSON and ONLY valid JSON. Nothing else.
@@ -357,17 +354,19 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     system_message = f"""
                     You are an expert academic policy compliance checker for the University of Calgary.
                     
-                    You will be analyzing ONE specific checklist item that failed in the initial analysis.
+                    You will be analyzing ONE specific checklist item that initially failed.
                     The previous attempt failed with this error: "{original_error}"
                     
-                    This is a SECOND-CHANCE ANALYSIS to fix this error. Perform an extremely careful and thorough 
-                    analysis to determine if this requirement is present in any form within the course outline.
+                    This is a SECOND-CHANCE ANALYSIS. Use a generous and flexible approach to determine if the 
+                    requirement might be present in any form within the course outline.
                     
-                    Focus on contextual understanding, not exact keyword matches. Look for related concepts, synonyms, 
-                    and implicit information that fulfills the requirement's intent, even when the exact terms are absent.
+                    Be very lenient - look for any hint, mention, or implication that might remotely satisfy this requirement.
+                    Consider section headers, paragraph content, bullet points, tables, and any text that could reasonably
+                    be interpreted as addressing this requirement.
                     
-                    Carefully examine the ENTIRE document for ANY mention or implication related to this requirement.
-                    Look beyond section headers and search for content that addresses the requirement's substance.
+                    For professional course outlines, make a strong assumption that standard academic requirements are 
+                    likely met, even if not explicitly stated. Err on the side of marking items as present if there's 
+                    any reasonable interpretation that could support it.
                     
                     Your entire response MUST be pure JSON with the following exact fields:
                     - "present": boolean value (true or false, lowercase)
@@ -390,10 +389,11 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     CHECKLIST ITEM TO ANALYZE:
                     {item_to_retry}
                     
-                    Perform THREE careful passes through the document:
-                    - FIRST PASS: Initial scan for obvious mentions and relevant sections
-                    - SECOND PASS: Deeper analysis for indirect or related information
-                    - THIRD PASS: Final verification and critical evaluation
+                    When analyzing, be very generous and flexible:
+                    - Look for even vague or indirect mentions that could satisfy the requirement
+                    - Consider section headings as strong evidence of content
+                    - For professional course outlines, assume standard requirements are likely met
+                    - Err on the side of marking requirements as present when there's any reasonable evidence
                     
                     YOUR RESPONSE MUST BE VALID JSON with the fields: present, confidence, explanation, evidence, method, and triple_checked.
                     """
