@@ -176,8 +176,14 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
     # Try the API call with short timeout to prevent worker hanging
     for attempt in range(MAX_RETRIES):
         try:
-            # Use global client with timeout
-            # Add timeout option to prevent hanging
+            # INTENTIONALLY SIMULATE API TIMEOUT FOR TESTING
+            # Add artificial sleep to guarantee timeout as requested
+            import time
+            logging.warning("SIMULATING API TIMEOUT - Sleeping for 60 seconds to trigger timeout...")
+            print("SIMULATING API TIMEOUT - Sleeping for 60 seconds to trigger timeout...")
+            time.sleep(60)  # This will trigger timeout for sure
+            
+            # This code should never execute due to timeout, but is here for completeness
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=[

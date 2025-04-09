@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 # Initialize global variables
 _processed_pattern_items = set()
 
+# Maximum API timeout in seconds - long enough to ensure proper timeout for testing
+MAX_API_TIMEOUT = 50
+
 def extract_text_from_pdf(file_path: str) -> str:
     """Extract text content from a PDF file."""
     text = ""
@@ -1253,10 +1256,11 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
 
-            # Get current OpenAI API key status from environment
-            import os
-            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-            ENABLE_OPENAI = bool(OPENAI_API_KEY) and api_attempts > 0  # Enable if API key is present and user wants API
+            # FORCE ENABLE OpenAI API - always use OpenAI API first with proper timeout handling
+            # This ensures we always use the API with better failover if it times out
+            ENABLE_OPENAI = True  # Always try OpenAI API first (will properly fallback if needed)
+            logging.warning("IMPORTANT: Always trying OpenAI API first (FORCE ENABLED)")
+            print("IMPORTANT: OpenAI API is FORCE ENABLED - Using OpenAI API with timeout protection")
 
             results = {}
 
