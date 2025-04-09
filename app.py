@@ -28,10 +28,29 @@ app.secret_key = os.environ.get('SESSION_SECRET', 'dev_secret_key')
 
 @app.errorhandler(Exception)
 def handle_error(e):
-    app.logger.error(f"Unhandled error: {str(e)}")
+    """
+    Enhanced error handler that provides detailed, helpful error messages
+    specifically for OpenAI API issues and other common errors.
+    """
+    error_message = str(e)
+    app.logger.error(f"Unhandled error: {error_message}")
+    
+    # Create a more user-friendly error message based on the error type
+    user_message = "An error occurred while processing your request."
+    
+    # Check for specific API-related errors
+    if "openai" in error_message.lower() or "api key" in error_message.lower():
+        user_message = "OpenAI API error: The system requires a valid OpenAI API key to function. Please ensure your API key is correctly set in the environment variables."
+    elif "timeout" in error_message.lower():
+        user_message = "The request timed out. Please try again with a smaller document or fewer checklist items."
+    elif "memory" in error_message.lower():
+        user_message = "The system ran out of memory while processing your request. Please try a smaller document."
+    elif "file format" in error_message.lower() or "parsing" in error_message.lower():
+        user_message = "There was an error reading your document. Please ensure it's a valid PDF or Word document and try again."
+    
     return render_template(
         'index.html',
-        error="An error occurred while processing your request. Please try again with a smaller file or contact support."
+        error=user_message
     ), 500
 
 # In-memory storage for last analysis
