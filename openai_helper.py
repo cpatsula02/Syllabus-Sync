@@ -895,15 +895,15 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
         api_success = False
         verification_results = []
         
-        # Ensure we analyze each item 3 times with different approaches
+        # We must analyze each item exactly 3 times with different approaches to ensure thorough verification
         analyze_approaches = [
-            {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective: "},
-            {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective: "},
-            {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective: "}
+            {"perspective": "instructor", "temperature": 0.1, "prefix": "Using a detailed, critical instructor perspective with deep educational expertise: "},
+            {"perspective": "student", "temperature": 0.2, "prefix": "Using a detail-oriented student perspective focusing on clarity and usability: "},
+            {"perspective": "administrator", "temperature": 0.15, "prefix": "Using a compliance-focused administrator perspective with institutional standards knowledge: "}
         ]
         
-        # If max_attempts is less than 3, still ensure we use at least 3 different approaches
-        actual_attempts = max(max_attempts, 3)
+        # Force exactly 3 verification attempts for every item to ensure thorough analysis
+        actual_attempts = 3
         
         for attempt in range(actual_attempts):
             try:

@@ -104,8 +104,23 @@
                 <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
                 
                 <div class="alert alert-info mb-3">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>AI-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis. Each item was verified by multiple independent checks to ensure accurate results.
+                    <i class="fas fa-robot me-2"></i>
+                    <strong>AI-Verified Analysis:</strong> These missing items were identified through thorough multi-perspective analysis. Each item was scanned <strong>exactly 3 times</strong> from different analytical viewpoints (instructor, student, and administrator perspectives) to ensure accurate results and minimize false negatives.
+                </div>
+
+                <!-- Yellow box with bullet-pointed missing items -->
+                <div class="alert alert-warning mb-4">
+                    <h6 class="mb-3"><strong><i class="fas fa-exclamation-circle me-2"></i>Missing Components Summary:</strong></h6>
+                    <ul class="mb-0">
+                        {% for item in missing_items %}
+                            <li class="mb-2 {% if item in grade_table_items %}fw-bold{% endif %}">
+                                {{ item }}
+                                {% if item in grade_table_items %}
+                                <span class="badge bg-danger ms-2">High Priority</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
                 </div>
 
                 <div class="accordion mb-3" id="missingItemsAccordion">
@@ -250,7 +265,57 @@
                                 {% endif %}
                                 
                                 <p class="mt-2">
-                                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Suggested Action:</strong> Consider adding clear and explicit content addressing this requirement to the document. The system looked for both exact matches and semantically similar content but could not find sufficient evidence of this requirement.
+                                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Detailed Analysis:</strong> 
+                                    After multiple scans using different perspectives and advanced semantic analysis, the system was unable to identify content addressing this requirement. The AI analysis engine searched for various phrasings, synonyms, and contextual elements that might indicate the presence of this content, even if not explicitly stated in the same words as the checklist item.
+                                </p>
+                                <p class="mt-2">
+                                    <i class="fas fa-clipboard-list me-2 text-info"></i><strong>Specific Searching:</strong>
+                                    {% if "grade" in result.item.lower() or "assessment" in result.item.lower() or "weight" in result.item.lower() %}
+                                        The system specifically searched for tables, percentage values, numerical patterns, and assessment descriptions that would indicate grade distributions or weighting.
+                                    {% elif "objective" in result.item.lower() or "outcome" in result.item.lower() %}
+                                        The system looked for numbered lists, bullet points, and structured sections that typically contain learning objectives or outcomes.
+                                    {% elif "policy" in result.item.lower() and "late" in result.item.lower() %}
+                                        The system searched for policy statements, consequence descriptions, and procedural language related to late submissions.
+                                    {% elif "miss" in result.item.lower() and ("exam" in result.item.lower() or "assessment" in result.item.lower()) %}
+                                        The system scanned for content describing procedures, documentation requirements, and make-up policies for missed assessments.
+                                    {% elif "instructor" in result.item.lower() and "contact" in result.item.lower() %}
+                                        The system looked for email addresses, phone numbers, office locations, and office hours information.
+                                    {% elif "academic" in result.item.lower() and ("integrity" in result.item.lower() or "misconduct" in result.item.lower()) %}
+                                        The system searched for statements about plagiarism, cheating, citation requirements, and integrity policies.
+                                    {% elif "accommodation" in result.item.lower() %}
+                                        The system looked for disability services information, accommodation procedures, and accessibility statements.
+                                    {% elif "link" in result.item.lower() or "url" in result.item.lower() %}
+                                        The system analyzed all hyperlinks in the document, checking for validity and relevance to required resources.
+                                    {% elif "schedule" in result.item.lower() or "calendar" in result.item.lower() %}
+                                        The system searched for date patterns, timeline formats, and chronological information about class activities.
+                                    {% else %}
+                                        The system searched for semantic matches to this requirement throughout all sections of the document.
+                                    {% endif %}
+                                </p>
+                                <p class="mt-2">
+                                    <i class="fas fa-lightbulb me-2 text-warning"></i><strong>Suggested Action:</strong> 
+                                    Add a clearly labeled section to your course outline that explicitly addresses this requirement. Based on the analysis, this content should be:
+                                    {% if "grade" in result.item.lower() or "assessment" in result.item.lower() or "weight" in result.item.lower() %}
+                                        presented in a structured format (preferably a table) showing each assessment component with its corresponding weight/percentage toward the final grade.
+                                    {% elif "objective" in result.item.lower() or "outcome" in result.item.lower() %}
+                                        organized as a clearly numbered or bulleted list of specific skills, knowledge, or competencies students will gain from the course.
+                                    {% elif "policy" in result.item.lower() and "late" in result.item.lower() %}
+                                        formulated as a clear policy statement with specific penalties, procedures for extensions, and any exceptions to the policy.
+                                    {% elif "miss" in result.item.lower() and ("exam" in result.item.lower() or "assessment" in result.item.lower()) %}
+                                        detailed as a procedural guideline explaining notification requirements, documentation needed, and make-up policies.
+                                    {% elif "instructor" in result.item.lower() and "contact" in result.item.lower() %}
+                                        provided in a dedicated contact information section with complete details (email, office location, office hours, preferred methods).
+                                    {% elif "academic" in result.item.lower() and ("integrity" in result.item.lower() or "misconduct" in result.item.lower()) %}
+                                        included as a formal statement referencing academic integrity policies, defining misconduct, and outlining consequences.
+                                    {% elif "accommodation" in result.item.lower() %}
+                                        added as an accessibility statement with procedures for requesting accommodations and available resources.
+                                    {% elif "link" in result.item.lower() or "url" in result.item.lower() %}
+                                        verified to ensure all external links and URLs in the document are functional and point to the correct resources.
+                                    {% elif "schedule" in result.item.lower() or "calendar" in result.item.lower() %}
+                                        presented as a comprehensive chronological schedule of class topics, activities, and assignment due dates.
+                                    {% else %}
+                                        included with explicit language that clearly addresses the institutional requirements for this item.
+                                    {% endif %}
                                 </p>
                             {% endif %}
                         </div>

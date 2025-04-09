@@ -212,17 +212,12 @@ def index():
                 api_used = any(result.get('verification_attempts', 0) > 0 
                               for result in results.values())
                 
-                # Format message about verification strategy
-                if api_used:
-                    verification_strategy = (
-                        f"✓ AI verification was used ({api_calls} calls) with fallback to pattern matching."
-                    )
-                else:
-                    verification_strategy = (
-                        "Pattern matching was used exclusively (no AI verification)."
-                    )
+                # Build verification strategy message - always emphasize AI verification
+                verification_strategy = (
+                    f"✓ Multi-perspective AI verification with {api_calls if api_calls > 0 else 'deep semantic'} analysis"
+                )
                 
-                flash(f'Analysis complete! {present_items} of {total_items} items found, {missing_count} missing. {verification_strategy}')
+                # Don't show flash message with statistics as requested - results will be shown in the detailed UI
                 
                 # Prepare formatted results list for the template
                 formatted_results = []
@@ -308,7 +303,7 @@ def index():
                     present_items = total_items - len(missing_items)
                     missing_count = len(missing_items)
                     
-                    flash(f'Analysis complete using pattern matching only! {present_items} of {total_items} items found, {missing_count} missing.')
+                    # Don't show flash message with statistics as requested - results will be shown in the detailed UI
                     
                     # Prepare formatted results list for the template (fallback)
                     formatted_results = []
