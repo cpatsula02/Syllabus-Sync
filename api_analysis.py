@@ -202,15 +202,17 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
         9. Focus on finding evidence of compliance rather than reasons for non-compliance
         10. Err on the side of marking items as present when there's any reasonable evidence
         
-        FLEXIBLE ANALYSIS APPROACH:
-        For EACH checklist item, use a generous and flexible approach:
-        - Look for section headings that match or relate to the requirement
-        - Consider any related content that might reasonably satisfy the requirement
-        - Recognize that professional outlines typically address standard academic requirements
-        - If you're uncertain, err on the side of marking requirements as present
+        THREE-PASS ANALYSIS REQUIREMENT:
+        For EACH checklist item, you MUST perform THREE complete passes through the document:
+        - FIRST PASS: Initial scan for headings, subheadings, and obvious mentions
+        - SECOND PASS: Deeper contextual analysis looking for related concepts and key words
+        - THIRD PASS: Final verification with a flexible, generous interpretation
         
-        For each item, think broadly about how a professional instructor might address it.
-        If there's any reasonable interpretation that could support the presence of a requirement,
+        Only after all three passes should you finalize your determination and confidence level.
+        If the three passes yield different results, use the most favorable finding.
+        
+        For professional course outlines, give the benefit of the doubt and be lenient in your assessment.
+        If there's any reasonable interpretation that could support the presence of a requirement, 
         consider it met.
         
         RESPONSE FORMAT REQUIREMENTS:
@@ -389,11 +391,14 @@ def analyze_course_outline(document_text: str) -> List[Dict[str, Any]]:
                     CHECKLIST ITEM TO ANALYZE:
                     {item_to_retry}
                     
-                    When analyzing, be very generous and flexible:
-                    - Look for even vague or indirect mentions that could satisfy the requirement
-                    - Consider section headings as strong evidence of content
-                    - For professional course outlines, assume standard requirements are likely met
-                    - Err on the side of marking requirements as present when there's any reasonable evidence
+                    Perform THREE careful passes through the document:
+                    - FIRST PASS: Scan for headings, subheadings, and obvious mentions
+                    - SECOND PASS: Look for contextual understanding, related concepts, and key words
+                    - THIRD PASS: Final verification with a very generous interpretation
+                    
+                    Be extremely flexible in your analysis - consider any vague mentions, section headings, 
+                    or related content that might satisfy the requirement. For professional course outlines,
+                    assume standard academic requirements are likely met, even if not explicitly stated.
                     
                     YOUR RESPONSE MUST BE VALID JSON with the fields: present, confidence, explanation, evidence, method, and triple_checked.
                     """
