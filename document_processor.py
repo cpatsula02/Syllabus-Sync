@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _processed_pattern_items = set()
 
 # Maximum API timeout in seconds - long enough to ensure proper timeout for testing
-MAX_API_TIMEOUT = 60  # Increased from 50 to 60 seconds to match OpenAI client timeout
+MAX_API_TIMEOUT = 45  # Reduced from 60 to 45 seconds to prevent worker termination
 
 def extract_text_from_pdf(file_path: str) -> str:
     """Extract text content from a PDF file."""
@@ -1091,7 +1091,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     - Always returns properly structured data with proper types
     """
     # Maximum API timeout in seconds to ensure we don't hang indefinitely
-    MAX_API_TIMEOUT = 60  # Increased from 50 to 60 seconds to match OpenAI client timeout
+    MAX_API_TIMEOUT = 45  # Reduced from 60 to 45 seconds to prevent worker termination
     # Ensure we have the OS module imported
     import os
     
@@ -1284,7 +1284,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 # Set a timeout for OpenAI requests (longer timeout as requested by user)
                 logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
                 signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (60 seconds)
+                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (45 seconds)
                 
                 try:
                     # Try the OpenAI API with timeout protection

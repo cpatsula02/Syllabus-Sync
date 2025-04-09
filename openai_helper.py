@@ -4,6 +4,7 @@ import time
 import json
 import re
 import random
+import socket
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime, timedelta
 
@@ -189,17 +190,30 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             # Instead, we're ensuring OpenAI API works properly - not sleeping
             logging.warning("Using ACTUAL OpenAI API call - no sleep simulation")
             
-            # This code should never execute due to timeout, but is here for completeness
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=temperature,  # Use the provided temperature parameter
-                max_tokens=250,   # Reduced token output to speed up response and prevent timeouts
-                timeout=55  # Set to slightly less than our signal timeout (60 seconds) to ensure API error is captured properly
-            )
+            # Robust timeout handling with socket timeout protection
+            # Store original socket timeout
+            original_timeout = socket.getdefaulttimeout()
+            try:
+                # Set socket timeout to prevent hanging connections
+                socket.setdefaulttimeout(40)  # Set socket timeout slightly less than API timeout
+                
+                response = client.chat.completions.create(
+                    model=MODEL,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=temperature,  # Use the provided temperature parameter
+                    max_tokens=200,   # Further reduced token output to speed up response and prevent timeouts
+                    timeout=35  # Reduced timeout to prevent worker termination
+                )
+            except Exception as socket_error:
+                # Log the error
+                logger.error(f"OpenAI API connection error: {str(socket_error)}")
+                raise APIError(f"OpenAI API connection error: {str(socket_error)}")
+            finally:
+                # Always reset socket timeout, even if there's an error
+                socket.setdefaulttimeout(original_timeout)
             
             # Estimate response tokens
             response_text = response.choices[0].message.content

@@ -168,12 +168,20 @@ def index():
                     # Add link validation results to context
                     additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
 
-                    # OpenAI is always disabled to prevent timeouts, use traditional pattern matching
-                    results = {}
-
-                    # Skip API calls entirely to prevent timeouts
-                    logger.info("OpenAI analysis is disabled to prevent server timeouts. Using traditional pattern matching...")
+                    # Process results from OpenAI API exclusively - no pattern matching
                     results = analysis_results
+                    
+                    # Check if any results have the openai_api_error method
+                    api_errors = [item for item, result in results.items() 
+                                 if result.get('method') == 'openai_api_error']
+                    
+                    if api_errors:
+                        # Extract the first error message
+                        error_msg = results[api_errors[0]].get('explanation', 'Unknown OpenAI API error')
+                        logger.error(f"OpenAI API error detected: {error_msg}")
+                        flash(f"OpenAI API error: {error_msg}", 'error')
+                    else:
+                        logger.info("Successfully used OpenAI API for analysis")
 
                     # Update link validation results
                     for item in checklist_items:
@@ -205,16 +213,10 @@ def index():
                     logger.exception(f"API error during document processing: {str(api_error)}")
                     error_message = str(api_error)
 
-                    # Check if this is likely an API error
+                    # Check if this is likely an API error and display appropriate message
                     if "openai" in error_message.lower() or "api" in error_message.lower():
-                        flash("There was an issue connecting to the OpenAI API. Retrying with traditional pattern matching...")
-                        # Retry with no API calls (force fallback methods)
-                        checklist_items, analysis_results = process_documents(
-                            checklist_path, 
-                            outline_path, 
-                            api_attempts=0,  # Force fallback methods 
-                            additional_context=additional_context
-                        )
+                        flash(f"OpenAI API Error: {error_message}. Please verify your API key and try again.", "error")
+                        return redirect(request.url)
                     else:
                         # Re-raise for other types of errors
                         raise
