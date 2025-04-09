@@ -1258,12 +1258,21 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
 
             if ENABLE_OPENAI:
                 logging.info("Using OpenAI for analysis with fallback")
-                results = analyze_checklist_items_batch(
-                    checklist_items, 
-                    outline_text, 
-                    max_attempts=api_attempts, 
-                    additional_context=enhanced_context
-                )
+                try:
+                    ai_results = analyze_checklist_items_batch(
+                        checklist_items, 
+                        outline_text, 
+                        max_attempts=api_attempts, 
+                        additional_context=enhanced_context
+                    )
+                    # Check if we received a proper dictionary result
+                    if isinstance(ai_results, dict):
+                        results = ai_results
+                    else:
+                        logging.warning("OpenAI analysis returned invalid results, falling back to traditional pattern matching")
+                except Exception as e:
+                    logging.exception(f"Error in OpenAI processing: {str(e)}")
+                    logging.info("OpenAI API integration is disabled to prevent server timeouts")
             else:
                 # Use traditional pattern matching for all items
                 logging.info("Using traditional pattern matching for analysis")

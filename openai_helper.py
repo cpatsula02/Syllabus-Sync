@@ -200,12 +200,31 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
             
             # Parse and cache the response
             try:
-                result = json.loads(response_text)
+                # If response_text is already a dictionary, don't try to parse it
+                if isinstance(response_text, dict):
+                    result = response_text
+                else:
+                    try:
+                        result = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        logger.warning(f"API returned non-JSON response: {response_text[:100]}")
+                        return {"error": "Invalid API response format", "fallback_required": True}
+                    except:
+                        # Just in case we get any other errors, make sure we return a proper dictionary
+                        logger.warning(f"Error parsing response: {str(response_text)[:100]}")
+                        return {"error": "Response parsing error", "fallback_required": True}
+                
+                # Make sure result is a dictionary
+                if not isinstance(result, dict):
+                    logger.warning(f"API returned non-dictionary result: {type(result)}")
+                    return {"error": "Response is not a dictionary", "fallback_required": True}
+                    
+                # Cache and return the result
                 CACHE[cache_key] = result
                 return result
-            except json.JSONDecodeError:
-                logger.warning("API returned non-JSON response")
-                return {"error": "Invalid API response format", "fallback_required": True}
+            except Exception as e:
+                logger.warning(f"Unexpected error handling API response: {str(e)}")
+                return {"error": f"Response handling error: {str(e)}", "fallback_required": True}
                 
         except RateLimitError as e:
             logger.warning(f"Rate limit error on attempt {attempt+1}/{MAX_RETRIES}: {str(e)}")
@@ -562,10 +581,21 @@ def ai_analyze_item(item: str, document_text: str, additional_context: str = "",
         
         # Process the API response
         result = api_response  # The api_call_with_backoff already handles JSON parsing
+            
+        # Make sure the result is a dictionary
+        if not isinstance(result, dict):
+            logger.error(f"API returned non-dictionary response: {type(result)}")
+            return fallback_analyze_item(item, document_text, additional_context)
+            
+        # Check if we need to fall back due to an error
+        if result.get('fallback_required', False):
+            logger.warning(f"API response indicates fallback is required: {result.get('error', 'Unknown error')}")
+            return fallback_analyze_item(item, document_text, additional_context)
 
         # Ensure all required fields are present
         if not all(key in result for key in ["present", "confidence", "explanation", "evidence", "method"]):
-            raise ValueError("API response missing required fields")
+            logger.warning("API response missing required fields, using fallback")
+            return fallback_analyze_item(item, document_text, additional_context)
             
         # Post-processing validation
         evidence_text = result.get("evidence", "")
