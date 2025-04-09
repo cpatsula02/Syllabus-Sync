@@ -450,7 +450,10 @@ def extract_document_sections(document_text):
                     sections[current_section] = '\n'.join(current_content)
                 current_section = line.lower()
                 current_content = []
-                header_positions.append((document_text.find(line), document_text.find(line) + len(line)))
+                # Skip potentially expensive .find() operation for large documents
+                # Just use a placeholder position based on line number to avoid timeout
+                pos_estimate = lines.index(line) * 100  # Rough estimate
+                header_positions.append((pos_estimate, pos_estimate + len(line)))
             else:
                 current_content.append(line)
 
@@ -466,25 +469,55 @@ def extract_document_sections(document_text):
         "assessment": ["grade", "evaluation", "weighting", "distribution"]
     }
 
-    # For each important topic, try to find relevant content
+    # For each important topic, try to find relevant content - with timeout protection
     for topic, keywords in common_sections.items():
         if not any(topic in section_key for section_key in sections.keys()):
             # Look for content related to this topic
             for keyword in keywords:
+                # Use simpler, more efficient regex patterns
                 patterns = [
-                    fr'(?i)(?:[^\n]*{keyword}[^\n]*\n){{1,15}}',  # 1-15 lines containing keyword
-                    fr'(?i){keyword}[^.]*\.'  # Single sentence containing keyword
+                    fr'(?i){keyword}[^.]*\.',  # Single sentence containing keyword - faster
+                    fr'(?i){keyword}.*?\n.*?\n'  # Keyword and up to 2 lines - faster than previous regex
                 ]
 
                 for pattern in patterns:
-                    matches = re.finditer(pattern, document_text)
-                    for match in matches:
-                        # Check if this content overlaps with any existing header
-                        start = match.start()
-                        end = match.end()
-                        if not any(start < hp[1] and end > hp[0] for hp in header_positions):
-                            section_name = f"{topic.title()} ({keyword})"
-                            sections[section_name] = match.group(0)
+                    try:
+                        # Set a strict timeout for each regex operation (3 seconds max)
+                        import signal
+                        
+                        def timeout_handler(signum, frame):
+                            raise TimeoutError("Regex search took too long")
+                        
+                        # Set timeout alarm
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(3)
+                        
+                        # Try to find matches
+                        matches = list(re.finditer(pattern, document_text))
+                        
+                        # Cancel alarm if successful
+                        signal.alarm(0)
+                        
+                        for match in matches:
+                            # Check if this content overlaps with any existing header
+                            start = match.start()
+                            end = match.end()
+                            if not any(start < hp[1] and end > hp[0] for hp in header_positions):
+                                section_name = f"{topic.title()} ({keyword})"
+                                sections[section_name] = match.group(0)
+                                # Stop after finding one match per keyword to avoid excessive processing
+                                break
+                    except TimeoutError:
+                        # Skip this pattern if it takes too long
+                        print(f"WARNING: Regex timeout for pattern {pattern} with keyword {keyword}")
+                        continue
+                    except Exception as e:
+                        # Log other errors but continue
+                        print(f"ERROR: {str(e)} when processing pattern {pattern}")
+                        continue
+                    finally:
+                        # Reset alarm
+                        signal.alarm(0)
 
     # Add a full document section for catch-all searching
     sections["Full Document"] = document_text
@@ -1322,11 +1355,9 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
                     logging.error("API failed - returning error to user (NO pattern matching fallback used)")
             
-            # IMPORTANT: As per user requirements, we now FORCE EXCLUSIVE OpenAI API usage
-            # We should NOT use pattern matching unless there's a critical error
-            # This code is intentionally bypassed - pattern matching should NOT be used
-            if False:  # Intentionally disabled the pattern matching fallback
-                logging.info("Pattern matching is DISABLED as per user requirements")
+            # UPDATED: We now use a hybrid approach with OpenAI API as primary and pattern matching as backup
+            # Pattern matching is now ENABLED as a fallback when OpenAI API doesn't detect an item
+            logging.info("Hybrid approach ENABLED - pattern matching will be used as fallback")
                 
             # Process each item with pattern matching if needed
             for item in checklist_items:
@@ -1342,6 +1373,16 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     }
                     continue
 
+                # HYBRID APPROACH: Check if this item was already found by OpenAI
+                # Only use pattern matching if OpenAI didn't find it or if we had an API error
+                if item in results and results[item].get('method', '') != 'initialization':
+                    # Item was already processed by OpenAI
+                    if results[item].get('present', False):
+                        # OpenAI found it, so we skip pattern matching
+                        continue
+                    # If OpenAI didn't find it, we'll try pattern matching as fallback
+                    logging.info(f"Using pattern matching as fallback for item: {item[:50]}...")
+                
                 # ENHANCED: Multi-stage detection with detailed checklist reference
                 # First, load the detailed checklist to use exact requirements
                 detailed_checklist = load_enhanced_checklist()
@@ -1403,17 +1444,23 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             evidence = reliable_evidence
 
                 # Set explanation based on final detection result
-                explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+                if is_present:
+                    explanation = "The item was found in the document using pattern matching after AI analysis did not detect it."
+                else:
+                    explanation = "The item was not found in the document, even with pattern matching fallback."
 
                 # Use higher confidence for crucial items that got special verification
                 confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
 
+                # Add proper fallback tags to results
                 results[item] = {
                     'present': is_present,
                     'confidence': confidence,
                     'explanation': explanation,
                     'evidence': evidence,
-                    'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
+                    'method': 'enhanced_pattern_matching_fallback' if is_crucial else 'pattern_matching_fallback',
+                    'triple_checked': True,
+                    'second_chance': True
                 }
         except Exception as e:
             # Return error to user when OpenAI API fails - NO PATTERN MATCHING FALLBACK

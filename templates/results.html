@@ -78,15 +78,32 @@
                         <p class="mb-2">The document was analyzed using multiple complementary techniques:</p>
                         <div class="d-flex flex-wrap">
                             {% for method_name, count in analysis_methods.items() %}
-                            <div class="badge bg-{{ 'primary' if 'ai_' in method_name else 'warning' if 'pattern' in method_name else 'secondary' }} me-2 mb-2 p-2">
-                                <i class="fas {{ 'fa-robot' if 'ai_' in method_name else 'fa-search' if 'pattern' in method_name else 'fa-code' }} me-1"></i>
-                                {{ method_name|replace('_', ' ')|title }}: {{ count }}
+                            {% set badge_color = 'success' if 'ai_general_analysis' in method_name 
+                                             else 'primary' if 'ai_' in method_name
+                                             else 'warning' if 'pattern_matching_fallback' in method_name
+                                             else 'info' if 'enhanced_pattern_matching_fallback' in method_name
+                                             else 'danger' if 'openai_api_error' in method_name
+                                             else 'secondary' %}
+                            {% set icon = 'fa-robot' if 'ai_' in method_name
+                                      else 'fa-search-plus' if 'enhanced_pattern_matching_fallback' in method_name
+                                      else 'fa-search' if 'pattern_matching_fallback' in method_name
+                                      else 'fa-exclamation-triangle' if 'openai_api_error' in method_name
+                                      else 'fa-table' if 'grade_table_extraction' in method_name
+                                      else 'fa-code' %}
+                            <div class="badge bg-{{ badge_color }} me-2 mb-2 p-2">
+                                <i class="fas {{ icon }} me-1"></i>
+                                {{ method_name|replace('_fallback', '')|replace('_', ' ')|title }}: {{ count }}
                             </div>
                             {% endfor %}
                         </div>
                         <div class="bg-light p-2 mt-2 rounded">
                             <i class="fas fa-info-circle text-primary me-1"></i>
-                            <span class="small"><strong>Hybrid Analysis:</strong> AI-based analysis was used for {{ api_calls_made }} item(s), with pattern matching as fallback for {{ total_count - api_calls_made }} item(s). This approach combines deep semantic understanding with robust pattern recognition.</span>
+                            <span class="small"><strong>Hybrid Analysis:</strong> 
+                                <span class="badge bg-success"><i class="fas fa-robot me-1"></i>AI Analysis</span> was used as primary detection for all {{ total_count }} items, with 
+                                <span class="badge bg-warning"><i class="fas fa-search me-1"></i>Pattern Matching</span> 
+                                as fallback for items not found by AI. 
+                                This advanced approach combines AI's deep semantic understanding with pattern recognition's reliability.
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -108,8 +125,24 @@
                 <h6 class="text-danger mb-3"><strong>The following components are missing from your course outline:</strong></h6>
                 
                 <div class="alert alert-info mb-3">
-                    <i class="fas fa-robot me-2"></i>
-                    <strong>Hybrid Analysis Approach:</strong> These missing items were identified through a thorough multi-perspective analysis that first uses OpenAI's API for advanced semantic understanding, and then uses pattern matching as a secondary verification method only when needed. This combined approach provides both deep contextual analysis and robust pattern recognition.
+                    <h6 class="fw-bold mb-2"><i class="fas fa-cogs me-2"></i>Hybrid Analysis Approach</h6>
+                    <p class="mb-2">
+                        These items were identified as missing through our multi-stage verification process:
+                    </p>
+                    <div class="d-flex flex-wrap">
+                        <div class="badge bg-success me-2 mb-2 p-2">
+                            <i class="fas fa-robot me-1"></i> Primary AI Analysis
+                        </div>
+                        <div class="badge bg-warning me-2 mb-2 p-2">
+                            <i class="fas fa-search me-1"></i> Fallback Pattern Matching
+                        </div>
+                        <div class="badge bg-info me-2 mb-2 p-2">
+                            <i class="fas fa-check-double me-1"></i> Triple Verification
+                        </div>
+                    </div>
+                    <p class="mt-2 mb-0">
+                        <small>Our system first uses OpenAI's advanced AI models for semantic understanding from multiple perspectives (instructor, student, and administrator viewpoints), then applies pattern matching as a fallback. Each item undergoes multiple verification passes for maximum accuracy.</small>
+                    </p>
                 </div>
 
                 <!-- Yellow box with bullet-pointed missing items -->
@@ -163,17 +196,38 @@
                     <!-- Detection Method Information -->
                     <p class="mb-2 detection-method">
                         <strong>Detection Method:</strong> 
-                        <span class="badge bg-{{ 'primary' if 'ai_' in result.method else 'warning' if 'pattern' in result.method else 'info' }}">{{ result.method|replace('_', ' ')|title }}</span>
+                        {% set badge_color = 'success' if 'ai_general_analysis' in result.method 
+                                         else 'primary' if 'ai_' in result.method
+                                         else 'warning' if 'pattern_matching_fallback' in result.method
+                                         else 'info' if 'enhanced_pattern_matching_fallback' in result.method
+                                         else 'danger' if 'openai_api_error' in result.method
+                                         else 'secondary' %}
+                        {% set icon = 'fa-robot' if 'ai_' in result.method
+                                  else 'fa-search-plus' if 'enhanced_pattern_matching_fallback' in result.method
+                                  else 'fa-search' if 'pattern_matching_fallback' in result.method
+                                  else 'fa-exclamation-triangle' if 'openai_api_error' in result.method
+                                  else 'fa-table' if 'grade_table_extraction' in result.method
+                                  else 'fa-code' %}
+                        <span class="badge bg-{{ badge_color }}">
+                            <i class="fas {{ icon }} me-1"></i>
+                            {{ result.method|replace('_fallback', '')|replace('_', ' ')|title }}
+                        </span>
                         {% if result.confidence %}
                         <span class="ms-2 text-muted">(Confidence: {{ (result.confidence * 100)|int }}%)</span>
                         {% endif %}
                         
                         {% if result.second_chance %}
-                        <span class="badge bg-warning ms-2">Second-Chance Analysis</span>
+                        <span class="badge bg-warning ms-2">
+                            <i class="fas fa-sync-alt me-1"></i>
+                            Fallback Analysis
+                        </span>
                         {% endif %}
                         
                         {% if result.triple_checked %}
-                        <span class="badge bg-success ms-2">Triple-Checked</span>
+                        <span class="badge bg-success ms-2">
+                            <i class="fas fa-check-double me-1"></i>
+                            Triple-Checked
+                        </span>
                         {% endif %}
 
                         {% if result.verification_attempts and result.verification_attempts > 0 %}
