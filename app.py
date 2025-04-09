@@ -676,11 +676,14 @@ def download_pdf():
         # Read the detailed checklist file
         detailed_checklist_items = []
         try:
+            print("Opening enhanced_checklist.txt file...")
             with open('enhanced_checklist.txt', 'r') as file:
                 content = file.read().strip()
+                print(f"Read {len(content)} characters from the file")
                 # Split by numbered list items (number followed by a period at the start of a line)
                 detailed_checklist_items = []
                 lines = content.split('\n')
+                print(f"Split content into {len(lines)} lines")
                 current_item = ""
                 
                 for line in lines:
@@ -689,7 +692,9 @@ def download_pdf():
                         # Save the previous item if it exists
                         if current_item:
                             detailed_checklist_items.append(current_item.strip())
+                            print(f"Added item: {current_item[:50]}...")
                         current_item = line
+                        print(f"Started new item: {line[:50]}...")
                     else:
                         # Continue with the current item
                         current_item += "\n" + line
@@ -697,13 +702,21 @@ def download_pdf():
                 # Add the last item
                 if current_item:
                     detailed_checklist_items.append(current_item.strip())
+                    print(f"Added final item: {current_item[:50]}...")
                     
                 print(f"Loaded {len(detailed_checklist_items)} detailed checklist items")
+                if detailed_checklist_items:
+                    print(f"First item: {detailed_checklist_items[0][:100]}")
+                    print(f"Last item: {detailed_checklist_items[-1][:100]}")
                 
             # Add the detailed checklist table to the PDF
+            print("Calling add_detailed_checklist_table...")
             add_detailed_checklist_table(pdf, analysis_data, detailed_checklist_items)
+            print("Successfully added detailed checklist table")
         except Exception as e:
             print(f"Error adding detailed checklist table: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             # Continue with the rest of the PDF even if this fails
         
         # Add a new page for the Quick Overview

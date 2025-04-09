@@ -1,6 +1,10 @@
 import os
 import re
+import logging
 from fpdf import FPDF
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def add_detailed_checklist_table(pdf, analysis_data, detailed_checklist_items):
     """
@@ -11,6 +15,9 @@ def add_detailed_checklist_table(pdf, analysis_data, detailed_checklist_items):
         analysis_data: The analysis data dictionary
         detailed_checklist_items: List of detailed checklist items with full descriptions
     """
+    logger.debug(f"Starting add_detailed_checklist_table with {len(detailed_checklist_items)} items")
+    logger.debug(f"PDF object type: {type(pdf)}")
+    logger.debug(f"First checklist item: {detailed_checklist_items[0] if detailed_checklist_items else 'No items'}")
     # Add a new page for the detailed checklist evaluation
     pdf.add_page()
     pdf.set_font('DejaVu', 'B', 16)
