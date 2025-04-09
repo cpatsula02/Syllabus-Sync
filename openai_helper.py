@@ -370,12 +370,12 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 if "evidence" not in result:
                     result["evidence"] = ""
                 
-                # Add method field if missing - Always indicate OpenAI API use
+                # Add method field if missing - Always use ai_general_analysis
                 if "method" not in result:
-                    result["method"] = "openai_api_analysis"
-                elif "ai_" in result["method"] and "openai" not in result["method"].lower():
-                    # Update any AI methods to explicitly show OpenAI usage
-                    result["method"] = "openai_" + result["method"]
+                    result["method"] = "ai_general_analysis"
+                else:
+                    # Always override the method to be consistent
+                    result["method"] = "ai_general_analysis"
                 
                 # Cache and return the result
                 CACHE[cache_key] = result
@@ -1096,7 +1096,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                     'confidence': 0.0,  # Zero confidence
                     'explanation': "OpenAI API analysis failed. As requested, we're not using pattern matching fallback.",
                     'evidence': "API error occurred - exclusive API verification was requested.",
-                    'method': 'openai_api_error'  # Indicate the error method, not fallback
+                    'method': 'ai_general_analysis'  # Consistent method name across all responses
                 }
                 # Still track it for reporting purposes as API failures
                 api_failure_count += 1
@@ -1118,7 +1118,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 'confidence': 0.0,  # Zero confidence
                 'explanation': "Item not processed by OpenAI API. As requested, we're not using pattern matching fallback.",
                 'evidence': "Item was not processed - exclusive API verification was requested.",
-                'method': 'openai_api_missing'  # Indicate it was missing from API processing
+                'method': 'ai_general_analysis'  # Consistent method name across all responses
             }
             # Still track it for reporting purposes as API failures
             api_failure_count += 1
@@ -1149,7 +1149,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 'confidence': 0,
                 'explanation': f"Error: expected dictionary but got {type(value).__name__}",
                 'evidence': str(value)[:100] if value else "",
-                'method': 'openai_api_error'
+                'method': 'ai_general_analysis'
             }
         else:
             # Value is already a dict
