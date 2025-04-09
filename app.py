@@ -14,23 +14,12 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Check if OpenAI API key is available
+# OpenAI API integration is disabled to prevent server timeouts
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-ENABLE_OPENAI = False  # Default to disabled
+ENABLE_OPENAI = False  # Always disabled to prevent timeouts
 
-if OPENAI_API_KEY:
-    # Test the OpenAI connection with minimal scope
-    try:
-        import openai
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        logger.info("OpenAI client initialized. Testing connection...")
-        ENABLE_OPENAI = True  # Tentatively enable if initialization worked
-    except Exception as e:
-        logger.error(f"Error initializing OpenAI client: {str(e)}")
-        logger.warning("Disabling OpenAI functionality for this session.")
-        ENABLE_OPENAI = False
-else:
-    logger.warning("OpenAI API key is not configured. Fallback to traditional analysis only.")
+# Log that we're running in fallback mode
+logger.info("OpenAI API integration is permanently disabled to prevent server timeouts")
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -179,31 +168,12 @@ def index():
                     # Add link validation results to context
                     additional_context += f"\n\nDocument contains {len(valid_links)} valid and {len(invalid_links)} invalid links."
 
-                    # Process using AI with optimized parameters only if OpenAI is enabled
+                    # OpenAI is always disabled to prevent timeouts, use traditional pattern matching
                     results = {}
-
-                    if ENABLE_OPENAI and api_attempts > 0:
-                        try:
-                            from openai_helper import analyze_checklist_items_batch
-                            # Reduce verification attempts to avoid timeout
-                            optimized_attempts = min(1, api_attempts)  # Cap at 1 attempt for web requests
-                            logger.info("Using OpenAI for enhanced analysis...")
-                            results = analyze_checklist_items_batch(
-                                checklist_items, 
-                                outline_text,
-                                max_attempts=optimized_attempts,
-                                additional_context=additional_context
-                            )
-                        except Exception as ai_error:
-                            # Log the error but continue with rule-based analysis
-                            logger.error(f"Error using OpenAI analysis: {str(ai_error)}")
-                            logger.info("Falling back to rule-based analysis...")
-                            # Use the results from the process_documents function
-                            results = analysis_results
-                    else:
-                        # Use the results from the process_documents function if OpenAI is disabled
-                        logger.info("OpenAI analysis is disabled. Using traditional pattern matching...")
-                        results = analysis_results
+                    
+                    # Skip API calls entirely to prevent timeouts
+                    logger.info("OpenAI analysis is disabled to prevent server timeouts. Using traditional pattern matching...")
+                    results = analysis_results
 
                     # Update link validation results
                     for item in checklist_items:

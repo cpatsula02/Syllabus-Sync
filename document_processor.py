@@ -1003,13 +1003,13 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
             
-            # Check if OpenAI is enabled in app.py
-            from app import ENABLE_OPENAI
+            # OpenAI is always disabled to prevent timeouts
+            ENABLE_OPENAI = False
             
             results = {}
             
-            # Use OpenAI if enabled and requested
-            if ENABLE_OPENAI and api_attempts > 0:
+            # Skip API calls to prevent timeouts
+            if False:  # Never use OpenAI API to prevent server timeouts
                 logging.info("Using OpenAI for analysis with fallback")
                 results = analyze_checklist_items_batch(
                     checklist_items, 
