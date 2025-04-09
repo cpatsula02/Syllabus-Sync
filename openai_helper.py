@@ -64,7 +64,10 @@ if openai_available:
             try:
                 # Force update the environment variable to ensure it's available
                 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-                client = OpenAI(api_key=OPENAI_API_KEY, timeout=300.0)
+                
+                # Reduce the timeout value for initialization only (5 seconds is often too tight)
+                client = OpenAI(api_key=OPENAI_API_KEY, timeout=60.0)
+                
                 # Make a tiny API call to validate the key works
                 logging.info("Validating OpenAI API key with a simple model call...")
                 try:
@@ -73,7 +76,7 @@ if openai_available:
                         model="gpt-3.5-turbo-0125",
                         messages=[{"role": "user", "content": "Respond with the word 'valid'"}],
                         max_tokens=5,
-                        timeout=5
+                        timeout=30  # Increase initial validation timeout
                     )
                     if response and response.choices and response.choices[0].message:
                         logging.info(f"OpenAI API key validated successfully!")
@@ -247,6 +250,8 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 print(f"Raw prompt: {json_prompt[:200]}...")
                 
                 # Use the response_format parameter to force JSON, which is the most reliable way
+                # We'll keep a shorter timeout here (60 seconds) to prevent hanging the server
+                # Large timeouts can cause Gunicorn worker issues in production environments
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[
@@ -255,8 +260,8 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                     ],
                     response_format={"type": "json_object"},  # Force JSON format - critical!
                     temperature=temperature,
-                    max_tokens=150,   # Keep responses short
-                    timeout=300  # 300-second timeout (5 minutes) to allow for completion
+                    max_tokens=100,   # Keep responses shorter for faster completion
+                    timeout=60  # 60-second timeout to avoid worker killing
                 )
             except Exception as api_error:
                 # Log the error more clearly
@@ -1040,19 +1045,19 @@ def analyze_checklist_item_with_retry(item: str, document_text: str, max_attempt
                 OPENAI_API_KEY = "sk-private-key-do-not-share"
                 logging.warning("Using fallback API key in analyze_checklist_item_with_retry")
             
-            api_client = OpenAI(api_key=OPENAI_API_KEY, timeout=300.0)
+            api_client = OpenAI(api_key=OPENAI_API_KEY, timeout=60.0)
             
             # Make actual API call with error handling
             response = api_client.chat.completions.create(
-                model="gpt-3.5-turbo",  # Using standard model for single-item processing
+                model="gpt-3.5-turbo-0125",  # Using consistent model with the rest of the application
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,  # Slightly increased to encourage generous interpretations
-                max_tokens=500,   # Reduced tokens for quicker completion
-                timeout=300.0      # Extended timeout for individual item analysis (300 seconds / 5 minutes)
+                max_tokens=100,   # Reduced tokens for quicker completion and to avoid timeout
+                timeout=60.0      # 60-second timeout to avoid worker killing
             )
             
             # Parse the response
