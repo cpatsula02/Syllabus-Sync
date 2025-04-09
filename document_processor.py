@@ -1241,8 +1241,8 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             
             # Use OpenAI if available
             import os
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    ENABLE_OPENAI = bool(OPENAI_API_KEY)
+            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+            ENABLE_OPENAI = bool(OPENAI_API_KEY)
             
             results = {}
             
