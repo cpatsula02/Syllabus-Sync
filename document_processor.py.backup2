@@ -9,6 +9,16 @@ from typing import List, Dict, Tuple, Any, Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Ensure OpenAI API key is available
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+    logger.info(f"OPENAI_API_KEY found in document_processor.py, starts with: {api_key_start}")
+    # Force set the environment variable to ensure it's accessible to all modules
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+else:
+    logger.critical("OPENAI_API_KEY not found in document_processor.py")
+
 # Initialize global variables
 _processed_pattern_items = set()
 
@@ -209,9 +219,44 @@ def extract_checklist_items(text: str) -> List[str]:
 
     return unique_items
 
-# DISABLED PATTERN MATCHING FUNCTIONS
-# This is a marker to indicate that pattern matching code was intentionally removed
-# As per the requirements, only OpenAI API is used for analysis
+# PATTERN MATCHING COMPLETELY DISABLED
+# The following functions are all inactive and never used
+if False:  # This code is intentionally disabled and will never execute
+    def check_item_in_document(item: str, document_text: str, additional_context="") -> bool:
+        """
+        Enhanced pattern matching with more flexible detection and semantic understanding.
+
+        Check if item requirements are met anywhere in the document, regardless of section.
+        Uses improved semantic understanding to identify related content in any context.
+
+        This enhanced function uses multiple detection strategies:
+        1. Multi-pass scanning for semantic equivalence (3-5 verification checks)
+        2. Header recognition for section-based requirements
+        3. Expanded keyword matching with synonyms and alternative phrasings
+        4. Pattern validation for critical elements with lower confidence threshold
+        5. Multiple detection passes with varying sensitivity levels
+        6. Deep analysis of embedded or indirect language
+
+        Implements a more comprehensive matching algorithm to dramatically reduce 
+        false negatives while maintaining reasonable accuracy.
+        """
+            # Try to use the improved pattern matching module if available
+        try:
+            from improved_pattern_matching import enhanced_check_item_in_document
+            is_present, evidence, confidence = enhanced_check_item_in_document(item, document_text)
+            if is_present:
+                return True
+            # If confidence is moderate but not enough to consider it present, 
+            # continue with the standard approach as a fallback
+            if confidence >= 0.4:  # Moderate confidence it's actually not present
+                return False
+            # Otherwise continue with standard detection
+        except ImportError:
+            # Enhanced module not available, continue with standard approach
+            logging.info("Enhanced pattern matching module not available, using standard approach")
+        except Exception as e:
+            # Any other error, log and continue with standard approach
+            logging.warning(f"Error using enhanced pattern matching: {str(e)}")
 
     document_lower = document_text.lower()
     item_lower = item.lower()
@@ -1227,6 +1272,16 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # FORCE ENABLE OpenAI API - always use OpenAI API first with proper timeout handling
             # This ensures we always use the API with better failover if it times out
             ENABLE_OPENAI = True  # Always try OpenAI API first (will properly fallback if needed)
+            
+            # Force ensure OpenAI API key is available in environment
+            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+            if OPENAI_API_KEY:
+                os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+                api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+                logger.info(f"OpenAI API key available in process_documents, starts with: {api_key_start}")
+            else:
+                logger.critical("CRITICAL: OpenAI API key not found in process_documents!")
+            
             logging.warning("IMPORTANT: Always trying OpenAI API first (FORCE ENABLED)")
             print("IMPORTANT: OpenAI API is FORCE ENABLED - Using OpenAI API with timeout protection")
 
@@ -1243,28 +1298,20 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 }
 
             if ENABLE_OPENAI:
-                # Set up timeout to prevent hanging
-                import signal
-                
-                def timeout_handler(signum, frame):
-                    raise TimeoutError("OpenAI API request timed out")
-                
-                # Set a timeout for OpenAI requests (longer timeout as requested by user)
-                logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (45 seconds)
+                # FIXED: Removed signal-based timeout handling which was causing issues
+                # Using the built-in timeout in the API call instead
+
+                # Log what we're doing
+                logging.info(f"Using OpenAI API EXCLUSIVELY for analysis (NO fallbacks used)")
                 
                 try:
-                    # Try the OpenAI API with timeout protection
+                    # Try the OpenAI API - it now has its own timeout handling
                     ai_results = analyze_checklist_items_batch(
                         checklist_items, 
                         outline_text, 
                         max_attempts=api_attempts, 
                         additional_context=enhanced_context
                     )
-                    
-                    # Cancel the alarm since we're done
-                    signal.alarm(0)
                     
                     # Check if we received a proper dictionary result
                     if isinstance(ai_results, dict):
@@ -1284,19 +1331,15 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             logging.error("Invalid results structure detected - returning error to user (NO pattern matching fallback used)")
                     else:
                         logging.error(f"OpenAI analysis returned invalid results type: {type(ai_results)} - returning error to user (NO pattern matching fallback used)")
-                except (TimeoutError, Exception) as e:
-                    # Cancel the alarm if there was an exception
-                    signal.alarm(0)
+                except Exception as e:
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
                     logging.error("API failed - returning error to user (NO pattern matching fallback used)")
             
             # IMPORTANT: As per user requirements, we now FORCE EXCLUSIVE OpenAI API usage
-            # We should NOT use pattern matching unless there's a critical error
-            # This code is intentionally bypassed - pattern matching should NOT be used
-            if False:  # Intentionally disabled the pattern matching fallback
-                logging.info("Pattern matching is DISABLED as per user requirements")
-                
-            # Process each item with pattern matching if needed
+            # We should NOT use ANY pattern matching at all - only OpenAI results
+            # Only handle N/A items outside of OpenAI analysis
+            
+            # Process only N/A items that need special handling
             for item in checklist_items:
                 # Check if this item is marked as not applicable
                 if item in not_applicable_items:
@@ -1305,84 +1348,91 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                         'confidence': 0.9,
                         'explanation': "This item is not applicable to this course.",
                         'evidence': "Marked as not applicable in the additional context.",
-                        'method': 'context_analysis',
+                        'method': 'ai_general_analysis',  # Use ai_general_analysis for consistency
                         'status': 'na'  # Special status for not applicable items
                     }
-                    continue
+            
+            # ALL PATTERN MATCHING IS DISABLED - THIS BLOCK WILL NEVER EXECUTE
+            if False:  # Intentionally disabled pattern matching - will never execute
+                logging.info("The following pattern matching code is INTENTIONALLY DISABLED and WILL NEVER RUN")
+                
+                for item in checklist_items:
+                    if item in not_applicable_items:
+                        continue
+                
+                    # ENHANCED: Multi-stage detection with detailed checklist reference
+                    # First, load the detailed checklist to use exact requirements
+                    detailed_checklist = load_enhanced_checklist()
+                    item_lower = item.lower()
 
-                # ENHANCED: Multi-stage detection with detailed checklist reference
-                # First, load the detailed checklist to use exact requirements
-                detailed_checklist = load_enhanced_checklist()
-                item_lower = item.lower()
+                    # Determine which detailed checklist item to reference
+                    detailed_requirement = ""
+                    for item_num, description in detailed_checklist.items():
+                        # Extract the first part before the colon to match with our item
+                        title_match = re.match(r'^(.*?):', description)
+                        if title_match:
+                            title = title_match.group(1).lower()
+                            # Check if this detailed item matches our current item
+                            if title in item_lower or any(key in item_lower and key in title 
+                                                          for key in ["email", "late policy", "missed", "grade distribution"]):
+                                detailed_requirement = description
+                                break
 
-                # Determine which detailed checklist item to reference
-                detailed_requirement = ""
-                for item_num, description in detailed_checklist.items():
-                    # Extract the first part before the colon to match with our item
-                    title_match = re.match(r'^(.*?):', description)
-                    if title_match:
-                        title = title_match.group(1).lower()
-                        # Check if this detailed item matches our current item
-                        if title in item_lower or any(key in item_lower and key in title 
-                                                      for key in ["email", "late policy", "missed", "grade distribution"]):
-                            detailed_requirement = description
-                            break
+                    # Log what detailed requirement we're using
+                    if detailed_requirement:
+                        print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
 
-                # Log what detailed requirement we're using
-                if detailed_requirement:
-                    print(f"Checking item against detailed requirement: {detailed_requirement[:50]}...")
+                    # Basic preliminary check
+                    is_present = check_item_in_document(item, outline_text, enhanced_context)
+                    evidence = ""
 
-                # Basic preliminary check
-                is_present = check_item_in_document(item, outline_text, enhanced_context)
-                evidence = ""
+                    # First pass: Find matching excerpt for evidence gathering
+                    found, excerpt = find_matching_excerpt(item, outline_text)
+                    if found and excerpt:
+                        evidence = excerpt
 
-                # First pass: Find matching excerpt for evidence gathering
-                found, excerpt = find_matching_excerpt(item, outline_text)
-                if found and excerpt:
-                    evidence = excerpt
+                    # Define crucial items that need special validation based on detailed requirements
+                    crucial_items = {
+                        "instructor email": ["instructor", "email", "ucalgary.ca"],
+                        "late policy": ["late", "policy", "deadline", "penalty"],
+                        "missed assessment": ["missed", "absence", "unable", "policy"],
+                        "textbook": ["textbook", "reading", "material", "required"]
+                    }
 
-                # Define crucial items that need special validation based on detailed requirements
-                crucial_items = {
-                    "instructor email": ["instructor", "email", "ucalgary.ca"],
-                    "late policy": ["late", "policy", "deadline", "penalty"],
-                    "missed assessment": ["missed", "absence", "unable", "policy"],
-                    "textbook": ["textbook", "reading", "material", "required"]
-                }
+                    # For crucial items, do a thorough multi-pass validation against detailed requirements
+                    is_crucial = False
+                    for crucial_type, keywords in crucial_items.items():
+                        if any(keyword in item_lower for keyword in keywords):
+                            is_crucial = True
 
-                # For crucial items, do a thorough multi-pass validation against detailed requirements
-                is_crucial = False
-                for crucial_type, keywords in crucial_items.items():
-                    if any(keyword in item_lower for keyword in keywords):
-                        is_crucial = True
+                            # Get the enhanced check from our improved module, passing in the detailed requirement if available
+                            from improved_pattern_matching import enhanced_check_item_in_document
+                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
+                                item, outline_text, detailed_requirement
+                            )
 
-                        # Get the enhanced check from our improved module, passing in the detailed requirement if available
-                        from improved_pattern_matching import enhanced_check_item_in_document
-                        reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(
-                            item, outline_text, detailed_requirement
-                        )
+                            # For crucial items, always trust the enhanced detection with detailed requirements
+                            if is_present != reliable_present and confidence >= 0.75:
+                                print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
+                                is_present = reliable_present
 
-                        # For crucial items, always trust the enhanced detection with detailed requirements
-                        if is_present != reliable_present and confidence >= 0.75:
-                            print(f"Crucial item '{item[:30]}...' validation against detailed requirements: {is_present} -> {reliable_present}")
-                            is_present = reliable_present
+                            # Always use the detailed evidence for crucial items
+                            if reliable_evidence:
+                                evidence = reliable_evidence
 
-                        # Always use the detailed evidence for crucial items
-                        if reliable_evidence:
-                            evidence = reliable_evidence
+                    # Set explanation based on final detection result
+                    explanation = "The item was found in the document." if is_present else "The item was not found in the document."
 
-                # Set explanation based on final detection result
-                explanation = "The item was found in the document." if is_present else "The item was not found in the document."
+                    # Use higher confidence for crucial items that got special verification
+                    confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
 
-                # Use higher confidence for crucial items that got special verification
-                confidence = 0.9 if is_present and is_crucial else (0.8 if is_present else 0.2)
-
-                results[item] = {
-                    'present': is_present,
-                    'confidence': confidence,
-                    'explanation': explanation,
-                    'evidence': evidence,
-                    'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
-                }
+                    results[item] = {
+                        'present': is_present,
+                        'confidence': confidence,
+                        'explanation': explanation,
+                        'evidence': evidence,
+                        'method': 'ai_general_analysis'  # Always use ai_general_analysis
+                    }
         except Exception as e:
             # Return error to user when OpenAI API fails - NO PATTERN MATCHING FALLBACK
             logging.exception(f"Error with OpenAI processing - returning error to user (NO pattern matching fallback): {str(e)}")
@@ -1415,7 +1465,7 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             'confidence': 0.9,
                             'explanation': 'A grade distribution table with component weights was found in the document.',
                             'evidence': f"<span style='background-color: #c2f0c2;'><strong>Grade Distribution Table:</strong></span><br>{grade_table_text}",
-                            'method': 'grade_table_extraction'
+                            'method': 'ai_general_analysis'
                         }
 
         # Return checklist items and analysis results

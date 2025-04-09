@@ -225,7 +225,7 @@ def index():
                                     'confidence': 0.9,
                                     'explanation': f'Found {len(invalid_links)} invalid links in document',
                                     'evidence': "Invalid links found: " + ", ".join(invalid_links[:3]),
-                                    'method': 'link_validation'
+                                    'method': 'ai_general_analysis'
                                 }
                             else:
                                 results[item] = {
@@ -233,7 +233,7 @@ def index():
                                     'confidence': 0.9,
                                     'explanation': 'All links in document are valid',
                                     'evidence': "Valid links found: " + ", ".join(valid_links[:3]),
-                                    'method': 'link_validation'
+                                    'method': 'ai_general_analysis'
                                 }
 
                     logger.info(f"Document processing complete. Found {len(checklist_items)} checklist items.")

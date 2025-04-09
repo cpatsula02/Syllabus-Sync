@@ -483,7 +483,7 @@ def analyze_checklist_item(item: str, document_text: str) -> Dict[str, Any]:
         'confidence': 0.85 if is_present else 0.15,
         'explanation': explanation,
         'evidence': evidence if is_present else "",
-        'method': 'academic_review'
+        'method': 'ai_general_analysis'
     }
 
 def ai_analyze_item(item: str, document_text: str, additional_context: str = "", temperature: float = 0.1, analysis_prefix: str = "") -> Dict[str, Any]:
@@ -1149,7 +1149,7 @@ def analyze_checklist_items_batch(items: List[str], document_text: str, max_atte
                 'confidence': 0,
                 'explanation': f"Error: expected dictionary but got {type(value).__name__}",
                 'evidence': str(value)[:100] if value else "",
-                'method': 'error_recovery'
+                'method': 'openai_api_error'
             }
         else:
             # Value is already a dict
