@@ -343,16 +343,12 @@ def index():
                                     api_calls_made=api_calls_made,
                                     max_attempts=api_attempts)
 
-            except Exception as e:
-                logger.exception(f"Error processing documents: {str(e)}")
-                flash(f'An error occurred: {str(e)}')
-                return redirect(request.url)
             except TimeoutError:
                 flash("Request timed out. Please try again with a smaller file or fewer items.")
                 return redirect(request.url)
             except Exception as e:
-                app.logger.error(f"Unexpected error: {str(e)}")
-                flash(f"An error occurred: {str(e)}")
+                logger.exception(f"Error processing documents: {str(e)}")
+                flash(f'An error occurred: {str(e)}')
                 return redirect(request.url)
             finally:
                 # Cleanup
@@ -364,8 +360,8 @@ def index():
                 except Exception as e:
                     app.logger.error(f"Error during cleanup: {str(e)}")
 
-    # For GET requests, simply render the template
-    return render_template('index.html')
+        # For GET requests, simply render the template
+        return render_template('index.html')
 
 @app.route('/get-match-details', methods=['GET'])
 def get_match_details():

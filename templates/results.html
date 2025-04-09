@@ -122,58 +122,6 @@
                         {% endfor %}
                     </ul>
                 </div>
-
-                <div class="accordion mb-3" id="missingItemsAccordion">
-                    {% for item in missing_items %}
-                    <div class="accordion-item border-{{ 'danger' if item in grade_table_items else 'warning' }} mb-2">
-                        <h2 class="accordion-header" id="heading{{ loop.index }}">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
-                                    data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" 
-                                    aria-controls="collapse{{ loop.index }}">
-                                <i class="fas {% if item in grade_table_items %}fa-table text-danger{% else %}fa-times-circle text-warning{% endif %} me-2"></i>
-                                <strong>{{ item }}</strong>
-                                {% if item in grade_table_items %}
-                                <span class="badge bg-danger ms-2">High Priority</span>
-                                {% endif %}
-                            </button>
-                        </h2>
-                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" 
-                             aria-labelledby="heading{{ loop.index }}" data-bs-parent="#missingItemsAccordion">
-                            <div class="accordion-body">
-                                <p>
-                                    <strong>Why it's important:</strong> 
-                                    {% if "grade" in item.lower() or "assessment" in item.lower() or "weight" in item.lower() %}
-                                        Students need clear information about how they will be evaluated and what percentage each component contributes to their final grade.
-                                    {% elif "objective" in item.lower() or "outcome" in item.lower() %}
-                                        Learning objectives help students understand what knowledge and skills they should gain from the course.
-                                    {% elif "policy" in item.lower() and "late" in item.lower() %}
-                                        A late policy informs students about consequences for submitting assignments after deadlines.
-                                    {% elif "miss" in item.lower() and ("exam" in item.lower() or "assessment" in item.lower()) %}
-                                        Students need to know the procedure if they miss an exam or assessment due to illness or emergency.
-                                    {% elif "instructor" in item.lower() and "contact" in item.lower() %}
-                                        Contact information allows students to reach the instructor with questions or concerns about the course.
-                                    {% elif "academic" in item.lower() and ("integrity" in item.lower() or "misconduct" in item.lower()) %}
-                                        Academic integrity statements clarify expectations about plagiarism and other forms of academic dishonesty.
-                                    {% elif "accommodation" in item.lower() %}
-                                        Accommodation information ensures students with disabilities know how to request needed support.
-                                    {% elif "schedule" in item.lower() or "calendar" in item.lower() %}
-                                        A course schedule helps students plan their semester and prepare for upcoming assessments.
-                                    {% else %}
-                                        This component is required by institutional standards to ensure a comprehensive course outline.
-                                    {% endif %}
-                                </p>
-                                <div class="d-grid">
-                                    <button class="btn btn-sm btn-outline-primary missing-details-btn" 
-                                            onclick="loadMatchDetails(this)" 
-                                            data-item="{{ item }}">
-                                        <i class="fas fa-search me-1"></i>View Further Analysis
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
             </div>
         </div>
     </div>
