@@ -30,7 +30,16 @@ except ImportError:
     class APITimeoutError(Exception): pass
 
 # Configure OpenAI with API key
+# Get API key from environment and make sure it's accessible to this module
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# Extra logging to help diagnose API key issues
+if OPENAI_API_KEY:
+    api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+    logging.info(f"OPENAI_API_KEY found in openai_helper.py, starts with: {api_key_start}")
+else:
+    logging.critical("OPENAI_API_KEY not found in openai_helper.py")
+
 # Create client only if API key is available and OpenAI library is available
 client = None
 if openai_available:
@@ -40,8 +49,27 @@ if openai_available:
             logging.critical("This application REQUIRES a valid OpenAI API key to function correctly!")
         else:
             try:
+                # Force update the environment variable to ensure it's available
+                os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
                 client = OpenAI(api_key=OPENAI_API_KEY)
-                # Don't make an API call here - just initialize the client
+                # Make a tiny API call to validate the key works
+                logging.info("Validating OpenAI API key with a simple model call...")
+                try:
+                    # Quick test with minimal tokens
+                    response = client.chat.completions.create(
+                        model="gpt-3.5-turbo-0125",
+                        messages=[{"role": "user", "content": "Respond with the word 'valid'"}],
+                        max_tokens=5,
+                        timeout=5
+                    )
+                    if response and response.choices and response.choices[0].message:
+                        logging.info(f"OpenAI API key validated successfully!")
+                    else:
+                        logging.warning("OpenAI API key validation: response structure unexpected")
+                except Exception as validate_err:
+                    logging.error(f"OpenAI API key validation failed: {str(validate_err)}")
+                    
+                # Don't make further API calls here - just initialize the client
                 logging.info("OpenAI client initialized. Advanced AI analysis is available.")
             except Exception as e:
                 logging.critical(f"CRITICAL ERROR: Failed to initialize OpenAI client: {str(e)}")

@@ -22,6 +22,13 @@ ENABLE_OPENAI = True  # CRITICAL: Force OpenAI API to be used exclusively (no pa
 OPENAI_API_STATUS = "unavailable"
 OPENAI_API_STATUS_MESSAGE = ""
 
+# Explicitly log the first 5 characters of the API key (for debugging, to confirm we have a key)
+if OPENAI_API_KEY:
+    api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+    logger.info(f"OPENAI_API_KEY found in environment, starts with: {api_key_start}")
+else:
+    logger.critical("OPENAI_API_KEY not found in environment")
+
 # Add API key validation for proper format (for future debugging)
 if OPENAI_API_KEY:
     # Check if key has valid format (starts with sk- and has sufficient length)
@@ -33,6 +40,8 @@ if OPENAI_API_KEY:
         logger.info("OpenAI API key validated with correct format")
         OPENAI_API_STATUS = "available"
         OPENAI_API_STATUS_MESSAGE = "Valid OpenAI API key detected"
+        # Force set the environment variable to ensure it's accessible to all modules
+        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 else:
     logger.critical("CRITICAL ERROR: No OpenAI API key found in environment variables")
     logger.critical("This application REQUIRES a valid OPENAI_API_KEY to function correctly")

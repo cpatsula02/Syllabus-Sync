@@ -9,6 +9,16 @@ from typing import List, Dict, Tuple, Any, Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Ensure OpenAI API key is available
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+    logger.info(f"OPENAI_API_KEY found in document_processor.py, starts with: {api_key_start}")
+    # Force set the environment variable to ensure it's accessible to all modules
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+else:
+    logger.critical("OPENAI_API_KEY not found in document_processor.py")
+
 # Initialize global variables
 _processed_pattern_items = set()
 
@@ -1259,6 +1269,16 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # FORCE ENABLE OpenAI API - always use OpenAI API first with proper timeout handling
             # This ensures we always use the API with better failover if it times out
             ENABLE_OPENAI = True  # Always try OpenAI API first (will properly fallback if needed)
+            
+            # Force ensure OpenAI API key is available in environment
+            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+            if OPENAI_API_KEY:
+                os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+                api_key_start = OPENAI_API_KEY[:5] + "..." if len(OPENAI_API_KEY) > 5 else "too short"
+                logger.info(f"OpenAI API key available in process_documents, starts with: {api_key_start}")
+            else:
+                logger.critical("CRITICAL: OpenAI API key not found in process_documents!")
+            
             logging.warning("IMPORTANT: Always trying OpenAI API first (FORCE ENABLED)")
             print("IMPORTANT: OpenAI API is FORCE ENABLED - Using OpenAI API with timeout protection")
 
