@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _processed_pattern_items = set()
 
 # Maximum API timeout in seconds - long enough to ensure proper timeout for testing
-MAX_API_TIMEOUT = 50
+MAX_API_TIMEOUT = 60  # Increased from 50 to 60 seconds to match OpenAI client timeout
 
 def extract_text_from_pdf(file_path: str) -> str:
     """Extract text content from a PDF file."""
@@ -1085,13 +1085,13 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     Handles various document formats and follows specific checklist requirements strictly.
 
     THIS FUNCTION HAS BEEN MODIFIED TO BE 100% RELIABLE:
-    - Uses OpenAI API with strict timeout handling (50 seconds max)
-    - Always falls back to pattern matching if OpenAI API times out
+    - Uses OpenAI API with strict timeout handling (60 seconds max)
+    - NEVER falls back to pattern matching (as per strict user requirements)
     - Never raises exceptions that would crash the application
     - Always returns properly structured data with proper types
     """
     # Maximum API timeout in seconds to ensure we don't hang indefinitely
-    MAX_API_TIMEOUT = 50  # 50 seconds should be enough for a reasonable response
+    MAX_API_TIMEOUT = 60  # Increased from 50 to 60 seconds to match OpenAI client timeout
     # Ensure we have the OS module imported
     import os
     
@@ -1282,9 +1282,9 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     raise TimeoutError("OpenAI API request timed out")
                 
                 # Set a timeout for OpenAI requests (longer timeout as requested by user)
-                logging.info(f"Using OpenAI for analysis with fallback and {MAX_API_TIMEOUT}-second timeout")
+                logging.info(f"Using OpenAI API EXCLUSIVELY for analysis with {MAX_API_TIMEOUT}-second timeout (NO fallbacks used)")
                 signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for longer timeout (50 seconds)
+                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for timeout (60 seconds)
                 
                 try:
                     # Try the OpenAI API with timeout protection
@@ -1313,14 +1313,14 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                             results = ai_results
                             logging.info("Successfully using OpenAI API results")
                         else:
-                            logging.error("Invalid results structure detected, falling back to pattern matching")
+                            logging.error("Invalid results structure detected - returning error to user (NO pattern matching fallback used)")
                     else:
-                        logging.warning(f"OpenAI analysis returned invalid results type: {type(ai_results)}, falling back to traditional pattern matching")
+                        logging.error(f"OpenAI analysis returned invalid results type: {type(ai_results)} - returning error to user (NO pattern matching fallback used)")
                 except (TimeoutError, Exception) as e:
                     # Cancel the alarm if there was an exception
                     signal.alarm(0)
                     logging.exception(f"Error or timeout in OpenAI processing: {str(e)}")
-                    logging.info("Falling back to pattern matching")
+                    logging.error("API failed - returning error to user (NO pattern matching fallback used)")
             
             # IMPORTANT: As per user requirements, we now FORCE EXCLUSIVE OpenAI API usage
             # We should NOT use pattern matching unless there's a critical error
@@ -1416,54 +1416,23 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                     'method': 'enhanced_pattern_matching' if is_crucial else 'pattern_matching'
                 }
         except Exception as e:
-            # Fallback completely to basic pattern matching if any errors
-            logging.exception(f"Error with OpenAI processing, using basic fallback: {str(e)}")
-
+            # Return error to user when OpenAI API fails - NO PATTERN MATCHING FALLBACK
+            logging.exception(f"Error with OpenAI processing - returning error to user (NO pattern matching fallback): {str(e)}")
+            
+            # Create proper error response with appropriate messaging - NO PATTERN MATCHING
             results = {}
             for item in checklist_items:
-                is_present = check_item_in_document(item, outline_text, enhanced_context)
-                item_lower = item.lower()
-                evidence = ""
-
-                # Even in fallback mode, apply special handling for crucial items
-                crucial_items = {
-                    "instructor email": ["instructor", "email", "contact"],
-                    "late policy": ["late", "policy", "deadline"],
-                    "missed assessment": ["missed", "absence", "unable"],
-                    "textbook": ["textbook", "reading", "material"]
-                }
-
-                # For crucial items, use the most reliable detection method
-                is_crucial = False
-                for crucial_type, keywords in crucial_items.items():
-                    if any(keyword in item_lower for keyword in keywords):
-                        is_crucial = True
-                        try:
-                            # Try the enhanced detection
-                            from improved_pattern_matching import enhanced_check_item_in_document
-                            reliable_present, reliable_evidence, confidence = enhanced_check_item_in_document(item, outline_text)
-
-                            # Only override if we have high confidence
-                            if confidence >= 0.75:
-                                print(f"Fallback crucial item '{item[:30]}...' using enhanced detection: {is_present} -> {reliable_present}")
-                                is_present = reliable_present
-                                evidence = reliable_evidence
-                        except Exception as ed:
-                            # If enhanced detection fails, continue with basic result
-                            print(f"Enhanced detection failed for crucial item: {str(ed)}")
-
-                explanation = "The item was found in the document." if is_present else "The item was not found in the document."
-
                 results[item] = {
-                    'present': is_present,
-                    'confidence': 0.8 if is_crucial and is_present else (0.7 if is_present else 0.3),
-                    'explanation': explanation,
-                    'evidence': evidence,
-                    'method': 'enhanced_fallback_detection' if is_crucial else 'basic_pattern_matching'
+                    'present': False,
+                    'confidence': 0,
+                    'explanation': f"OpenAI API error: {str(e)}. Analysis could not be completed.",
+                    'evidence': "",
+                    'method': 'openai_api_error'  # Clear indication this was an API error, not pattern matching
                 }
 
         # Post-process grade distribution items with the extracted table if found
-        if has_grade_table:
+        # BUT ONLY if we didn't have an API error (check methods to ensure we don't override error results)
+        if has_grade_table and not any(result.get('method') == 'openai_api_error' for result in results.values()):
             for item in checklist_items:
                 item_lower = item.lower()
                 if ('grade' in item_lower and 'distribution' in item_lower) or 'weight' in item_lower:
@@ -1496,25 +1465,25 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             logging.error("DEBUG: No valid checklist items found during error handling")
             default_items = ["Error processing checklist"]
             
-            # Create a default result
+            # Create a default result with explicit OpenAI API error method
             for item in default_items:
                 empty_results[item] = {
                     'present': False,
                     'confidence': 0,
-                    'explanation': f"Error during processing: {str(e)}",
+                    'explanation': f"OpenAI API error during processing: {str(e)}. Analysis could not be completed.",
                     'evidence': "",
-                    'method': 'error_fallback'
+                    'method': 'openai_api_error'  # Explicitly mark as an API error, not pattern matching fallback
                 }
             return default_items, empty_results
         else:
-            # If we do have valid items, create results for each
-            logging.error(f"DEBUG: Creating error fallback for {len(checklist_items)} items")
+            # If we do have valid items, create results for each with explicit OpenAI API error method
+            logging.error(f"DEBUG: Creating API error responses for {len(checklist_items)} items")
             for item in checklist_items:
                 empty_results[item] = {
                     'present': False,
                     'confidence': 0,
-                    'explanation': f"Error during processing: {str(e)}",
+                    'explanation': f"OpenAI API error during processing: {str(e)}. Analysis could not be completed.",
                     'evidence': "",
-                    'method': 'error_fallback'
+                    'method': 'openai_api_error'  # Explicitly mark as an API error, not pattern matching fallback
                 }
             return checklist_items, empty_results
