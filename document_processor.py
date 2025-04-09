@@ -235,7 +235,10 @@ def fallback_analyze_item(item: str, document_text: str, additional_context: str
     raise Exception("CRITICAL ERROR: Use ai_analyze_item for OpenAI API-only analysis")
 
 
-def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 3, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+def process_documents(checklist_path: str, outline_path: str, api_attempts: int = 2, additional_context: str = "") -> Tuple[List[str], Dict[str, Any]]:
+    # Maximum API timeout in seconds to ensure we don't hang indefinitely
+    MAX_API_TIMEOUT = 300  # 5 minutes per batch
+    BATCH_SIZE = 2  # Process only 2 items at a time to prevent timeouts
     """
     Document processing that exclusively uses the OpenAI API for analysis.
 
