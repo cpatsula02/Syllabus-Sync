@@ -113,9 +113,12 @@ CHECKLIST_KEYWORDS = {
     ],
     
     "midterm_quiz": [
-        "midterm", "mid-term", "quiz", "test", "examination", "timing", "location",
-        "modality", "format", "duration", "length", "open book", "closed book",
-        "permitted materials", "allowed resources", "restrictions", "rules"
+        "midterm", "mid-term", "midterm exam", "midterm quiz", "midterm test", "mid-term exam",
+        "mid-term quiz", "mid-term test", "quiz", "test", "examination", "term test", 
+        "term exam", "in-class test", "in-class assessment", "in-class quiz",
+        "timing", "location", "modality", "format", "duration", "length", 
+        "open book", "closed book", "permitted materials", "allowed resources", 
+        "restrictions", "rules", "assessment", "evaluation"
     ],
     
     "final_exam": [
@@ -153,7 +156,9 @@ CHECKLIST_KEYWORDS = {
     
     "schedule_exams": [
         "schedule", "calendar", "exam date", "test date", "quiz date", "assessment date",
-        "midterm", "final exam", "final test", "examination period", "quiz time"
+        "midterm", "midterm exam", "midterm quiz", "midterm test", "mid-term", "mid-term exam",
+        "term test", "in-class test", "in-class assessment", "in-class quiz",
+        "final exam", "final test", "examination period", "quiz time", "assessment timing"
     ],
     
     "links": [
@@ -209,7 +214,7 @@ def get_enhanced_keywords(item_text: str) -> List[str]:
         return CHECKLIST_KEYWORDS["assignment_submission"]
     elif "group project" in item_lower:
         return CHECKLIST_KEYWORDS["group_project"]
-    elif ("midterm" in item_lower or "quiz" in item_lower) and not "final" in item_lower:
+    elif (any(term in item_lower for term in ["midterm", "mid-term", "test", "quiz", "assessment"]) and not "final" in item_lower):
         return CHECKLIST_KEYWORDS["midterm_quiz"]
     elif "final exam" in item_lower and not "50%" in item_lower and not "take-home" in item_lower:
         return CHECKLIST_KEYWORDS["final_exam"]
@@ -399,6 +404,104 @@ def extract_email(text: str) -> str:
         return match.group(0)
     return ""
 
+def check_midterm_quiz_info(document_text: str, validation_requirements: Dict = None) -> Tuple[bool, str, float]:
+    """
+    Enhanced detection of midterm, quiz, or test information with improved keyword recognition.
+    This function supports various ways of referring to midterms such as "midterm exam", 
+    "midterm quiz", or just "midterm".
+    
+    Args:
+        document_text: The document text to search
+        validation_requirements: Optional dict with specific validation criteria
+        
+    Returns:
+        Tuple of (has_info, evidence, confidence)
+    """
+    # Define expanded midterm/quiz related terms for detection
+    midterm_terms = [
+        "midterm", "mid-term", "midterm exam", "midterm quiz", "midterm test", 
+        "mid-term exam", "mid-term quiz", "mid-term test", "term test", 
+        "in-class test", "in-class assessment", "in-class quiz", "term exam"
+    ]
+    
+    # Define assessment details we need to find
+    assessment_details = [
+        "duration", "length", "time", "hour", "minute", 
+        "format", "structure", "question", "worth", "weight", "value",
+        "date", "schedule", "location", "room", "venue", "online",
+        "material", "content", "cover", "topic", "chapter", 
+        "open book", "closed book", "note", "calculator", "aid", "permitted" 
+    ]
+    
+    # Find sections containing midterm/quiz terms
+    assessment_sections = []
+    for term in midterm_terms:
+        # Look for the term in context
+        pattern = r'(?i)(?:[^\n]*' + re.escape(term) + r'[^\n]*\n){1,10}'
+        matches = re.findall(pattern, document_text)
+        assessment_sections.extend(matches)
+    
+    # If we found relevant sections, check for assessment details
+    if assessment_sections:
+        combined_sections = '\n'.join(assessment_sections)
+        
+        # Count how many assessment details we can find
+        details_found = []
+        for detail in assessment_details:
+            if detail in combined_sections.lower():
+                details_found.append(detail)
+        
+        # If we have enough details, consider it a match
+        if len(details_found) >= 3:  # At least 3 details found
+            # Highlight midterm terms and details in the evidence
+            highlighted_text = combined_sections
+            
+            # Highlight midterm terms
+            for term in midterm_terms:
+                if term in highlighted_text.lower():
+                    pattern = re.compile(re.escape(term), re.IGNORECASE)
+                    highlighted_text = pattern.sub(f"<mark>{term}</mark>", highlighted_text)
+            
+            # Highlight assessment details
+            for detail in details_found:
+                pattern = re.compile(r'\b' + re.escape(detail) + r'\b', re.IGNORECASE)
+                highlighted_text = pattern.sub(f"<mark>{detail}</mark>", highlighted_text)
+            
+            # Return success with highlighted evidence
+            return True, f"Found detailed midterm/quiz information: {highlighted_text[:500]}...", 0.9
+    
+    # Check for exam/test/quiz in grade table
+    grade_table = extract_grade_table(document_text)
+    if grade_table:
+        for term in midterm_terms:
+            if term in grade_table.lower():
+                # Try to find weight and date info near the term
+                context_pattern = r'(?i)(?:[^\n]*' + re.escape(term) + r'[^\n]*(?:\n[^\n]*){0,5})'
+                context_match = re.search(context_pattern, grade_table)
+                if context_match:
+                    context = context_match.group(0)
+                    
+                    # Look for weight/percentage
+                    if re.search(r'(?i)(\d+%|\d+\s*percent|\d+\s*points)', context):
+                        # Highlight the evidence
+                        highlighted_context = context
+                        for detail in ["weight", "percent", "worth", "value", "%", "point"]:
+                            if detail in highlighted_context.lower():
+                                pattern = re.compile(r'\b' + re.escape(detail) + r'\b', re.IGNORECASE)
+                                highlighted_context = pattern.sub(f"<mark>{detail}</mark>", highlighted_context)
+                        
+                        # Highlight the midterm term
+                        pattern = re.compile(re.escape(term), re.IGNORECASE)
+                        highlighted_context = pattern.sub(f"<mark>{term}</mark>", highlighted_context)
+                        
+                        return True, f"Found {term} in grade table with weighting information: {highlighted_context}", 0.85
+    
+    # If found sections but not enough details, mention what was found but is insufficient
+    if assessment_sections:
+        return False, f"Found mentions of midterm/quiz but insufficient details (only {len(details_found)} details: {', '.join(details_found)}). Required: format, date, weight, duration or similar information.", 0.8
+    
+    return False, "No detailed midterm/quiz information found after comprehensive search.", 0.9
+
 def extract_grade_table(text: str) -> str:
     """
     Extract grade distribution table or section from text.
@@ -442,11 +545,16 @@ def check_special_cases(item: str, document_text: str, validation_requirements: 
     Args:
         item: Checklist item
         document_text: Document text
+        validation_requirements: Optional dict with specific validation criteria
         
     Returns:
         Tuple of (is_present, evidence, confidence)
     """
     item_lower = item.lower()
+    
+    # Handle midterm/quiz/test detection with expanded terms
+    if any(term in item_lower for term in ["midterm", "mid-term", "quiz", "test"]) and not "final" in item_lower:
+        return check_midterm_quiz_info(document_text, validation_requirements)
     
     # Check for instructor email - enhanced to detect absence more reliably
     if "instructor" in item_lower and "email" in item_lower:
