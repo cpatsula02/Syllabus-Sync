@@ -27,11 +27,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Validate checklist format
+            // Validate checklist format - more permissive to allow pasted lists
             const lines = checklistText.split('\n').filter(line => line.trim());
-            if (!lines.some(line => line.match(/^(\d+[\.\)]|\-|\*|\+|•)\s/))) {
+            
+            // Check if there's at least one line with substantial content
+            const hasSubstantialContent = lines.some(line => line.trim().length > 10);
+            
+            if (lines.length === 0 || !hasSubstantialContent) {
                 e.preventDefault();
-                alert('Please ensure each checklist item starts with a number (1.) or bullet point (-)');
+                alert('Please provide at least one checklist item with meaningful content');
                 return;
             }
             

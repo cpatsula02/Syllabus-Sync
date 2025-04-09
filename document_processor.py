@@ -862,10 +862,27 @@ def identify_grade_distribution_table(document_text: str) -> Tuple[bool, str]:
 def extract_checklist_items_strict(text: str) -> List[str]:
     """
     Extract checklist items from text, ensuring each numbered/bulleted item is separate.
-    Only extracts items that start with numbers or bullets.
+    Handles pasted text from various sources with different list formats.
+    Intelligently processes text even without explicit bullets or numbers.
     """
     items = []
     lines = text.split('\n')
+    
+    # Mode detection - check if list appears to use bullets, numbers, or plain text
+    has_numbered_items = False
+    has_bulleted_items = False
+    has_lettered_items = False
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        if re.match(r'^\d+[\.\)]\s+\w+', line):
+            has_numbered_items = True
+        elif re.match(r'^[a-zA-Z][\.\)]\s+\w+', line):
+            has_lettered_items = True
+        elif re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s+\w+', line):
+            has_bulleted_items = True
 
     for line in lines:
         line = line.strip()
@@ -878,15 +895,19 @@ def extract_checklist_items_strict(text: str) -> List[str]:
         # Match lettered items (a., a), etc.)
         elif re.match(r'^[a-zA-Z][\.\)]\s+\w+', line):
             items.append(line)
-        # Match bullet points
-        elif re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s+\w+', line):
+        # Match bullet points with more bullet types
+        elif re.match(r'^[\*\-\+•⚫⚪○●◆◇■□▪▫➢➤➔→⇒✓✔✗✘]\s+\w+', line):
+            items.append(line)
+        # For plain text lines (when no formatting detected), treat each non-empty line as an item
+        elif not (has_numbered_items or has_bulleted_items or has_lettered_items) and len(line) > 10:
+            # Only include substantial lines (longer than 10 chars) as checklist items
             items.append(line)
 
     # Clean up items
     cleaned_items = []
     for item in items:
         # Remove leading numbers/bullets and clean up
-        cleaned = re.sub(r'^\d+[\.\)]|^[a-zA-Z][\.\)]|^[\*\-\+•⚫⚪○●◆◇■□▪▫]\s*', '', item).strip()
+        cleaned = re.sub(r'^\d+[\.\)]|^[a-zA-Z][\.\)]|^[\*\-\+•⚫⚪○●◆◇■□▪▫➢➤➔→⇒✓✔✗✘]\s*', '', item).strip()
         if cleaned:
             cleaned_items.append(cleaned)
 
