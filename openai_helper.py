@@ -186,7 +186,7 @@ def api_call_with_backoff(prompt: str, temperature: float = 0.1) -> Dict:
                 response_format={"type": "json_object"},
                 temperature=temperature,  # Use the provided temperature parameter
                 max_tokens=400,   # Limit token output to speed up response
-                timeout=5  # 5 second timeout to prevent hanging
+                timeout=20  # Increased timeout from 5 to 20 seconds
             )
             
             # Estimate response tokens

@@ -17,9 +17,8 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ENABLE_OPENAI = bool(OPENAI_API_KEY)  # Enable if API key is present
 
-# IMPORTANT: Force pattern-matching mode in the web interface for reliability
-# This temporary change ensures we don't encounter API timeout errors
-ENABLE_OPENAI = False
+# Keep OpenAI integration enabled as requested, but with improved timeout handling
+# We'll use proper timeout controls in openai_helper.py instead of disabling API
 
 # Add API key validation for proper format (for future debugging)
 if OPENAI_API_KEY:
@@ -29,8 +28,8 @@ if OPENAI_API_KEY:
     else:
         logger.info("OpenAI API key validated with correct format")
     
-    logger.warning("OpenAI integration DISABLED for reliability - using pattern matching only")
-    logger.info("All requests will use enhanced pattern matching instead of OpenAI API")
+    logger.info("OpenAI integration ENABLED - will try AI verification with improved timeout handling")
+    logger.info("Using more reliable processing with improved error handling")
 else:
     logger.warning("OPENAI_API_KEY environment variable not found - pattern matching only mode will be used")
 

@@ -1082,13 +1082,13 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
     Handles various document formats and follows specific checklist requirements strictly.
 
     THIS FUNCTION HAS BEEN MODIFIED TO BE 100% RELIABLE:
-    - Forces pattern matching mode for all document processing 
-    - Will never use OpenAI API regardless of api_attempts parameter
+    - Uses OpenAI API with strict timeout handling (50 seconds max)
+    - Always falls back to pattern matching if OpenAI API times out
     - Never raises exceptions that would crash the application
     - Always returns properly structured data with proper types
     """
-    # Force api_attempts to 0 to ensure we never use OpenAI API
-    api_attempts = 0
+    # Maximum API timeout in seconds to ensure we don't hang indefinitely
+    MAX_API_TIMEOUT = 50  # 50 seconds should be enough for a reasonable response
     # Ensure we have the OS module imported
     import os
     
@@ -1253,8 +1253,10 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
             # Try to import OpenAI helper, which will fail gracefully if OpenAI is not available
             from openai_helper import analyze_checklist_items_batch, fallback_analyze_item
 
-            # FORCE DISABLE OPENAI for reliability in all cases - use pattern matching only
-            ENABLE_OPENAI = False  # Force pattern matching mode for guaranteed stability
+            # Get current OpenAI API key status from environment
+            import os
+            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+            ENABLE_OPENAI = bool(OPENAI_API_KEY) and api_attempts > 0  # Enable if API key is present and user wants API
 
             results = {}
 
@@ -1275,10 +1277,10 @@ def process_documents(checklist_path: str, outline_path: str, api_attempts: int 
                 def timeout_handler(signum, frame):
                     raise TimeoutError("OpenAI API request timed out")
                 
-                # Set a timeout for OpenAI requests
-                logging.info("Using OpenAI for analysis with fallback and 20-second timeout")
+                # Set a timeout for OpenAI requests (longer timeout as requested by user)
+                logging.info(f"Using OpenAI for analysis with fallback and {MAX_API_TIMEOUT}-second timeout")
                 signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(20)  # Set alarm for 20 seconds
+                signal.alarm(MAX_API_TIMEOUT)  # Set alarm for longer timeout (50 seconds)
                 
                 try:
                     # Try the OpenAI API with timeout protection
